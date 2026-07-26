@@ -31,7 +31,9 @@ describe("Supabase server REST config", () => {
 
   it("keeps bearer auth for a legacy service-role JWT", async () => {
     vi.stubEnv("BOOKMARK_SUPABASE_URL", "https://db.example.com");
-    vi.stubEnv("BOOKMARK_SUPABASE_SERVICE_ROLE_KEY", "legacy.jwt.value");
+    const serviceRoleJwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature";
+    vi.stubEnv("BOOKMARK_SUPABASE_SERVICE_ROLE_KEY", serviceRoleJwt);
     const { createSupabaseRestHeaders, getSupabaseServerConfig } = await import(
       "@/app/lib/supabase/server-config"
     );
@@ -42,7 +44,7 @@ describe("Supabase server REST config", () => {
       prefer: "return=representation"
     });
 
-    expect(headers.get("Authorization")).toBe("Bearer legacy.jwt.value");
+    expect(headers.get("Authorization")).toBe(`Bearer ${serviceRoleJwt}`);
     expect(headers.get("Content-Profile")).toBe("bookmark");
     expect(headers.get("Prefer")).toBe("return=representation");
   });
@@ -79,5 +81,21 @@ describe("Supabase server REST config", () => {
     );
 
     expect(getSupabaseServerConfig()).toBeNull();
+  });
+
+  it("rejects non-service-role values supplied through the server secret variable", async () => {
+    vi.stubEnv("BOOKMARK_SUPABASE_URL", "https://db.example.com");
+    const { getSupabaseServerConfig } = await import(
+      "@/app/lib/supabase/server-config"
+    );
+
+    for (const apiKey of [
+      "not-a-supabase-key",
+      "header.not-base64.signature",
+      "header.eyJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.signature"
+    ]) {
+      vi.stubEnv("BOOKMARK_SUPABASE_SECRET_KEY", apiKey);
+      expect(getSupabaseServerConfig()).toBeNull();
+    }
   });
 });
