@@ -57,4 +57,27 @@ describe("Supabase server REST config", () => {
 
     expect(getSupabaseServerConfig()).toBeNull();
   });
+
+  it("rejects a publishable key supplied through the server secret variable", async () => {
+    vi.stubEnv("BOOKMARK_SUPABASE_URL", "https://db.example.com");
+    vi.stubEnv("BOOKMARK_SUPABASE_SECRET_KEY", "sb_publishable_test");
+    const { getSupabaseServerConfig } = await import(
+      "@/app/lib/supabase/server-config"
+    );
+
+    expect(getSupabaseServerConfig()).toBeNull();
+  });
+
+  it("rejects an anon JWT supplied through the server secret variable", async () => {
+    vi.stubEnv("BOOKMARK_SUPABASE_URL", "https://db.example.com");
+    vi.stubEnv(
+      "BOOKMARK_SUPABASE_SECRET_KEY",
+      "header.eyJyb2xlIjoiYW5vbiJ9.signature"
+    );
+    const { getSupabaseServerConfig } = await import(
+      "@/app/lib/supabase/server-config"
+    );
+
+    expect(getSupabaseServerConfig()).toBeNull();
+  });
 });

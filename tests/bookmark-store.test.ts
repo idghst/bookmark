@@ -66,4 +66,18 @@ describe("bookmarkStore.createSection", () => {
     expect(deleteUrl.pathname).toBe("/rest/v1/sections");
     expect(fetchMock.mock.calls[1][1]?.method).toBe("DELETE");
   });
+
+  it("requires BOOKMARK_USER_ID before making a Supabase request", async () => {
+    vi.stubEnv("BOOKMARK_SUPABASE_URL", "https://db.example.com");
+    vi.stubEnv("BOOKMARK_SUPABASE_SECRET_KEY", "sb_secret_test");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.listBookmarks()).rejects.toMatchObject({
+      message: "BOOKMARK_USER_ID is required.",
+      status: 500
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

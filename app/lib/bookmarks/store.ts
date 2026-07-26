@@ -49,8 +49,6 @@ export class StoreError extends Error {
   }
 }
 
-let userIdPromise: Promise<string> | null = null;
-
 function getBookmarkSupabaseConfig() {
   const config = getSupabaseServerConfig();
   if (!config) {
@@ -108,30 +106,10 @@ async function readErrorMessage(response: Response) {
   }
 }
 
-async function findUserIdIn(table: string) {
-  const rows = await supabaseRequest<Array<{ user_id: string }>>(table, {
-    query: { select: "user_id", order: "created_at.asc", limit: "1" }
-  });
-  return rows[0]?.user_id ?? null;
-}
-
 async function getBookmarkUserId() {
-  if (!userIdPromise) {
-    userIdPromise = (async () => {
-      const configured = process.env.BOOKMARK_USER_ID;
-      if (configured) return configured;
-
-      const inferred =
-        (await findUserIdIn(TABLES.bookmarks)) ??
-        (await findUserIdIn(TABLES.folders)) ??
-        (await findUserIdIn(TABLES.sections));
-
-      if (!inferred) throw new StoreError("BOOKMARK_USER_ID is required when no existing bookmark rows identify a user.", 500);
-      return inferred;
-    })();
-  }
-
-  return userIdPromise;
+  const configured = process.env.BOOKMARK_USER_ID;
+  if (!configured) throw new StoreError("BOOKMARK_USER_ID is required.", 500);
+  return configured;
 }
 
 async function nextPosition(table: string, userId: string) {

@@ -4,6 +4,23 @@ export type SupabaseServerConfig = {
   authorization: string | null;
 };
 
+function isBrowserSafeKey(apiKey: string) {
+  if (apiKey.startsWith("sb_publishable_")) return true;
+
+  const payload = apiKey.split(".")[1];
+  if (!payload) return false;
+
+  try {
+    const encoded = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(
+      atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="))
+    ) as { role?: string };
+    return claims.role === "anon" || claims.role === "authenticated";
+  } catch {
+    return false;
+  }
+}
+
 export function getSupabaseServerConfig(): SupabaseServerConfig | null {
   const url = (
     process.env.BOOKMARK_SUPABASE_URL ??
@@ -16,7 +33,7 @@ export function getSupabaseServerConfig(): SupabaseServerConfig | null {
     process.env.BOOKMARK_SUPABASE_SERVICE_ROLE_KEY ??
     process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url || !apiKey) return null;
+  if (!url || !apiKey || isBrowserSafeKey(apiKey)) return null;
 
   return {
     url,
