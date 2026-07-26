@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pretendard Variable (셀프호스팅, public/fonts) — 한글 지원용 범용 폰트 */
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+
+  /* 브랜드 색상(템플릿 기본: indigo). 새 서비스에 맞게 이 두 값만 바꾸면 된다. */
+  --color-brand: #4f46e5;
+  --color-brand-dark: #4338ca;
+
+  /* 표면/텍스트 토큰 */
+  --surface-canvas: #ffffff;
+  --surface-soft: #f5f6f8;
+  --surface-muted: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-heading: #111827;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --border-subtle: #e2e8f0;
+
+  --radius: 0.5rem;
+  --radius-md: calc(var(--radius) - 2px);
+  --dashboard-header-height: 88px;
+
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-serif: var(--font-sans);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* shadcn/ui 디자인 토큰(HSL) — tailwind.config.ts 가 hsl(var(--token)) 으로 매핑한다 */
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 243 75% 96%;
+  --accent-foreground: 243 58% 41%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 243 75% 59%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-serif);
+}
+
+button,
+textarea,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(79, 70, 229, 0.16);
+}
+
+/* 스크롤바 숨김 유틸 */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* 화면 전환·팝업 진입 애니메이션. 모션 최소화 선호 시 비활성. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.fade-in {
+  animation: fade-in 0.18s ease-out both;
+}
+.pop-in {
+  animation: pop-in 0.16s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .pop-in {
+    animation: none;
+  }
+}

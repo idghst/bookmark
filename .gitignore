@@ -1,1 +1,53 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+next-env.d.ts.bak
+
+# production/build output
+dist/
+build/
+
+# tests and coverage
+coverage/
+test-results/
+.nyc_output/
+
+# TypeScript
+tsconfig.tsbuildinfo
+
+# local runtime data
+.runtime/
+*.sqlite
+*.sqlite3
+*.db
+
+# env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# local git worktrees
 .worktrees/
