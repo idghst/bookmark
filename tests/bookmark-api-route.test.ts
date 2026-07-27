@@ -38,33 +38,23 @@ describe("bookmark API write boundary", () => {
   });
 
   it("normalizes an omitted bookmark URL scheme before writing", async () => {
-    vi.stubEnv("BOOKMARK_USER_ID", "user-1");
-    vi.stubEnv("BOOKMARK_SUPABASE_URL", "https://db.example.com");
-    vi.stubEnv("BOOKMARK_SUPABASE_SECRET_KEY", "sb_secret_test");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ position: 0 }]), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify([
-            {
-              id: "bookmark-1",
-              user_id: "user-1",
-              title: "Example",
-              url: "https://example.com/",
-              description: null,
-              is_favorite: false,
-              created_at: "2026-07-27T00:00:00.000Z",
-              updated_at: null,
-              folder_id: null,
-              section_id: null,
-              position: 1
-            }
-          ]),
-          { status: 201 }
-        )
-      );
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "bookmark-1",
+          title: "Example",
+          url: "https://example.com/",
+          description: null,
+          isFavorite: false,
+          folderId: null,
+          sectionId: null,
+          position: 1
+        }),
+        { status: 201 }
+      )
+    );
     vi.stubGlobal("fetch", fetchMock);
     const { POST } = await import("@/app/api/[resource]/[[...path]]/route");
 

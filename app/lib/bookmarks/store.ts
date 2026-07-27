@@ -1,46 +1,13 @@
-import type { BookmarkFormData, BookmarkItem, Folder, FolderFormData, PositionUpdate, Section } from "@/app/lib/bookmarks/types";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
-import {
-  createSupabaseRestHeaders,
-  getSupabaseServerConfig
-} from "@/app/lib/supabase/server-config";
+import type {
+  BookmarkFormData,
+  BookmarkItem,
+  Folder,
+  FolderFormData,
+  PositionUpdate,
+  Section
+} from "@/app/lib/bookmarks/types";
 
-type BookmarkRow = {
-  id: string;
-  user_id: string;
-  title: string;
-  url: string;
-  description: string | null;
-  is_favorite: boolean | null;
-  created_at: string;
-  updated_at: string | null;
-  folder_id: string | null;
-  section_id: string | null;
-  position: number | null;
-};
-
-type FolderRow = {
-  id: string;
-  user_id: string;
-  name: string;
-  color: string | null;
-  position: number | null;
-};
-
-type SectionRow = {
-  id: string;
-  user_id: string;
-  name: string;
-  folder_id: string;
-  position: number | null;
-};
-
-const TABLES = {
-  bookmarks: "items",
-  folders: "folders",
-  sections: "sections"
-} as const;
-const BOOKMARK_SCHEMA = "bookmark";
 const BOOKMARK_FIELDS = new Set([
   "title",
   "url",
@@ -58,93 +25,21 @@ export class StoreError extends Error {
   }
 }
 
-function getBookmarkSupabaseConfig() {
-  const config = getSupabaseServerConfig();
-  if (!config) {
-    throw new StoreError(
-      "BOOKMARK_SUPABASE_URL and BOOKMARK_SUPABASE_SECRET_KEY are required.",
-      500
-    );
-  }
-  return config;
-}
-
-async function supabaseRequest<T>(
-  table: string,
-  {
-    method = "GET",
-    query,
-    body,
-    prefer
-  }: {
-    method?: string;
-    query?: Record<string, string>;
-    body?: unknown;
-    prefer?: string;
-  } = {}
-): Promise<T> {
-  const config = getBookmarkSupabaseConfig();
-  const endpoint = new URL(`${config.url}/rest/v1/${table}`);
-  Object.entries(query ?? {}).forEach(([key, value]) => endpoint.searchParams.set(key, value));
-
-  const requestHeaders = createSupabaseRestHeaders(config, {
-    schema: BOOKMARK_SCHEMA,
-    write: !["GET", "HEAD"].includes(method),
-    prefer
-  });
-  if (body !== undefined) requestHeaders.set("Content-Type", "application/json");
-
-  const response = await fetch(endpoint, {
-    method,
-    headers: requestHeaders,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store"
-  });
-
-  if (!response.ok) throw new StoreError(await readErrorMessage(response), response.status);
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
-}
-
-async function readErrorMessage(response: Response) {
-  try {
-    const payload = (await response.json()) as { message?: string; details?: string; hint?: string };
-    return payload.message ?? payload.details ?? payload.hint ?? response.statusText;
-  } catch {
-    return response.statusText || "Supabase REST request failed.";
-  }
-}
-
-async function getBookmarkUserId() {
-  const configured = process.env.BOOKMARK_USER_ID;
-  if (!configured) throw new StoreError("BOOKMARK_USER_ID is required.", 500);
-  return configured;
-}
-
-async function nextPosition(table: string, userId: string) {
-  const rows = await supabaseRequest<Array<{ position: number | null }>>(table, {
-    query: { select: "position", user_id: `eq.${userId}`, order: "position.desc", limit: "1" }
-  });
-  return (rows[0]?.position ?? -1) + 1;
-}
-
-function one<T>(rows: T[], label: string) {
-  const row = rows[0];
-  if (!row) throw new StoreError(`${label} not found.`, 404);
-  return row;
-}
-
 function invalid(message: string): never {
   throw new StoreError(message, 400);
 }
 
 function record(value: unknown, label: string) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) invalid(`${label} body is invalid.`);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    invalid(`${label} body is invalid.`);
+  }
   return value as Record<string, unknown>;
 }
 
 function nonEmptyString(value: unknown, label: string) {
-  if (typeof value !== "string" || !value.trim()) invalid(`${label} must be a non-empty string.`);
+  if (typeof value !== "string" || !value.trim()) {
+    invalid(`${label} must be a non-empty string.`);
+  }
   return value.trim();
 }
 
@@ -165,21 +60,39 @@ function normalizeBookmarkUrl(value: unknown) {
   }
 }
 
-function assertAllowedFields(data: Record<string, unknown>, allowed: Set<string>, label: string) {
-  if (Object.keys(data).some((key) => !allowed.has(key))) invalid(`${label} body contains unsupported fields.`);
+function assertAllowedFields(
+  data: Record<string, unknown>,
+  allowed: Set<string>,
+  label: string
+) {
+  if (Object.keys(data).some((key) => !allowed.has(key))) {
+    invalid(`${label} body contains unsupported fields.`);
+  }
 }
 
 function validateBookmarkCreate(value: unknown): BookmarkFormData {
   const data = record(value, "Bookmark");
   assertAllowedFields(data, BOOKMARK_FIELDS, "Bookmark");
-  if (typeof data.isFavorite !== "boolean") invalid("Bookmark isFavorite must be boolean.");
-  if (!Object.hasOwn(data, "folderId") || (data.folderId !== null && typeof data.folderId !== "string")) {
+  if (typeof data.isFavorite !== "boolean") {
+    invalid("Bookmark isFavorite must be boolean.");
+  }
+  if (
+    !Object.hasOwn(data, "folderId") ||
+    (data.folderId !== null && typeof data.folderId !== "string")
+  ) {
     invalid("Bookmark folderId must be a string or null.");
   }
-  if (!Object.hasOwn(data, "sectionId") || (data.sectionId !== null && typeof data.sectionId !== "string")) {
+  if (
+    !Object.hasOwn(data, "sectionId") ||
+    (data.sectionId !== null && typeof data.sectionId !== "string")
+  ) {
     invalid("Bookmark sectionId must be a string or null.");
   }
-  if (data.description !== undefined && data.description !== null && typeof data.description !== "string") {
+  if (
+    data.description !== undefined &&
+    data.description !== null &&
+    typeof data.description !== "string"
+  ) {
     invalid("Bookmark description must be a string or null.");
   }
 
@@ -188,8 +101,14 @@ function validateBookmarkCreate(value: unknown): BookmarkFormData {
     url: normalizeBookmarkUrl(data.url),
     description: data.description as string | null | undefined,
     isFavorite: data.isFavorite,
-    folderId: data.folderId === null ? null : nonEmptyString(data.folderId, "Bookmark folderId"),
-    sectionId: data.sectionId === null ? null : nonEmptyString(data.sectionId, "Bookmark sectionId")
+    folderId:
+      data.folderId === null
+        ? null
+        : nonEmptyString(data.folderId, "Bookmark folderId"),
+    sectionId:
+      data.sectionId === null
+        ? null
+        : nonEmptyString(data.sectionId, "Bookmark sectionId")
   };
 }
 
@@ -199,7 +118,9 @@ function validateBookmarkPatch(value: unknown): Partial<BookmarkFormData> {
   if (!Object.keys(data).length) invalid("Bookmark PATCH body must not be empty.");
   const result: Partial<BookmarkFormData> = {};
 
-  if (Object.hasOwn(data, "title")) result.title = nonEmptyString(data.title, "Bookmark title");
+  if (Object.hasOwn(data, "title")) {
+    result.title = nonEmptyString(data.title, "Bookmark title");
+  }
   if (Object.hasOwn(data, "url")) result.url = normalizeBookmarkUrl(data.url);
   if (Object.hasOwn(data, "description")) {
     if (data.description !== null && typeof data.description !== "string") {
@@ -208,20 +129,28 @@ function validateBookmarkPatch(value: unknown): Partial<BookmarkFormData> {
     result.description = data.description as string | null;
   }
   if (Object.hasOwn(data, "isFavorite")) {
-    if (typeof data.isFavorite !== "boolean") invalid("Bookmark isFavorite must be boolean.");
+    if (typeof data.isFavorite !== "boolean") {
+      invalid("Bookmark isFavorite must be boolean.");
+    }
     result.isFavorite = data.isFavorite;
   }
   if (Object.hasOwn(data, "folderId")) {
     if (data.folderId !== null && typeof data.folderId !== "string") {
       invalid("Bookmark folderId must be a string or null.");
     }
-    result.folderId = data.folderId === null ? null : nonEmptyString(data.folderId, "Bookmark folderId");
+    result.folderId =
+      data.folderId === null
+        ? null
+        : nonEmptyString(data.folderId, "Bookmark folderId");
   }
   if (Object.hasOwn(data, "sectionId")) {
     if (data.sectionId !== null && typeof data.sectionId !== "string") {
       invalid("Bookmark sectionId must be a string or null.");
     }
-    result.sectionId = data.sectionId === null ? null : nonEmptyString(data.sectionId, "Bookmark sectionId");
+    result.sectionId =
+      data.sectionId === null
+        ? null
+        : nonEmptyString(data.sectionId, "Bookmark sectionId");
   }
   return result;
 }
@@ -229,7 +158,11 @@ function validateBookmarkPatch(value: unknown): Partial<BookmarkFormData> {
 function validateFolderCreate(value: unknown): FolderFormData {
   const data = record(value, "Folder");
   assertAllowedFields(data, FOLDER_FIELDS, "Folder");
-  if (data.color !== undefined && data.color !== null && typeof data.color !== "string") {
+  if (
+    data.color !== undefined &&
+    data.color !== null &&
+    typeof data.color !== "string"
+  ) {
     invalid("Folder color must be a string or null.");
   }
   return {
@@ -243,9 +176,13 @@ function validateFolderPatch(value: unknown): Partial<FolderFormData> {
   assertAllowedFields(data, FOLDER_FIELDS, "Folder");
   if (!Object.keys(data).length) invalid("Folder PATCH body must not be empty.");
   const result: Partial<FolderFormData> = {};
-  if (Object.hasOwn(data, "name")) result.name = nonEmptyString(data.name, "Folder name");
+  if (Object.hasOwn(data, "name")) {
+    result.name = nonEmptyString(data.name, "Folder name");
+  }
   if (Object.hasOwn(data, "color")) {
-    if (data.color !== null && typeof data.color !== "string") invalid("Folder color must be a string or null.");
+    if (data.color !== null && typeof data.color !== "string") {
+      invalid("Folder color must be a string or null.");
+    }
     result.color = data.color as string | null;
   }
   return result;
@@ -273,272 +210,157 @@ function validatePositionUpdates(value: unknown): PositionUpdate[] {
   });
 }
 
-async function ownedRow<T>(table: string, id: string, userId: string, label: string) {
-  const rows = await supabaseRequest<T[]>(table, {
-    query: { select: "*", id: `eq.${id}`, user_id: `eq.${userId}`, limit: "1" }
-  });
-  const row = rows[0];
-  if (!row) invalid(`${label} does not belong to the configured user.`);
-  return row;
-}
-
-async function validateBookmarkReferences(folderId: string | null, sectionId: string | null, userId: string) {
-  if (folderId) await ownedRow<FolderRow>(TABLES.folders, folderId, userId, "Folder");
-  if (!sectionId) return;
-  const section = await ownedRow<SectionRow>(TABLES.sections, sectionId, userId, "Section");
-  if (!folderId || section.folder_id !== folderId) invalid("Section must belong to the bookmark folder.");
-}
-
-async function reorderOwnedRows(
-  table: string,
-  items: PositionUpdate[],
-  userId: string,
-  updatedAt = false
-) {
-  if (!items.length) return;
-  const rows = await supabaseRequest<Array<{ id: string; position: number | null }>>(table, {
-    query: { select: "id,position", user_id: `eq.${userId}` }
-  });
-  const originalById = new Map(rows.map((row) => [row.id, row.position ?? 0]));
-  if (items.some(({ id }) => !originalById.has(id))) {
-    invalid("Reorder item does not belong to the configured user.");
+function getFastApiConfig() {
+  const rawUrl = process.env.BOOKMARK_API_URL?.trim();
+  const apiKey = process.env.BOOKMARK_API_KEY?.trim();
+  if (!rawUrl || !apiKey) {
+    throw new StoreError(
+      "BOOKMARK_API_URL and BOOKMARK_API_KEY are required.",
+      500
+    );
   }
 
   try {
-    for (const item of items) {
-      await supabaseRequest<void>(table, {
-        method: "PATCH",
-        prefer: "return=minimal",
-        query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
-        body: {
-          position: item.position,
-          ...(updatedAt ? { updated_at: new Date().toISOString() } : {})
-        }
-      });
+    const url = new URL(rawUrl);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      !url.hostname ||
+      url.username ||
+      url.password
+    ) {
+      throw new Error();
     }
-  } catch (error) {
-    await Promise.allSettled(
-      items.map((item) =>
-        supabaseRequest<void>(table, {
-          method: "PATCH",
-          prefer: "return=minimal",
-          query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
-          body: {
-            position: originalById.get(item.id),
-            ...(updatedAt ? { updated_at: new Date().toISOString() } : {})
-          }
-        })
-      )
-    );
-    throw error;
+    return { url: url.toString().replace(/\/$/, ""), apiKey };
+  } catch {
+    throw new StoreError("BOOKMARK_API_URL must be a valid HTTP(S) URL.", 500);
   }
 }
 
-function mapBookmark(row: BookmarkRow): BookmarkItem {
-  return {
-    id: row.id,
-    title: row.title,
-    url: row.url,
-    description: row.description,
-    isFavorite: Boolean(row.is_favorite),
-    folderId: row.folder_id,
-    sectionId: row.section_id,
-    position: row.position ?? 0
-  };
+async function readErrorMessage(response: Response) {
+  try {
+    const payload = (await response.json()) as {
+      message?: string;
+      detail?: string | Array<{ msg?: string }>;
+    };
+    if (payload.message) return payload.message;
+    if (typeof payload.detail === "string") return payload.detail;
+    if (Array.isArray(payload.detail)) {
+      return payload.detail.find((item) => item.msg)?.msg ?? "FastAPI request failed.";
+    }
+  } catch {
+    // Use the stable fallback below.
+  }
+  return response.statusText || "FastAPI request failed.";
 }
 
-function mapFolder(row: FolderRow): Folder {
-  return {
-    id: row.id,
-    name: row.name,
-    color: row.color,
-    position: row.position ?? 0
-  };
-}
+async function fastApiRequest<T>(
+  path: string,
+  {
+    method = "GET",
+    body
+  }: {
+    method?: string;
+    body?: unknown;
+  } = {}
+): Promise<T> {
+  const config = getFastApiConfig();
+  const endpoint = new URL(path.replace(/^\/+/, ""), `${config.url}/`);
+  const headers = new Headers({
+    Accept: "application/json",
+    "X-Bookmark-Key": config.apiKey
+  });
+  if (body !== undefined) headers.set("Content-Type", "application/json");
 
-function mapSection(row: SectionRow): Section {
-  return {
-    id: row.id,
-    name: row.name,
-    folderId: row.folder_id,
-    position: row.position ?? 0
-  };
+  const response = await fetch(endpoint, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new StoreError(await readErrorMessage(response), response.status);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
 }
 
 export const bookmarkStore = {
-  async listBookmarks() {
-    const userId = await getBookmarkUserId();
-    const rows = await supabaseRequest<BookmarkRow[]>(TABLES.bookmarks, {
-      query: { select: "*", user_id: `eq.${userId}`, order: "position.asc" }
-    });
-    return rows.map(mapBookmark);
-  },
+  listBookmarks: () => fastApiRequest<BookmarkItem[]>("/api/bookmarks"),
 
   async createBookmark(value: unknown) {
-    const data = validateBookmarkCreate(value);
-    const userId = await getBookmarkUserId();
-    await validateBookmarkReferences(data.folderId, data.sectionId, userId);
-    const rows = await supabaseRequest<BookmarkRow[]>(TABLES.bookmarks, {
+    return fastApiRequest<BookmarkItem>("/api/bookmarks", {
       method: "POST",
-      prefer: "return=representation",
-      body: {
-        title: data.title,
-        url: data.url,
-        description: data.description ?? "",
-        is_favorite: data.isFavorite,
-        folder_id: data.folderId,
-        section_id: data.sectionId,
-        user_id: userId,
-        position: await nextPosition(TABLES.bookmarks, userId)
-      }
+      body: validateBookmarkCreate(value)
     });
-    return mapBookmark(one(rows, "Bookmark"));
   },
 
   async updateBookmark(id: string, value: unknown) {
-    const data = validateBookmarkPatch(value);
-    const userId = await getBookmarkUserId();
-    if (data.folderId !== undefined || data.sectionId !== undefined) {
-      const current = await ownedRow<BookmarkRow>(TABLES.bookmarks, id, userId, "Bookmark");
-      await validateBookmarkReferences(
-        data.folderId === undefined ? current.folder_id : data.folderId,
-        data.sectionId === undefined ? current.section_id : data.sectionId,
-        userId
-      );
-    }
-    const body: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (data.title !== undefined) body.title = data.title;
-    if (data.url !== undefined) body.url = data.url;
-    if (data.description !== undefined) body.description = data.description;
-    if (data.isFavorite !== undefined) body.is_favorite = data.isFavorite;
-    if (data.folderId !== undefined) body.folder_id = data.folderId;
-    if (data.sectionId !== undefined) body.section_id = data.sectionId;
-
-    const rows = await supabaseRequest<BookmarkRow[]>(TABLES.bookmarks, {
+    return fastApiRequest<BookmarkItem>(`/api/bookmarks/${id}`, {
       method: "PATCH",
-      prefer: "return=representation",
-      query: { id: `eq.${id}`, user_id: `eq.${userId}` },
-      body
-    });
-    return mapBookmark(one(rows, "Bookmark"));
-  },
-
-  async deleteBookmark(id: string) {
-    const userId = await getBookmarkUserId();
-    await supabaseRequest<void>(TABLES.bookmarks, {
-      method: "DELETE",
-      prefer: "return=minimal",
-      query: { id: `eq.${id}`, user_id: `eq.${userId}` }
+      body: validateBookmarkPatch(value)
     });
   },
 
-  async reorderBookmarks(items: unknown) {
-    const validated = validatePositionUpdates(items);
-    const userId = await getBookmarkUserId();
-    await reorderOwnedRows(TABLES.bookmarks, validated, userId, true);
+  deleteBookmark: (id: string) =>
+    fastApiRequest<void>(`/api/bookmarks/${id}`, { method: "DELETE" }),
+
+  async reorderBookmarks(value: unknown) {
+    return fastApiRequest<void>("/api/bookmarks/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
   },
 
-  async listFolders() {
-    const userId = await getBookmarkUserId();
-    const rows = await supabaseRequest<FolderRow[]>(TABLES.folders, {
-      query: { select: "*", user_id: `eq.${userId}`, order: "position.asc" }
-    });
-    return rows.map(mapFolder);
-  },
+  listFolders: () => fastApiRequest<Folder[]>("/api/folders"),
 
   async createFolder(value: unknown) {
-    const data = validateFolderCreate(value);
-    const userId = await getBookmarkUserId();
-    const rows = await supabaseRequest<FolderRow[]>(TABLES.folders, {
+    return fastApiRequest<Folder>("/api/folders", {
       method: "POST",
-      prefer: "return=representation",
-      body: {
-        name: data.name,
-        color: data.color ?? null,
-        user_id: userId,
-        position: await nextPosition(TABLES.folders, userId)
-      }
+      body: validateFolderCreate(value)
     });
-    return mapFolder(one(rows, "Folder"));
   },
 
   async updateFolder(id: string, value: unknown) {
-    const data = validateFolderPatch(value);
-    const userId = await getBookmarkUserId();
-    const rows = await supabaseRequest<FolderRow[]>(TABLES.folders, {
+    return fastApiRequest<Folder>(`/api/folders/${id}`, {
       method: "PATCH",
-      prefer: "return=representation",
-      query: { id: `eq.${id}`, user_id: `eq.${userId}` },
-      body: data
-    });
-    return mapFolder(one(rows, "Folder"));
-  },
-
-  async deleteFolder(id: string) {
-    const userId = await getBookmarkUserId();
-    await supabaseRequest<void>(TABLES.folders, {
-      method: "DELETE",
-      prefer: "return=minimal",
-      query: { id: `eq.${id}`, user_id: `eq.${userId}` }
+      body: validateFolderPatch(value)
     });
   },
 
-  async reorderFolders(items: unknown) {
-    const validated = validatePositionUpdates(items);
-    const userId = await getBookmarkUserId();
-    await reorderOwnedRows(TABLES.folders, validated, userId);
+  deleteFolder: (id: string) =>
+    fastApiRequest<void>(`/api/folders/${id}`, { method: "DELETE" }),
+
+  async reorderFolders(value: unknown) {
+    return fastApiRequest<void>("/api/folders/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
   },
 
-  async listSections() {
-    const userId = await getBookmarkUserId();
-    const rows = await supabaseRequest<SectionRow[]>(TABLES.sections, {
-      query: { select: "*", user_id: `eq.${userId}`, order: "position.asc" }
-    });
-    return rows.map(mapSection);
-  },
+  listSections: () => fastApiRequest<Section[]>("/api/sections"),
 
   async createSection(folderIdValue: unknown, nameValue: unknown) {
     const folderId = nonEmptyString(folderIdValue, "Section folderId");
     const name = nonEmptyString(nameValue, "Section name");
-    const userId = await getBookmarkUserId();
-    await ownedRow<FolderRow>(TABLES.folders, folderId, userId, "Folder");
-    const existingRows = await supabaseRequest<SectionRow[]>(TABLES.sections, {
-      query: { select: "*", user_id: `eq.${userId}`, folder_id: `eq.${folderId}` }
-    });
-    const existing = findSectionByName(existingRows.map(mapSection), folderId, name);
+    const existing = findSectionByName(
+      await fastApiRequest<Section[]>("/api/sections"),
+      folderId,
+      name
+    );
     if (existing) return existing;
-
-    const rows = await supabaseRequest<SectionRow[]>(TABLES.sections, {
+    return fastApiRequest<Section>("/api/sections", {
       method: "POST",
-      prefer: "return=representation",
-      body: {
-        name: name.trim(),
-        folder_id: folderId,
-        user_id: userId,
-        position: await nextPosition(TABLES.sections, userId)
-      }
-    });
-    return mapSection(one(rows, "Section"));
-  },
-
-  async deleteSection(id: string) {
-    const userId = await getBookmarkUserId();
-    await supabaseRequest<void>(TABLES.bookmarks, {
-      method: "PATCH",
-      prefer: "return=minimal",
-      query: { section_id: `eq.${id}`, user_id: `eq.${userId}` },
-      body: { section_id: null, updated_at: new Date().toISOString() }
-    });
-    await supabaseRequest<void>(TABLES.sections, {
-      method: "DELETE",
-      prefer: "return=minimal",
-      query: { id: `eq.${id}`, user_id: `eq.${userId}` }
+      body: { folderId, name }
     });
   },
 
-  async reorderSections(items: unknown) {
-    const validated = validatePositionUpdates(items);
-    const userId = await getBookmarkUserId();
-    await reorderOwnedRows(TABLES.sections, validated, userId);
+  deleteSection: (id: string) =>
+    fastApiRequest<void>(`/api/sections/${id}`, { method: "DELETE" }),
+
+  async reorderSections(value: unknown) {
+    return fastApiRequest<void>("/api/sections/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
   }
 };
