@@ -310,12 +310,14 @@ export default function BookmarksPage() {
   const [mutationError, setMutationError] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [apiBacked, setApiBacked] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const mutationQueues = useRef(new Map<string, Promise<void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
   const favoriteTargets = useRef(new Map<string, boolean>());
+  const favoriteReconciliations = useRef(new Set<string>());
 
   useEffect(() => {
     if (deleteTarget) setDeleteError("");
@@ -344,11 +346,15 @@ export default function BookmarksPage() {
     async function loadBookmarks() {
       const hasCache = hydrateFromFallback();
       if (hasCache) setHydrated(true);
-      await refreshBookmarks({
-        fallbackToInitial: !hasCache,
-        markHydrated: !hasCache,
-        isCancelled: () => cancelled
-      });
+      try {
+        await refreshBookmarks({
+          fallbackToInitial: !hasCache,
+          markHydrated: !hasCache,
+          isCancelled: () => cancelled
+        });
+      } finally {
+        if (!cancelled) setBootstrapping(false);
+      }
     }
 
     void loadBookmarks();
@@ -469,6 +475,7 @@ export default function BookmarksPage() {
   }
 
   function openBookmarkDialog(bookmark?: BookmarkItem) {
+    if (bootstrapping) return;
     setBookmarkError("");
     setSectionCreatorOpen(false);
     setSectionNameDraft("");
@@ -491,6 +498,7 @@ export default function BookmarksPage() {
   }
 
   function openFolderDialog(folder?: Folder) {
+    if (bootstrapping) return;
     setFolderError("");
     if (folder) {
       setFolderDialog({ mode: "edit", folderId: folder.id });
@@ -502,7 +510,7 @@ export default function BookmarksPage() {
   }
 
   async function createSectionFromBookmarkDialog() {
-    if (creatingSection) return;
+    if (bootstrapping || creatingSection) return;
     const name = sectionNameDraft.trim();
     if (!name) {
       setSectionCreateMessage("섹션 이름을 입력하세요.");
@@ -542,7 +550,7 @@ export default function BookmarksPage() {
 
   async function saveBookmark(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || creatingSection) return;
+    if (bootstrapping || saving || creatingSection) return;
     const title = bookmarkDraft.title.trim();
     const url = safeUrl(bookmarkDraft.url);
     if (!title) {
@@ -610,7 +618,7 @@ export default function BookmarksPage() {
 
   async function saveFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
+    if (bootstrapping || saving) return;
     const name = folderDraft.name.trim();
     if (!name) {
       setFolderError("폴더 이름을 입력하세요.");
@@ -657,7 +665,7 @@ export default function BookmarksPage() {
   }
 
   async function confirmDelete() {
-    if (!deleteTarget || deleting) return;
+    if (bootstrapping || !deleteTarget || deleting) return;
 
     setDeleteError("");
     setDeleting(true);
@@ -716,8 +724,9 @@ export default function BookmarksPage() {
     rollback: () => void,
     request: () => Promise<unknown>,
     fallbackMessage: string,
-    reconcileOnFailure = false
+    reconcileOnFailure: boolean | (() => boolean) = false
   ) {
+    if (bootstrapping) return;
     setMutationError("");
     apply();
     if (!apiBacked) return;
@@ -732,7 +741,10 @@ export default function BookmarksPage() {
         pendingOptimistic.current.delete(token);
       } catch (error) {
         pendingOptimistic.current.delete(token);
-        const refreshed = reconcileOnFailure
+        const shouldReconcile = typeof reconcileOnFailure === "function"
+          ? reconcileOnFailure()
+          : reconcileOnFailure;
+        const refreshed = shouldReconcile
           ? await refreshBookmarks({ reapplyOptimistic: true })
           : false;
         if (!refreshed) rollback();
@@ -747,8 +759,10 @@ export default function BookmarksPage() {
   }
 
   function toggleFavorite(id: string) {
+    if (bootstrapping) return;
     const bookmark = bookmarks.find((item) => item.id === id);
     if (!bookmark) return;
+    if (favoriteTargets.current.has(id)) favoriteReconciliations.current.add(id);
     const previousFavorite = favoriteTargets.current.get(id) ?? bookmark.isFavorite;
     const optimisticFavorite = !previousFavorite;
     favoriteTargets.current.set(id, optimisticFavorite);
@@ -775,19 +789,24 @@ export default function BookmarksPage() {
           method: "PATCH",
           body: JSON.stringify({ isFavorite: optimisticFavorite })
         }),
-      "즐겨찾기 변경에 실패했습니다."
+      "즐겨찾기 변경에 실패했습니다.",
+      () => favoriteReconciliations.current.has(id)
     );
     if (!mutation) {
       favoriteTargets.current.delete(id);
+      favoriteReconciliations.current.delete(id);
       return;
     }
     void mutation.finally(() => {
-      if (favoriteTargets.current.get(id) === optimisticFavorite) favoriteTargets.current.delete(id);
+      if (favoriteTargets.current.get(id) === optimisticFavorite) {
+        favoriteTargets.current.delete(id);
+        favoriteReconciliations.current.delete(id);
+      }
     });
   }
 
   function dropFolder(targetFolderId: string) {
-    if (!draggingFolderId) return;
+    if (bootstrapping || !draggingFolderId) return;
     const moved = moveById(orderedFolders, draggingFolderId, targetFolderId);
     const changes = getPositionChanges(orderedFolders, moved);
     void persistOptimisticMutation(
@@ -803,7 +822,7 @@ export default function BookmarksPage() {
   }
 
   function dropSection(targetSectionId: string) {
-    if (!selectedFolder || !draggingSectionId) return;
+    if (bootstrapping || !selectedFolder || !draggingSectionId) return;
     const scoped = sections.filter((section) => section.folderId === selectedFolder.id).sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingSectionId, targetSectionId);
     const changes = getPositionChanges(scoped, moved);
@@ -820,7 +839,7 @@ export default function BookmarksPage() {
   }
 
   function dropBookmark(targetBookmarkId: string) {
-    if (!selectedFolder || !draggingBookmarkId) return;
+    if (bootstrapping || !selectedFolder || !draggingBookmarkId) return;
     const active = bookmarks.find((bookmark) => bookmark.id === draggingBookmarkId);
     const target = bookmarks.find((bookmark) => bookmark.id === targetBookmarkId);
     if (!active || !target || active.folderId !== selectedFolder.id || active.sectionId !== target.sectionId) {
@@ -846,6 +865,7 @@ export default function BookmarksPage() {
   }
 
   function dragOverBookmark(targetBookmarkId: string) {
+    if (bootstrapping) return;
     const active = bookmarks.find((bookmark) => bookmark.id === draggingBookmarkId);
     const target = bookmarks.find((bookmark) => bookmark.id === targetBookmarkId);
     setDragOverBookmarkId(active?.folderId === target?.folderId && active?.sectionId === target?.sectionId ? targetBookmarkId : null);
@@ -856,7 +876,10 @@ export default function BookmarksPage() {
   }
 
   return (
-    <div className="fade-in flex h-full min-h-[640px] overflow-hidden bg-white">
+    <div
+      className="fade-in flex h-full min-h-[640px] overflow-hidden bg-white"
+      aria-busy={bootstrapping}
+    >
       <FolderSidebar
         folders={orderedFolders}
         bookmarks={bookmarks}
@@ -870,7 +893,9 @@ export default function BookmarksPage() {
         onDeleteFolder={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
         onRefresh={() => void refreshBookmarks()}
         refreshing={refreshing}
+        mutationsDisabled={bootstrapping}
         onDragFolder={(id) => {
+          if (bootstrapping) return;
           setDraggingFolderId(id);
           if (!id) setDragOverFolderId(null);
         }}
@@ -900,7 +925,9 @@ export default function BookmarksPage() {
             onDeleteFolder={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
             onRefresh={() => void refreshBookmarks()}
             refreshing={refreshing}
+            mutationsDisabled={bootstrapping}
             onDragFolder={(id) => {
+              if (bootstrapping) return;
               setDraggingFolderId(id);
               if (!id) setDragOverFolderId(null);
             }}
@@ -979,7 +1006,7 @@ export default function BookmarksPage() {
               즐겨찾기
               <span className="tabular-nums">{currentFavoriteCount}</span>
             </Button>
-            <Button size="sm" disabled={!selectedFolder} onClick={() => openBookmarkDialog()} className="hidden sm:inline-flex">
+            <Button size="sm" disabled={bootstrapping || !selectedFolder} onClick={() => openBookmarkDialog()} className="hidden sm:inline-flex">
               <Plus className="h-4 w-4" />
               북마크 추가
             </Button>
@@ -1010,7 +1037,7 @@ export default function BookmarksPage() {
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-white px-6 text-center">
                 <div className="mb-3 h-1.5 w-12 rounded-full bg-[var(--color-brand)]" />
                 <p className="text-base font-bold text-[var(--text-heading)]">{emptyMessage}</p>
-                <Button className="mt-4" size="sm" disabled={!selectedFolder} onClick={() => openBookmarkDialog()}>
+                <Button className="mt-4" size="sm" disabled={bootstrapping || !selectedFolder} onClick={() => openBookmarkDialog()}>
                   <Plus className="h-4 w-4" />
                   북마크 추가
                 </Button>
@@ -1019,9 +1046,9 @@ export default function BookmarksPage() {
               groups.map((group) => (
                 <section key={group.id} className="space-y-4">
                   <div
-                    draggable={group.id !== NO_SECTION}
+                    draggable={!bootstrapping && group.id !== NO_SECTION}
                     onDragStart={() => {
-                      if (group.id !== NO_SECTION) setDraggingSectionId(group.id);
+                      if (!bootstrapping && group.id !== NO_SECTION) setDraggingSectionId(group.id);
                     }}
                     onDragEnd={() => {
                       setDraggingSectionId(null);
@@ -1051,6 +1078,7 @@ export default function BookmarksPage() {
                       <>
                         <button
                           type="button"
+                          disabled={bootstrapping}
                           className="rounded p-1 text-[var(--text-muted)] hover:bg-red-50 hover:text-destructive"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1062,9 +1090,12 @@ export default function BookmarksPage() {
                         </button>
                         <button
                           type="button"
-                          draggable
+                          disabled={bootstrapping}
+                          draggable={!bootstrapping}
                           className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC]"
-                          onDragStart={() => setDraggingSectionId(group.id)}
+                          onDragStart={() => {
+                            if (!bootstrapping) setDraggingSectionId(group.id);
+                          }}
                           onDragEnd={() => {
                             setDraggingSectionId(null);
                             setDragOverSectionId(null);
@@ -1088,7 +1119,10 @@ export default function BookmarksPage() {
                         viewMode={viewMode}
                         dragging={draggingBookmarkId === bookmark.id}
                         dragOver={dragOverBookmarkId === bookmark.id}
-                        onDragStart={(id) => setDraggingBookmarkId(id)}
+                        mutationsDisabled={bootstrapping}
+                        onDragStart={(id) => {
+                          if (!bootstrapping) setDraggingBookmarkId(id);
+                        }}
                         onDragEnd={() => {
                           setDraggingBookmarkId(null);
                           setDragOverBookmarkId(null);
@@ -1108,7 +1142,7 @@ export default function BookmarksPage() {
           </div>
         </main>
 
-        <Button size="icon-lg" disabled={!selectedFolder} className="fixed bottom-4 right-4 z-40 sm:hidden" onClick={() => openBookmarkDialog()}>
+        <Button size="icon-lg" disabled={bootstrapping || !selectedFolder} className="fixed bottom-4 right-4 z-40 sm:hidden" onClick={() => openBookmarkDialog()}>
           <Plus className="h-5 w-5" />
           <span className="sr-only">북마크 추가</span>
         </Button>
@@ -1391,6 +1425,7 @@ function FolderSidebar({
   onDeleteFolder,
   onRefresh,
   refreshing,
+  mutationsDisabled,
   onDragFolder,
   onDragOverFolder,
   onDropFolder,
@@ -1408,6 +1443,7 @@ function FolderSidebar({
   onDeleteFolder: (folder: Folder) => void;
   onRefresh: () => void;
   refreshing: boolean;
+  mutationsDisabled: boolean;
   onDragFolder: (folderId: string | null) => void;
   onDragOverFolder: (folderId: string | null) => void;
   onDropFolder: (folderId: string) => void;
@@ -1454,7 +1490,7 @@ function FolderSidebar({
             return (
               <div
                 key={folder.id}
-                draggable
+                draggable={!mutationsDisabled}
                 onDragStart={() => onDragFolder(folder.id)}
                 onDragEnd={() => onDragFolder(null)}
                 onDragOver={(event) => {
@@ -1484,11 +1520,19 @@ function FolderSidebar({
                 </button>
                 <div className="absolute right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                   <GripVertical className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
-                  <button className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC]" onClick={() => onEditFolder(folder)}>
+                  <button
+                    disabled={mutationsDisabled}
+                    className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC]"
+                    onClick={() => onEditFolder(folder)}
+                  >
                     <Pencil className="h-3.5 w-3.5" />
                     <span className="sr-only">{folder.name} 편집</span>
                   </button>
-                  <button className="rounded p-1 text-destructive hover:bg-[#F8FAFC]" onClick={() => onDeleteFolder(folder)}>
+                  <button
+                    disabled={mutationsDisabled}
+                    className="rounded p-1 text-destructive hover:bg-[#F8FAFC]"
+                    onClick={() => onDeleteFolder(folder)}
+                  >
                     <Trash2 className="h-3.5 w-3.5" />
                     <span className="sr-only">{folder.name} 삭제</span>
                   </button>
@@ -1500,7 +1544,11 @@ function FolderSidebar({
       </nav>
 
       <div className="shrink-0 space-y-1.5 border-t border-[var(--border-subtle)] p-3">
-        <button className="flex min-h-9 w-full items-center gap-2 rounded px-3 text-sm font-bold text-[#334155] hover:bg-white" onClick={onAddFolder}>
+        <button
+          disabled={mutationsDisabled}
+          className="flex min-h-9 w-full items-center gap-2 rounded px-3 text-sm font-bold text-[#334155] hover:bg-white"
+          onClick={onAddFolder}
+        >
           <FolderPlus className="h-4 w-4" />
           새 폴더
         </button>
@@ -1517,6 +1565,7 @@ function BookmarkCard({
   viewMode,
   dragging,
   dragOver,
+  mutationsDisabled,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -1531,6 +1580,7 @@ function BookmarkCard({
   viewMode: ViewMode;
   dragging: boolean;
   dragOver: boolean;
+  mutationsDisabled: boolean;
   onDragStart: (bookmarkId: string) => void;
   onDragEnd: () => void;
   onDragOver: (bookmarkId: string) => void;
@@ -1549,7 +1599,7 @@ function BookmarkCard({
         dragging ? "opacity-60" : "cursor-pointer hover:border-[var(--color-brand)] hover:bg-white",
         dragOver && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25"
       )}
-      draggable
+      draggable={!mutationsDisabled}
       role="link"
       tabIndex={0}
       onClick={openBookmark}
@@ -1582,11 +1632,11 @@ function BookmarkCard({
           </div>
           <div className="-mr-1 -mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100" onClick={(event) => event.stopPropagation()}>
             <GripVertical className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-            <Button variant="ghost" size="icon-xs" onClick={() => onEdit(bookmark)}>
+            <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onEdit(bookmark)}>
               <Pencil className="h-4 w-4" />
               <span className="sr-only">{bookmark.title} 편집</span>
             </Button>
-            <Button variant="ghost" size="icon-xs" onClick={() => onDelete(bookmark)}>
+            <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onDelete(bookmark)}>
               <Trash2 className="h-4 w-4 text-destructive" />
               <span className="sr-only">{bookmark.title} 삭제</span>
             </Button>
@@ -1601,7 +1651,13 @@ function BookmarkCard({
             {section ? <Badge variant="outline">{section.name}</Badge> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
-            <Button variant="ghost" size="icon-xs" className="border border-[var(--border-subtle)] bg-[#F8FAFC]" onClick={() => onToggleFavorite(bookmark.id)}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={mutationsDisabled}
+              className="border border-[var(--border-subtle)] bg-[#F8FAFC]"
+              onClick={() => onToggleFavorite(bookmark.id)}
+            >
               <Star className={cn("h-4 w-4", bookmark.isFavorite ? "fill-[var(--color-brand)] text-[var(--color-brand)]" : "text-[var(--text-muted)]")} />
               <span className="sr-only">{bookmark.title} 즐겨찾기</span>
             </Button>

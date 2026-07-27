@@ -185,6 +185,133 @@ describe("bookmark database saving feedback", () => {
     );
   });
 
+  it("blocks cached mutation controls until the initial remote bootstrap succeeds", async () => {
+    const section = { id: "section-a", name: "기본", folderId: "work", position: 0 } satisfies Section;
+    const bookmark = {
+      id: "bm-1",
+      title: "Example",
+      url: "https://example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: section.id,
+      position: 0
+    } satisfies BookmarkItem;
+    const { setItem } = stubBookmarkCache([bookmark], [section]);
+    const resolvers = new Map<string, (response: Response) => void>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if ((init?.method ?? "GET") === "GET") {
+        return new Promise<Response>((resolve) => {
+          resolvers.set(path, resolve);
+        });
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ ...bookmark, isFavorite: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+
+    const card = await screen.findByRole("link", { name: /Example/ });
+    const favorite = screen.getByRole("button", { name: "Example 즐겨찾기" });
+    expect(screen.getByRole("main").closest("[aria-busy]")).toHaveAttribute("aria-busy", "true");
+    expect(card).toHaveAttribute("draggable", "false");
+    expect(favorite).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Example 편집" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Example 삭제" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "기본 섹션 삭제" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "기본 섹션 순서 변경" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "작업 편집" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "작업 삭제" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "새 폴더" })).toBeDisabled();
+    screen.getAllByRole("button", { name: "북마크 추가" }).forEach((button) => {
+      expect(button).toBeDisabled();
+    });
+
+    fireEvent.click(favorite);
+    fireEvent.click(screen.getAllByRole("button", { name: "북마크 추가" })[0]);
+    expect(mutationCalls(fetchMock)).toHaveLength(0);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(favorite.querySelector("svg")).not.toHaveClass("fill-[var(--color-brand)]");
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.bookmarks[0]).toMatchObject({ id: "bm-1", isFavorite: false });
+    });
+
+    await act(async () => {
+      resolvers.get("/api/folders")?.(
+        new Response(JSON.stringify(remoteSnapshot.folders), { status: 200 })
+      );
+      resolvers.get("/api/sections")?.(
+        new Response(JSON.stringify(remoteSnapshot.sections), { status: 200 })
+      );
+      resolvers.get("/api/bookmarks")?.(
+        new Response(JSON.stringify(remoteSnapshot.bookmarks), { status: 200 })
+      );
+    });
+
+    await waitFor(() => expect(favorite).toBeEnabled());
+    expect(screen.getByRole("main").closest("[aria-busy]")).toHaveAttribute("aria-busy", "false");
+    expect(card).toHaveAttribute("draggable", "true");
+    fireEvent.click(favorite);
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+  });
+
+  it("unlocks local fallback mutations after the initial remote bootstrap fails", async () => {
+    const bookmark = {
+      id: "bm-1",
+      title: "Example",
+      url: "https://example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: null,
+      position: 0
+    } satisfies BookmarkItem;
+    const { setItem } = stubBookmarkCache([bookmark]);
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET") {
+        return new Promise<Response>((resolve) => {
+          resolvers.push(resolve);
+        });
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+
+    const favorite = await screen.findByRole("button", { name: "Example 즐겨찾기" });
+    expect(favorite).toBeDisabled();
+    fireEvent.click(favorite);
+    expect(mutationCalls(fetchMock)).toHaveLength(0);
+    expect(favorite.querySelector("svg")).not.toHaveClass("fill-[var(--color-brand)]");
+
+    await act(async () => {
+      resolvers.forEach((resolve) =>
+        resolve(
+          new Response(JSON.stringify({ detail: "offline" }), {
+            status: 503,
+            headers: { "Content-Type": "application/json" }
+          })
+        )
+      );
+    });
+
+    await waitFor(() => expect(favorite).toBeEnabled());
+    fireEvent.click(favorite);
+    expect(mutationCalls(fetchMock)).toHaveLength(0);
+    expect(favorite.querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.bookmarks[0]).toMatchObject({ id: "bm-1", isFavorite: true });
+    });
+  });
+
   it("opens folder choices above the bookmark modal", async () => {
     stubBookmarkCache();
     render(<BookmarksPage />);
@@ -511,6 +638,132 @@ describe("bookmark database saving feedback", () => {
       )
     );
   });
+
+  it.each([
+    {
+      label: "both requests fail",
+      outcomes: [false, false],
+      expectedFavorite: false,
+      expectedOrder: [
+        "PATCH true",
+        "GET /api/folders",
+        "GET /api/sections",
+        "GET /api/bookmarks",
+        "PATCH false",
+        "GET /api/folders",
+        "GET /api/sections",
+        "GET /api/bookmarks"
+      ]
+    },
+    {
+      label: "only the first request succeeds",
+      outcomes: [true, false],
+      expectedFavorite: true,
+      expectedOrder: [
+        "PATCH true",
+        "PATCH false",
+        "GET /api/folders",
+        "GET /api/sections",
+        "GET /api/bookmarks"
+      ]
+    },
+    {
+      label: "only the second request succeeds",
+      outcomes: [false, true],
+      expectedFavorite: false,
+      expectedOrder: [
+        "PATCH true",
+        "GET /api/folders",
+        "GET /api/sections",
+        "GET /api/bookmarks",
+        "PATCH false"
+      ]
+    },
+    {
+      label: "both requests succeed",
+      outcomes: [true, true],
+      expectedFavorite: false,
+      expectedOrder: ["PATCH true", "PATCH false"]
+    }
+  ])(
+    "reconciles queued favorite toggles with canonical state when $label",
+    async ({ outcomes, expectedFavorite, expectedOrder }) => {
+      const bookmark = {
+        id: "bm-1",
+        title: "Example",
+        url: "https://example.com",
+        description: null,
+        isFavorite: false,
+        folderId: "work",
+        sectionId: null,
+        position: 0
+      } satisfies BookmarkItem;
+      const { setItem } = stubBookmarkCache([bookmark]);
+      let canonicalFavorite = false;
+      let patchIndex = 0;
+      const requestOrder: string[] = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        const method = init?.method ?? "GET";
+        if (method === "GET") {
+          requestOrder.push(`GET ${path}`);
+          if (path === "/api/folders") {
+            return new Response(JSON.stringify(remoteSnapshot.folders), { status: 200 });
+          }
+          if (path === "/api/sections") {
+            return new Response(JSON.stringify(remoteSnapshot.sections), { status: 200 });
+          }
+          return new Response(
+            JSON.stringify([{ ...bookmark, isFavorite: canonicalFavorite }]),
+            { status: 200 }
+          );
+        }
+
+        const target = JSON.parse(String(init?.body)).isFavorite as boolean;
+        requestOrder.push(`PATCH ${target}`);
+        const succeeds = outcomes[patchIndex];
+        patchIndex += 1;
+        if (!succeeds) {
+          return new Response(JSON.stringify({ detail: "즐겨찾기 저장에 실패했습니다." }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        canonicalFavorite = target;
+        return new Response(JSON.stringify({ ...bookmark, isFavorite: target }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      render(<BookmarksPage />);
+
+      const favorite = await screen.findByRole("button", { name: "Example 즐겨찾기" });
+      await waitFor(() => expect(favorite).toBeEnabled());
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      requestOrder.length = 0;
+
+      fireEvent.click(favorite);
+      fireEvent.click(favorite);
+
+      await waitFor(() => expect(patchIndex).toBe(2));
+      await waitFor(() => expect(requestOrder).toEqual(expectedOrder));
+      await waitFor(() => {
+        if (expectedFavorite) {
+          expect(favorite.querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
+        } else {
+          expect(favorite.querySelector("svg")).not.toHaveClass("fill-[var(--color-brand)]");
+        }
+      });
+      await waitFor(() => {
+        const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+        expect(saved.bookmarks[0]).toMatchObject({
+          id: "bm-1",
+          isFavorite: expectedFavorite
+        });
+      });
+    }
+  );
 
   it("refreshes canonical remote data after reorder failure", async () => {
     const section = { id: "section-a", name: "기본", folderId: "work", position: 0 } satisfies Section;
