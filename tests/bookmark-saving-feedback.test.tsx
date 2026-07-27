@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import BookmarksPage from "@/app/(dashboard)/bookmarks/page";
+import BookmarksPage from "@/app/(dashboard)/page";
 import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 
 let remoteSnapshot: {

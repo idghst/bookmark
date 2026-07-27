@@ -16,7 +16,7 @@ pnpm install
 pnpm dev
 ```
 
-앱은 http://localhost:3000 에서 `/bookmarks`로 이동합니다.
+북마크 화면은 http://localhost:3000 `/`에서 바로 열립니다.
 
 ## 환경 변수
 
