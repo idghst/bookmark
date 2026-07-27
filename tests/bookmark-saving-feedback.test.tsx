@@ -13,14 +13,16 @@ function stubBookmarkCache(bookmarks: BookmarkItem[] = [], sections: Section[] =
     bookmarks,
     selectedFolderId: "work"
   });
+  const setItem = vi.fn();
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: {
       getItem: vi.fn(() => cache),
-      setItem: vi.fn(),
+      setItem,
       removeItem: vi.fn()
     }
   });
+  return { setItem };
 }
 
 describe("bookmark database saving feedback", () => {
@@ -97,6 +99,79 @@ describe("bookmark database saving feedback", () => {
       { id: "bm-b", position: 0 },
       { id: "bm-a", position: 1 }
     ]);
+  });
+
+  it("rolls back bookmark order and cache when reorder saving fails", async () => {
+    const section = { id: "section-a", name: "기본", folderId: "work", position: 0 } satisfies Section;
+    const bookmarks: BookmarkItem[] = [
+      { id: "bm-a", title: "첫 북마크", url: "https://a.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 },
+      { id: "bm-b", title: "둘째 북마크", url: "https://b.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 1 }
+    ];
+    const { setItem } = stubBookmarkCache(bookmarks, [section]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ detail: "순서 저장에 실패했습니다." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+    );
+    render(<BookmarksPage />);
+
+    fireEvent.dragStart(await screen.findByRole("link", { name: /첫 북마크/ }));
+    const second = screen.getByRole("link", { name: /둘째 북마크/ });
+    fireEvent.dragOver(second);
+    fireEvent.drop(second);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("순서 저장에 실패했습니다.");
+    expect(
+      screen.getByRole("link", { name: /첫 북마크/ }).compareDocumentPosition(
+        screen.getByRole("link", { name: /둘째 북마크/ })
+      ) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.bookmarks).toMatchObject([
+        { id: "bm-a", position: 0 },
+        { id: "bm-b", position: 1 }
+      ]);
+    });
+  });
+
+  it("rolls back favorite state and cache when saving fails", async () => {
+    const bookmark = {
+      id: "bm-1",
+      title: "Example",
+      url: "https://example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: null,
+      position: 0
+    } satisfies BookmarkItem;
+    const { setItem } = stubBookmarkCache([bookmark]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ detail: "즐겨찾기 저장에 실패했습니다." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+    );
+    render(<BookmarksPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Example 즐겨찾기" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("즐겨찾기 저장에 실패했습니다.");
+    expect(screen.getByRole("button", { name: "Example 즐겨찾기" }).querySelector("svg")).not.toHaveClass(
+      "fill-[var(--color-brand)]"
+    );
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.bookmarks[0]).toMatchObject({ id: "bm-1", isFavorite: false });
+    });
   });
 
   it("creates a section separately and waits for the user to select it", async () => {

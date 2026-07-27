@@ -269,6 +269,7 @@ export default function BookmarksPage() {
   const [folderError, setFolderError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [mutationError, setMutationError] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [apiBacked, setApiBacked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -661,24 +662,53 @@ export default function BookmarksPage() {
     }
   }
 
+  async function persistOptimisticMutation(
+    apply: () => void,
+    rollback: () => void,
+    request: () => Promise<unknown>,
+    fallbackMessage: string
+  ) {
+    setMutationError("");
+    apply();
+    if (!apiBacked) return;
+
+    try {
+      await request();
+    } catch (error) {
+      rollback();
+      setMutationError(error instanceof Error ? error.message : fallbackMessage);
+    }
+  }
+
   function toggleFavorite(id: string) {
     const bookmark = bookmarks.find((item) => item.id === id);
-    if (apiBacked && bookmark) {
-      void apiRequest<BookmarkItem>(`/api/bookmarks/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isFavorite: !bookmark.isFavorite })
-      });
-    }
-    setBookmarks((current) =>
-      current.map((bookmark) => (bookmark.id === id ? { ...bookmark, isFavorite: !bookmark.isFavorite } : bookmark))
+    if (!bookmark) return;
+    const previous = bookmarks;
+    const next = bookmarks.map((item) =>
+      item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
+    );
+    void persistOptimisticMutation(
+      () => setBookmarks(next),
+      () => setBookmarks(previous),
+      () =>
+        apiRequest<BookmarkItem>(`/api/bookmarks/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ isFavorite: !bookmark.isFavorite })
+        }),
+      "즐겨찾기 변경에 실패했습니다."
     );
   }
 
   function dropFolder(targetFolderId: string) {
     if (!draggingFolderId) return;
+    const previous = folders;
     const moved = moveById(orderedFolders, draggingFolderId, targetFolderId);
-    setFolders(moved);
-    if (apiBacked) void apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) });
+    void persistOptimisticMutation(
+      () => setFolders(moved),
+      () => setFolders(previous),
+      () => apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+      "폴더 순서 저장에 실패했습니다."
+    );
     setDraggingFolderId(null);
     setDragOverFolderId(null);
   }
@@ -687,8 +717,14 @@ export default function BookmarksPage() {
     if (!selectedFolder || !draggingSectionId) return;
     const scoped = sections.filter((section) => section.folderId === selectedFolder.id).sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingSectionId, targetSectionId);
-    setSections((current) => current.map((section) => moved.find((item) => item.id === section.id) ?? section));
-    if (apiBacked) void apiRequest<void>("/api/sections/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) });
+    const previous = sections;
+    const next = sections.map((section) => moved.find((item) => item.id === section.id) ?? section);
+    void persistOptimisticMutation(
+      () => setSections(next),
+      () => setSections(previous),
+      () => apiRequest<void>("/api/sections/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+      "섹션 순서 저장에 실패했습니다."
+    );
     setDraggingSectionId(null);
     setDragOverSectionId(null);
   }
@@ -706,8 +742,14 @@ export default function BookmarksPage() {
       .filter((bookmark) => bookmark.folderId === selectedFolder.id && bookmark.sectionId === active.sectionId)
       .sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingBookmarkId, targetBookmarkId);
-    setBookmarks((current) => current.map((bookmark) => moved.find((item) => item.id === bookmark.id) ?? bookmark));
-    if (apiBacked) void apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) });
+    const previous = bookmarks;
+    const next = bookmarks.map((bookmark) => moved.find((item) => item.id === bookmark.id) ?? bookmark);
+    void persistOptimisticMutation(
+      () => setBookmarks(next),
+      () => setBookmarks(previous),
+      () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+      "북마크 순서 저장에 실패했습니다."
+    );
     setDraggingBookmarkId(null);
     setDragOverBookmarkId(null);
   }
@@ -868,6 +910,11 @@ export default function BookmarksPage() {
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
           <div className="mx-auto w-full max-w-[1480px] space-y-6 p-4 md:p-6 lg:p-8">
+            {mutationError ? (
+              <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">
+                {mutationError}
+              </div>
+            ) : null}
             {filtered.length === 0 ? (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-white px-6 text-center">
                 <div className="mb-3 h-1.5 w-12 rounded-full bg-[var(--color-brand)]" />
