@@ -41,6 +41,15 @@ const TABLES = {
   sections: "sections"
 } as const;
 const BOOKMARK_SCHEMA = "bookmark";
+const BOOKMARK_FIELDS = new Set([
+  "title",
+  "url",
+  "description",
+  "isFavorite",
+  "folderId",
+  "sectionId"
+]);
+const FOLDER_FIELDS = new Set(["name", "color"]);
 
 export class StoreError extends Error {
   constructor(message: string, public readonly status = 500) {
@@ -125,6 +134,206 @@ function one<T>(rows: T[], label: string) {
   return row;
 }
 
+function invalid(message: string): never {
+  throw new StoreError(message, 400);
+}
+
+function record(value: unknown, label: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalid(`${label} body is invalid.`);
+  return value as Record<string, unknown>;
+}
+
+function nonEmptyString(value: unknown, label: string) {
+  if (typeof value !== "string" || !value.trim()) invalid(`${label} must be a non-empty string.`);
+  return value.trim();
+}
+
+function normalizeBookmarkUrl(value: unknown) {
+  const raw = nonEmptyString(value, "Bookmark URL");
+  if (/^[a-z][a-z\d+.-]*:/i.test(raw) && !/^https?:\/\//i.test(raw)) {
+    invalid("Bookmark URL must use http or https.");
+  }
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
+      invalid("Bookmark URL must use http or https.");
+    }
+    return url.toString();
+  } catch {
+    return invalid("Bookmark URL is invalid.");
+  }
+}
+
+function assertAllowedFields(data: Record<string, unknown>, allowed: Set<string>, label: string) {
+  if (Object.keys(data).some((key) => !allowed.has(key))) invalid(`${label} body contains unsupported fields.`);
+}
+
+function validateBookmarkCreate(value: unknown): BookmarkFormData {
+  const data = record(value, "Bookmark");
+  assertAllowedFields(data, BOOKMARK_FIELDS, "Bookmark");
+  if (typeof data.isFavorite !== "boolean") invalid("Bookmark isFavorite must be boolean.");
+  if (!Object.hasOwn(data, "folderId") || (data.folderId !== null && typeof data.folderId !== "string")) {
+    invalid("Bookmark folderId must be a string or null.");
+  }
+  if (!Object.hasOwn(data, "sectionId") || (data.sectionId !== null && typeof data.sectionId !== "string")) {
+    invalid("Bookmark sectionId must be a string or null.");
+  }
+  if (data.description !== undefined && data.description !== null && typeof data.description !== "string") {
+    invalid("Bookmark description must be a string or null.");
+  }
+
+  return {
+    title: nonEmptyString(data.title, "Bookmark title"),
+    url: normalizeBookmarkUrl(data.url),
+    description: data.description as string | null | undefined,
+    isFavorite: data.isFavorite,
+    folderId: data.folderId === null ? null : nonEmptyString(data.folderId, "Bookmark folderId"),
+    sectionId: data.sectionId === null ? null : nonEmptyString(data.sectionId, "Bookmark sectionId")
+  };
+}
+
+function validateBookmarkPatch(value: unknown): Partial<BookmarkFormData> {
+  const data = record(value, "Bookmark");
+  assertAllowedFields(data, BOOKMARK_FIELDS, "Bookmark");
+  if (!Object.keys(data).length) invalid("Bookmark PATCH body must not be empty.");
+  const result: Partial<BookmarkFormData> = {};
+
+  if (Object.hasOwn(data, "title")) result.title = nonEmptyString(data.title, "Bookmark title");
+  if (Object.hasOwn(data, "url")) result.url = normalizeBookmarkUrl(data.url);
+  if (Object.hasOwn(data, "description")) {
+    if (data.description !== null && typeof data.description !== "string") {
+      invalid("Bookmark description must be a string or null.");
+    }
+    result.description = data.description as string | null;
+  }
+  if (Object.hasOwn(data, "isFavorite")) {
+    if (typeof data.isFavorite !== "boolean") invalid("Bookmark isFavorite must be boolean.");
+    result.isFavorite = data.isFavorite;
+  }
+  if (Object.hasOwn(data, "folderId")) {
+    if (data.folderId !== null && typeof data.folderId !== "string") {
+      invalid("Bookmark folderId must be a string or null.");
+    }
+    result.folderId = data.folderId === null ? null : nonEmptyString(data.folderId, "Bookmark folderId");
+  }
+  if (Object.hasOwn(data, "sectionId")) {
+    if (data.sectionId !== null && typeof data.sectionId !== "string") {
+      invalid("Bookmark sectionId must be a string or null.");
+    }
+    result.sectionId = data.sectionId === null ? null : nonEmptyString(data.sectionId, "Bookmark sectionId");
+  }
+  return result;
+}
+
+function validateFolderCreate(value: unknown): FolderFormData {
+  const data = record(value, "Folder");
+  assertAllowedFields(data, FOLDER_FIELDS, "Folder");
+  if (data.color !== undefined && data.color !== null && typeof data.color !== "string") {
+    invalid("Folder color must be a string or null.");
+  }
+  return {
+    name: nonEmptyString(data.name, "Folder name"),
+    color: data.color as string | null | undefined
+  };
+}
+
+function validateFolderPatch(value: unknown): Partial<FolderFormData> {
+  const data = record(value, "Folder");
+  assertAllowedFields(data, FOLDER_FIELDS, "Folder");
+  if (!Object.keys(data).length) invalid("Folder PATCH body must not be empty.");
+  const result: Partial<FolderFormData> = {};
+  if (Object.hasOwn(data, "name")) result.name = nonEmptyString(data.name, "Folder name");
+  if (Object.hasOwn(data, "color")) {
+    if (data.color !== null && typeof data.color !== "string") invalid("Folder color must be a string or null.");
+    result.color = data.color as string | null;
+  }
+  return result;
+}
+
+function validatePositionUpdates(value: unknown): PositionUpdate[] {
+  if (!Array.isArray(value)) invalid("Reorder body must be an array.");
+  const ids = new Set<string>();
+  return value.map((entry) => {
+    const item = record(entry, "Reorder item");
+    if (
+      Object.keys(item).length !== 2 ||
+      !Object.hasOwn(item, "id") ||
+      !Object.hasOwn(item, "position")
+    ) {
+      invalid("Reorder items require only id and position.");
+    }
+    const id = nonEmptyString(item.id, "Reorder id");
+    if (!Number.isInteger(item.position) || (item.position as number) < 0) {
+      invalid("Reorder position must be a non-negative integer.");
+    }
+    if (ids.has(id)) invalid("Reorder ids must be unique.");
+    ids.add(id);
+    return { id, position: item.position as number };
+  });
+}
+
+async function ownedRow<T>(table: string, id: string, userId: string, label: string) {
+  const rows = await supabaseRequest<T[]>(table, {
+    query: { select: "*", id: `eq.${id}`, user_id: `eq.${userId}`, limit: "1" }
+  });
+  const row = rows[0];
+  if (!row) invalid(`${label} does not belong to the configured user.`);
+  return row;
+}
+
+async function validateBookmarkReferences(folderId: string | null, sectionId: string | null, userId: string) {
+  if (folderId) await ownedRow<FolderRow>(TABLES.folders, folderId, userId, "Folder");
+  if (!sectionId) return;
+  const section = await ownedRow<SectionRow>(TABLES.sections, sectionId, userId, "Section");
+  if (!folderId || section.folder_id !== folderId) invalid("Section must belong to the bookmark folder.");
+}
+
+async function reorderOwnedRows(
+  table: string,
+  items: PositionUpdate[],
+  userId: string,
+  updatedAt = false
+) {
+  if (!items.length) return;
+  const rows = await supabaseRequest<Array<{ id: string; position: number | null }>>(table, {
+    query: { select: "id,position", user_id: `eq.${userId}` }
+  });
+  const originalById = new Map(rows.map((row) => [row.id, row.position ?? 0]));
+  if (items.some(({ id }) => !originalById.has(id))) {
+    invalid("Reorder item does not belong to the configured user.");
+  }
+
+  try {
+    for (const item of items) {
+      await supabaseRequest<void>(table, {
+        method: "PATCH",
+        prefer: "return=minimal",
+        query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
+        body: {
+          position: item.position,
+          ...(updatedAt ? { updated_at: new Date().toISOString() } : {})
+        }
+      });
+    }
+  } catch (error) {
+    await Promise.allSettled(
+      items.map((item) =>
+        supabaseRequest<void>(table, {
+          method: "PATCH",
+          prefer: "return=minimal",
+          query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
+          body: {
+            position: originalById.get(item.id),
+            ...(updatedAt ? { updated_at: new Date().toISOString() } : {})
+          }
+        })
+      )
+    );
+    throw error;
+  }
+}
+
 function mapBookmark(row: BookmarkRow): BookmarkItem {
   return {
     id: row.id,
@@ -165,8 +374,10 @@ export const bookmarkStore = {
     return rows.map(mapBookmark);
   },
 
-  async createBookmark(data: BookmarkFormData) {
+  async createBookmark(value: unknown) {
+    const data = validateBookmarkCreate(value);
     const userId = await getBookmarkUserId();
+    await validateBookmarkReferences(data.folderId, data.sectionId, userId);
     const rows = await supabaseRequest<BookmarkRow[]>(TABLES.bookmarks, {
       method: "POST",
       prefer: "return=representation",
@@ -184,8 +395,17 @@ export const bookmarkStore = {
     return mapBookmark(one(rows, "Bookmark"));
   },
 
-  async updateBookmark(id: string, data: Partial<BookmarkFormData>) {
+  async updateBookmark(id: string, value: unknown) {
+    const data = validateBookmarkPatch(value);
     const userId = await getBookmarkUserId();
+    if (data.folderId !== undefined || data.sectionId !== undefined) {
+      const current = await ownedRow<BookmarkRow>(TABLES.bookmarks, id, userId, "Bookmark");
+      await validateBookmarkReferences(
+        data.folderId === undefined ? current.folder_id : data.folderId,
+        data.sectionId === undefined ? current.section_id : data.sectionId,
+        userId
+      );
+    }
     const body: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (data.title !== undefined) body.title = data.title;
     if (data.url !== undefined) body.url = data.url;
@@ -212,18 +432,10 @@ export const bookmarkStore = {
     });
   },
 
-  async reorderBookmarks(items: PositionUpdate[]) {
+  async reorderBookmarks(items: unknown) {
+    const validated = validatePositionUpdates(items);
     const userId = await getBookmarkUserId();
-    await Promise.all(
-      items.map((item) =>
-        supabaseRequest<void>(TABLES.bookmarks, {
-          method: "PATCH",
-          prefer: "return=minimal",
-          query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
-          body: { position: item.position, updated_at: new Date().toISOString() }
-        })
-      )
-    );
+    await reorderOwnedRows(TABLES.bookmarks, validated, userId, true);
   },
 
   async listFolders() {
@@ -234,7 +446,8 @@ export const bookmarkStore = {
     return rows.map(mapFolder);
   },
 
-  async createFolder(data: FolderFormData) {
+  async createFolder(value: unknown) {
+    const data = validateFolderCreate(value);
     const userId = await getBookmarkUserId();
     const rows = await supabaseRequest<FolderRow[]>(TABLES.folders, {
       method: "POST",
@@ -249,7 +462,8 @@ export const bookmarkStore = {
     return mapFolder(one(rows, "Folder"));
   },
 
-  async updateFolder(id: string, data: Partial<FolderFormData>) {
+  async updateFolder(id: string, value: unknown) {
+    const data = validateFolderPatch(value);
     const userId = await getBookmarkUserId();
     const rows = await supabaseRequest<FolderRow[]>(TABLES.folders, {
       method: "PATCH",
@@ -269,18 +483,10 @@ export const bookmarkStore = {
     });
   },
 
-  async reorderFolders(items: PositionUpdate[]) {
+  async reorderFolders(items: unknown) {
+    const validated = validatePositionUpdates(items);
     const userId = await getBookmarkUserId();
-    await Promise.all(
-      items.map((item) =>
-        supabaseRequest<void>(TABLES.folders, {
-          method: "PATCH",
-          prefer: "return=minimal",
-          query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
-          body: { position: item.position }
-        })
-      )
-    );
+    await reorderOwnedRows(TABLES.folders, validated, userId);
   },
 
   async listSections() {
@@ -291,8 +497,11 @@ export const bookmarkStore = {
     return rows.map(mapSection);
   },
 
-  async createSection(folderId: string, name: string) {
+  async createSection(folderIdValue: unknown, nameValue: unknown) {
+    const folderId = nonEmptyString(folderIdValue, "Section folderId");
+    const name = nonEmptyString(nameValue, "Section name");
     const userId = await getBookmarkUserId();
+    await ownedRow<FolderRow>(TABLES.folders, folderId, userId, "Folder");
     const existingRows = await supabaseRequest<SectionRow[]>(TABLES.sections, {
       query: { select: "*", user_id: `eq.${userId}`, folder_id: `eq.${folderId}` }
     });
@@ -327,17 +536,9 @@ export const bookmarkStore = {
     });
   },
 
-  async reorderSections(items: PositionUpdate[]) {
+  async reorderSections(items: unknown) {
+    const validated = validatePositionUpdates(items);
     const userId = await getBookmarkUserId();
-    await Promise.all(
-      items.map((item) =>
-        supabaseRequest<void>(TABLES.sections, {
-          method: "PATCH",
-          prefer: "return=minimal",
-          query: { id: `eq.${item.id}`, user_id: `eq.${userId}` },
-          body: { position: item.position }
-        })
-      )
-    );
+    await reorderOwnedRows(TABLES.sections, validated, userId);
   }
 };

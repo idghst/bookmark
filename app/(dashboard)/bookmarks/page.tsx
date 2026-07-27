@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useId, useMemo, useState } from "react";
+import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { Route } from "next";
@@ -213,6 +213,14 @@ function updateMatchingPositions<T extends { id: string; position: number }>(
   });
 }
 
+function applyPositions<T extends { id: string; position: number }>(
+  items: T[],
+  positions: Array<{ id: string; position: number }>
+) {
+  const byId = new Map(positions.map(({ id, position }) => [id, position]));
+  return items.map((item) => (byId.has(item.id) ? { ...item, position: byId.get(item.id)! } : item));
+}
+
 async function apiRequest<T>(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -305,6 +313,9 @@ export default function BookmarksPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const mutationQueues = useRef(new Map<string, Promise<void>>());
+  const pendingOptimistic = useRef(new Map<symbol, () => void>());
+  const favoriteTargets = useRef(new Map<string, boolean>());
 
   useEffect(() => {
     if (deleteTarget) setDeleteError("");
@@ -321,7 +332,7 @@ export default function BookmarksPage() {
           setSections(normalizePositions(cache.sections ?? []));
           setBookmarks(normalizePositions(cache.bookmarks ?? []));
           setSelectedFolderId(cache.selectedFolderId ?? cache.folders[0].id);
-          setApiBacked(Boolean(cache.apiBacked));
+          setApiBacked(false);
           return true;
         }
       } catch {
@@ -331,12 +342,13 @@ export default function BookmarksPage() {
     }
 
     async function loadBookmarks() {
-      if (hydrateFromFallback()) {
-        setHydrated(true);
-        return;
-      }
-
-      await refreshBookmarks({ fallbackToInitial: true, markHydrated: true, isCancelled: () => cancelled });
+      const hasCache = hydrateFromFallback();
+      if (hasCache) setHydrated(true);
+      await refreshBookmarks({
+        fallbackToInitial: !hasCache,
+        markHydrated: !hasCache,
+        isCancelled: () => cancelled
+      });
     }
 
     void loadBookmarks();
@@ -364,10 +376,12 @@ export default function BookmarksPage() {
   async function refreshBookmarks({
     fallbackToInitial = false,
     markHydrated = false,
+    reapplyOptimistic = false,
     isCancelled = () => false
   }: {
     fallbackToInitial?: boolean;
     markHydrated?: boolean;
+    reapplyOptimistic?: boolean;
     isCancelled?: () => boolean;
   } = {}) {
     setRefreshing(true);
@@ -377,20 +391,24 @@ export default function BookmarksPage() {
         apiRequest<Section[]>("/api/sections"),
         apiRequest<BookmarkItem[]>("/api/bookmarks")
       ]);
-      if (isCancelled()) return;
+      if (isCancelled()) return false;
       if (!remoteFolders.length) throw new Error("폴더 데이터가 없습니다.");
       setFolders(remoteFolders);
       setSections(remoteSections);
       setBookmarks(remoteBookmarks);
       setSelectedFolderId((current) => (remoteFolders.some((folder) => folder.id === current) ? current : remoteFolders[0].id));
       setApiBacked(true);
+      if (reapplyOptimistic) pendingOptimistic.current.forEach((reapply) => reapply());
+      return true;
     } catch {
-      if (!fallbackToInitial || isCancelled()) return;
-      setFolders(INITIAL_FOLDERS);
-      setSections(INITIAL_SECTIONS);
-      setBookmarks(INITIAL_BOOKMARKS);
-      setSelectedFolderId(INITIAL_FOLDERS[0]?.id ?? "");
-      setApiBacked(false);
+      if (fallbackToInitial && !isCancelled()) {
+        setFolders(INITIAL_FOLDERS);
+        setSections(INITIAL_SECTIONS);
+        setBookmarks(INITIAL_BOOKMARKS);
+        setSelectedFolderId(INITIAL_FOLDERS[0]?.id ?? "");
+        setApiBacked(false);
+      }
+      return false;
     } finally {
       if (!isCancelled()) {
         setRefreshing(false);
@@ -692,30 +710,50 @@ export default function BookmarksPage() {
     }
   }
 
-  async function persistOptimisticMutation(
+  function persistOptimisticMutation(
+    key: string,
     apply: () => void,
     rollback: () => void,
     request: () => Promise<unknown>,
-    fallbackMessage: string
+    fallbackMessage: string,
+    reconcileOnFailure = false
   ) {
     setMutationError("");
     apply();
     if (!apiBacked) return;
 
-    try {
-      await request();
-    } catch (error) {
-      rollback();
-      setMutationError(error instanceof Error ? error.message : fallbackMessage);
-    }
+    const token = Symbol(key);
+    pendingOptimistic.current.set(token, apply);
+    const previous = mutationQueues.current.get(key) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(async () => {
+      apply();
+      try {
+        await request();
+        pendingOptimistic.current.delete(token);
+      } catch (error) {
+        pendingOptimistic.current.delete(token);
+        const refreshed = reconcileOnFailure
+          ? await refreshBookmarks({ reapplyOptimistic: true })
+          : false;
+        if (!refreshed) rollback();
+        setMutationError(error instanceof Error ? error.message : fallbackMessage);
+      }
+    });
+    mutationQueues.current.set(key, queued);
+    void queued.finally(() => {
+      if (mutationQueues.current.get(key) === queued) mutationQueues.current.delete(key);
+    });
+    return queued;
   }
 
   function toggleFavorite(id: string) {
     const bookmark = bookmarks.find((item) => item.id === id);
     if (!bookmark) return;
-    const previousFavorite = bookmark.isFavorite;
+    const previousFavorite = favoriteTargets.current.get(id) ?? bookmark.isFavorite;
     const optimisticFavorite = !previousFavorite;
-    void persistOptimisticMutation(
+    favoriteTargets.current.set(id, optimisticFavorite);
+    const mutation = persistOptimisticMutation(
+      `favorite:${id}`,
       () =>
         setBookmarks((current) =>
           current.map((item) =>
@@ -739,6 +777,13 @@ export default function BookmarksPage() {
         }),
       "즐겨찾기 변경에 실패했습니다."
     );
+    if (!mutation) {
+      favoriteTargets.current.delete(id);
+      return;
+    }
+    void mutation.finally(() => {
+      if (favoriteTargets.current.get(id) === optimisticFavorite) favoriteTargets.current.delete(id);
+    });
   }
 
   function dropFolder(targetFolderId: string) {
@@ -746,10 +791,12 @@ export default function BookmarksPage() {
     const moved = moveById(orderedFolders, draggingFolderId, targetFolderId);
     const changes = getPositionChanges(orderedFolders, moved);
     void persistOptimisticMutation(
-      () => setFolders((current) => updateMatchingPositions(current, changes, "apply")),
+      "reorder:folders",
+      () => setFolders((current) => applyPositions(current, moved)),
       () => setFolders((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
-      "폴더 순서 저장에 실패했습니다."
+      "폴더 순서 저장에 실패했습니다.",
+      true
     );
     setDraggingFolderId(null);
     setDragOverFolderId(null);
@@ -761,10 +808,12 @@ export default function BookmarksPage() {
     const moved = moveById(scoped, draggingSectionId, targetSectionId);
     const changes = getPositionChanges(scoped, moved);
     void persistOptimisticMutation(
-      () => setSections((current) => updateMatchingPositions(current, changes, "apply")),
+      `reorder:sections:${selectedFolder.id}`,
+      () => setSections((current) => applyPositions(current, moved)),
       () => setSections((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/sections/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
-      "섹션 순서 저장에 실패했습니다."
+      "섹션 순서 저장에 실패했습니다.",
+      true
     );
     setDraggingSectionId(null);
     setDragOverSectionId(null);
@@ -785,10 +834,12 @@ export default function BookmarksPage() {
     const moved = moveById(scoped, draggingBookmarkId, targetBookmarkId);
     const changes = getPositionChanges(scoped, moved);
     void persistOptimisticMutation(
-      () => setBookmarks((current) => updateMatchingPositions(current, changes, "apply")),
+      `reorder:bookmarks:${selectedFolder.id}:${active.sectionId ?? NO_SECTION}`,
+      () => setBookmarks((current) => applyPositions(current, moved)),
       () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
-      "북마크 순서 저장에 실패했습니다."
+      "북마크 순서 저장에 실패했습니다.",
+      true
     );
     setDraggingBookmarkId(null);
     setDragOverBookmarkId(null);

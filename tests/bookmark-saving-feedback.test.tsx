@@ -3,11 +3,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import BookmarksPage from "@/app/(dashboard)/bookmarks/page";
 import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 
+let remoteSnapshot: {
+  bookmarks: BookmarkItem[];
+  sections: Section[];
+  folders: Folder[];
+};
+
 function stubBookmarkCache(
   bookmarks: BookmarkItem[] = [],
   sections: Section[] = [],
   folders: Folder[] = [{ id: "work", name: "작업", color: "#4f46e5", position: 0 }]
 ) {
+  remoteSnapshot = { bookmarks, sections, folders };
   const cache = JSON.stringify({
     version: 1,
     apiBacked: true,
@@ -29,6 +36,31 @@ function stubBookmarkCache(
   return { setItem };
 }
 
+function stubRemote(
+  mutation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    const method = init?.method ?? "GET";
+    if (method === "GET" && path === "/api/folders") {
+      return new Response(JSON.stringify(remoteSnapshot.folders), { status: 200 });
+    }
+    if (method === "GET" && path === "/api/sections") {
+      return new Response(JSON.stringify(remoteSnapshot.sections), { status: 200 });
+    }
+    if (method === "GET" && path === "/api/bookmarks") {
+      return new Response(JSON.stringify(remoteSnapshot.bookmarks), { status: 200 });
+    }
+    return mutation(input, init);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function mutationCalls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET") !== "GET");
+}
+
 describe("bookmark database saving feedback", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -42,6 +74,115 @@ describe("bookmark database saving feedback", () => {
     fireEvent.click(addButtons[0]);
 
     expect(screen.getByRole("dialog").parentElement).toBe(document.body);
+  });
+
+  it("paints cache immediately and replaces it with a successful remote refresh", async () => {
+    const { setItem } = stubBookmarkCache([
+      {
+        id: "cached",
+        title: "Cached",
+        url: "https://cached.example.com",
+        description: null,
+        isFavorite: false,
+        folderId: "work",
+        sectionId: null,
+        position: 0
+      }
+    ]);
+    let resolveFolders!: (response: Response) => void;
+    let resolveSections!: (response: Response) => void;
+    let resolveBookmarks!: (response: Response) => void;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === "/api/folders") {
+        return new Promise<Response>((resolve) => {
+          resolveFolders = resolve;
+        });
+      }
+      if (String(input) === "/api/sections") {
+        return new Promise<Response>((resolve) => {
+          resolveSections = resolve;
+        });
+      }
+      return new Promise<Response>((resolve) => {
+        resolveBookmarks = resolve;
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+
+    expect(await screen.findByRole("link", { name: /Cached/ })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      resolveFolders(new Response(JSON.stringify(remoteSnapshot.folders), { status: 200 }));
+      resolveSections(new Response(JSON.stringify([]), { status: 200 }));
+      resolveBookmarks(
+        new Response(
+          JSON.stringify([
+            {
+              id: "remote",
+              title: "Remote",
+              url: "https://remote.example.com",
+              description: null,
+              isFavorite: false,
+              folderId: "work",
+              sectionId: null,
+              position: 0
+            }
+          ]),
+          { status: 200 }
+        )
+      );
+    });
+
+    expect(await screen.findByRole("link", { name: /Remote/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Cached/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved).toMatchObject({
+        apiBacked: true,
+        bookmarks: [{ id: "remote", title: "Remote" }]
+      });
+    });
+  });
+
+  it("keeps cache on remote failure and does not trust cached apiBacked", async () => {
+    const { setItem } = stubBookmarkCache([
+      {
+        id: "cached",
+        title: "Cached",
+        url: "https://cached.example.com",
+        description: null,
+        isFavorite: false,
+        folderId: "work",
+        sectionId: null,
+        position: 0
+      }
+    ]);
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ detail: "offline" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+
+    expect(await screen.findByRole("link", { name: /Cached/ })).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved).toMatchObject({
+        apiBacked: false,
+        bookmarks: [{ id: "cached", title: "Cached" }]
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cached 즐겨찾기" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole("button", { name: "Cached 즐겨찾기" }).querySelector("svg")).toHaveClass(
+      "fill-[var(--color-brand)]"
+    );
   });
 
   it("opens folder choices above the bookmark modal", async () => {
@@ -66,8 +207,7 @@ describe("bookmark database saving feedback", () => {
       ],
       sections
     );
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRemote(async () => new Response(null, { status: 204 }));
     render(<BookmarksPage />);
 
     const first = await screen.findByRole("link", { name: /첫 북마크/ });
@@ -76,7 +216,7 @@ describe("bookmark database saving feedback", () => {
     fireEvent.dragOver(second);
     fireEvent.drop(second);
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mutationCalls(fetchMock)).toHaveLength(0);
   });
 
   it("reorders bookmarks inside the same section", async () => {
@@ -88,8 +228,7 @@ describe("bookmark database saving feedback", () => {
       ],
       [section]
     );
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRemote(async () => new Response(null, { status: 204 }));
     render(<BookmarksPage />);
 
     fireEvent.dragStart(await screen.findByRole("link", { name: /첫 북마크/ }));
@@ -97,9 +236,9 @@ describe("bookmark database saving feedback", () => {
     fireEvent.dragOver(second);
     fireEvent.drop(second);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/bookmarks/reorder");
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual([
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+    expect(mutationCalls(fetchMock)[0][0]).toBe("/api/bookmarks/reorder");
+    expect(JSON.parse(String(mutationCalls(fetchMock)[0][1]?.body))).toEqual([
       { id: "bm-b", position: 0 },
       { id: "bm-a", position: 1 }
     ]);
@@ -112,14 +251,12 @@ describe("bookmark database saving feedback", () => {
       { id: "bm-b", title: "둘째 북마크", url: "https://b.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 1 }
     ];
     const { setItem } = stubBookmarkCache(bookmarks, [section]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
+    stubRemote(
+      async () =>
         new Response(JSON.stringify({ detail: "순서 저장에 실패했습니다." }), {
           status: 500,
           headers: { "Content-Type": "application/json" }
         })
-      )
     );
     render(<BookmarksPage />);
 
@@ -149,14 +286,12 @@ describe("bookmark database saving feedback", () => {
       { id: "docs", name: "문서", color: "#2166d7", position: 1 }
     ];
     const { setItem } = stubBookmarkCache([], [], folders);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
+    stubRemote(
+      async () =>
         new Response(JSON.stringify({ detail: "폴더 순서 저장에 실패했습니다." }), {
           status: 500,
           headers: { "Content-Type": "application/json" }
         })
-      )
     );
     render(<BookmarksPage />);
 
@@ -188,14 +323,12 @@ describe("bookmark database saving feedback", () => {
       { id: "bm-b", title: "둘째 북마크", url: "https://b.example.com", description: null, isFavorite: false, folderId: "work", sectionId: "section-b", position: 1 }
     ];
     const { setItem } = stubBookmarkCache(bookmarks, sections);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
+    stubRemote(
+      async () =>
         new Response(JSON.stringify({ detail: "섹션 순서 저장에 실패했습니다." }), {
           status: 500,
           headers: { "Content-Type": "application/json" }
         })
-      )
     );
     render(<BookmarksPage />);
 
@@ -228,14 +361,12 @@ describe("bookmark database saving feedback", () => {
       position: 0
     } satisfies BookmarkItem;
     const { setItem } = stubBookmarkCache([bookmark]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
+    stubRemote(
+      async () =>
         new Response(JSON.stringify({ detail: "즐겨찾기 저장에 실패했습니다." }), {
           status: 500,
           headers: { "Content-Type": "application/json" }
         })
-      )
     );
     render(<BookmarksPage />);
 
@@ -277,9 +408,8 @@ describe("bookmark database saving feedback", () => {
     const firstRequest = new Promise<Response>((resolve) => {
       failFirst = resolve;
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) =>
+    stubRemote(
+      (input: RequestInfo | URL) =>
         String(input).endsWith("/bm-a")
           ? firstRequest
           : Promise.resolve(
@@ -288,7 +418,6 @@ describe("bookmark database saving feedback", () => {
                 headers: { "Content-Type": "application/json" }
               })
             )
-      )
     );
     render(<BookmarksPage />);
 
@@ -326,6 +455,155 @@ describe("bookmark database saving feedback", () => {
     });
   });
 
+  it("serializes two favorite changes for the same bookmark", async () => {
+    const bookmark = {
+      id: "bm-1",
+      title: "Example",
+      url: "https://example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: null,
+      position: 0
+    } satisfies BookmarkItem;
+    stubBookmarkCache([bookmark]);
+    let finishFirst!: (response: Response) => void;
+    const firstRequest = new Promise<Response>((resolve) => {
+      finishFirst = resolve;
+    });
+    let patchCount = 0;
+    const fetchMock = stubRemote(async () => {
+      patchCount += 1;
+      return patchCount === 1
+        ? firstRequest
+        : new Response(JSON.stringify(bookmark), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          });
+    });
+    render(<BookmarksPage />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    fireEvent.click(screen.getByRole("button", { name: "Example 즐겨찾기" }));
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Example 즐겨찾기" }));
+    await act(async () => Promise.resolve());
+    expect(mutationCalls(fetchMock)).toHaveLength(1);
+
+    await act(async () => {
+      finishFirst(
+        new Response(JSON.stringify({ ...bookmark, isFavorite: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+      await firstRequest;
+    });
+
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(2));
+    expect(mutationCalls(fetchMock).map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+      { isFavorite: true },
+      { isFavorite: false }
+    ]);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Example 즐겨찾기" }).querySelector("svg")).not.toHaveClass(
+        "fill-[var(--color-brand)]"
+      )
+    );
+  });
+
+  it("refreshes canonical remote data after reorder failure", async () => {
+    const section = { id: "section-a", name: "기본", folderId: "work", position: 0 } satisfies Section;
+    const cached: BookmarkItem[] = [
+      { id: "bm-a", title: "캐시 첫", url: "https://a.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 },
+      { id: "bm-b", title: "캐시 둘", url: "https://b.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 1 }
+    ];
+    stubBookmarkCache(cached, [section]);
+    let bookmarkReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if ((init?.method ?? "GET") === "POST") {
+        return new Response(JSON.stringify({ detail: "순서 저장 실패" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (path === "/api/folders") return new Response(JSON.stringify(remoteSnapshot.folders), { status: 200 });
+      if (path === "/api/sections") return new Response(JSON.stringify(remoteSnapshot.sections), { status: 200 });
+      bookmarkReads += 1;
+      return new Response(
+        JSON.stringify(
+          bookmarkReads === 1
+            ? cached
+            : cached.map((item) => ({ ...item, title: item.id === "bm-a" ? "DB 첫" : "DB 둘" }))
+        ),
+        { status: 200 }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    fireEvent.dragStart(screen.getByRole("link", { name: /캐시 첫/ }));
+    const second = screen.getByRole("link", { name: /캐시 둘/ });
+    fireEvent.dragOver(second);
+    fireEvent.drop(second);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("순서 저장 실패");
+    expect(await screen.findByRole("link", { name: /DB 첫/ })).toBeInTheDocument();
+    expect(bookmarkReads).toBe(2);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET") === "GET")).toHaveLength(6);
+  });
+
+  it("serializes overlapping reorder and preserves the later order after failure", async () => {
+    const section = { id: "section-a", name: "기본", folderId: "work", position: 0 } satisfies Section;
+    const bookmarks: BookmarkItem[] = [
+      { id: "bm-a", title: "A", url: "https://a.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 },
+      { id: "bm-b", title: "B", url: "https://b.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 1 },
+      { id: "bm-c", title: "C", url: "https://c.example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 2 }
+    ];
+    stubBookmarkCache(bookmarks, [section]);
+    let failFirst!: (response: Response) => void;
+    const firstRequest = new Promise<Response>((resolve) => {
+      failFirst = resolve;
+    });
+    let reorderCount = 0;
+    const fetchMock = stubRemote(async () => {
+      reorderCount += 1;
+      return reorderCount === 1 ? firstRequest : new Response(null, { status: 204 });
+    });
+    render(<BookmarksPage />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    fireEvent.dragStart(screen.getByRole("link", { name: /^A https:\/\/a/ }));
+    fireEvent.dragOver(screen.getByRole("link", { name: /^B https:\/\/b/ }));
+    fireEvent.drop(screen.getByRole("link", { name: /^B https:\/\/b/ }));
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+
+    fireEvent.dragStart(screen.getByRole("link", { name: /^A https:\/\/a/ }));
+    fireEvent.dragOver(screen.getByRole("link", { name: /^C https:\/\/c/ }));
+    fireEvent.drop(screen.getByRole("link", { name: /^C https:\/\/c/ }));
+    await act(async () => Promise.resolve());
+    expect(mutationCalls(fetchMock)).toHaveLength(1);
+
+    await act(async () => {
+      failFirst(
+        new Response(JSON.stringify({ detail: "첫 순서 저장 실패" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+      await firstRequest;
+    });
+
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(2));
+    const b = screen.getByRole("link", { name: /^B https:\/\/b/ });
+    const c = screen.getByRole("link", { name: /^C https:\/\/c/ });
+    const a = screen.getByRole("link", { name: /^A https:\/\/a/ });
+    expect(b.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(c.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("creates a section separately and waits for the user to select it", async () => {
     stubBookmarkCache();
     const section = { id: "section-project", name: "프로젝트", folderId: "work", position: 0 } satisfies Section;
@@ -336,7 +614,7 @@ describe("bookmark database saving feedback", () => {
         headers: { "Content-Type": "application/json" }
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubRemote(fetchMock);
     render(<BookmarksPage />);
 
     fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
@@ -357,8 +635,9 @@ describe("bookmark database saving feedback", () => {
   it("does not create a duplicate section and points to the existing option", async () => {
     const section = { id: "section-basic", name: "기본", folderId: "work", position: 0 } satisfies Section;
     stubBookmarkCache([], [section]);
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRemote(async () => {
+      throw new Error("Unexpected mutation");
+    });
     render(<BookmarksPage />);
 
     fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
@@ -366,7 +645,7 @@ describe("bookmark database saving feedback", () => {
     fireEvent.change(screen.getByLabelText("새 섹션 이름"), { target: { value: " 기본 " } });
     fireEvent.click(screen.getByRole("button", { name: "만들기" }));
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mutationCalls(fetchMock)).toHaveLength(0);
     expect(screen.getByRole("status")).toHaveTextContent("이미 있습니다");
     const sectionSelect = screen.getByRole("combobox", { name: "섹션" });
     expect(sectionSelect).toHaveTextContent("없음");
@@ -380,16 +659,18 @@ describe("bookmark database saving feedback", () => {
       [{ id: "bm-1", title: "보존할 북마크", url: "https://example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 }],
       [section]
     );
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRemote(async () => new Response(null, { status: 204 }));
     render(<BookmarksPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "기본 섹션 삭제" }));
     expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toHaveTextContent("북마크는 삭제하지 않고 섹션 없음으로 이동합니다");
     fireEvent.click(screen.getByRole("button", { name: "삭제" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(fetchMock).toHaveBeenCalledWith("/api/sections/section-basic", expect.objectContaining({ method: "DELETE" }));
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+    expect(mutationCalls(fetchMock)[0]).toEqual([
+      "/api/sections/section-basic",
+      expect.objectContaining({ method: "DELETE" })
+    ]);
     expect(screen.queryByRole("heading", { name: "기본" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "섹션 없음" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /보존할 북마크/ })).toBeInTheDocument();
@@ -416,7 +697,7 @@ describe("bookmark database saving feedback", () => {
     const request = new Promise<Response>((resolve) => {
       finishRequest = resolve;
     });
-    vi.stubGlobal("fetch", vi.fn(() => request));
+    stubRemote(async () => request);
 
     render(<BookmarksPage />);
     const addButtons = await screen.findAllByRole("button", { name: "북마크 추가" });
@@ -468,7 +749,7 @@ describe("bookmark database saving feedback", () => {
     const request = new Promise<Response>((resolve) => {
       finishRequest = resolve;
     });
-    vi.stubGlobal("fetch", vi.fn(() => request));
+    stubRemote(async () => request);
 
     render(<BookmarksPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Example 삭제" }));

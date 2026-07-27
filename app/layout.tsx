@@ -14,12 +14,7 @@ export const metadata: Metadata = {
     statusBarStyle: "default"
   },
   icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon.png", type: "image/png", sizes: "48x48" },
-      { url: "/brand/favicon-32.png", type: "image/png", sizes: "32x32" },
-      { url: "/brand/favicon-16.png", type: "image/png", sizes: "16x16" }
-    ],
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/icons/apple-touch-icon.png", type: "image/png", sizes: "180x180" }]
   }
 };

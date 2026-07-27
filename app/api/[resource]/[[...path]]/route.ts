@@ -25,6 +25,14 @@ async function routeParts(context: RouteContext) {
   return { resource: params.resource, path: params.path ?? [] };
 }
 
+async function readJson(request: NextRequest) {
+  try {
+    return await request.json();
+  } catch {
+    throw new StoreError("Request body must be valid JSON.", 400);
+  }
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { resource, path } = await routeParts(context);
@@ -41,30 +49,50 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { resource, path } = await routeParts(context);
-    const body = await request.json();
 
     if (resource === "bookmarks") {
-      if (path[0] === "reorder") {
-        await bookmarkStore.reorderBookmarks(body);
+      if (path.length === 1 && path[0] === "reorder") {
+        await bookmarkStore.reorderBookmarks(await readJson(request));
         return new Response(null, { status: 204 });
       }
-      if (path.length === 0) return NextResponse.json(await bookmarkStore.createBookmark(body), { status: 201 });
+      if (path.length === 0) {
+        return NextResponse.json(await bookmarkStore.createBookmark(await readJson(request)), { status: 201 });
+      }
     }
 
     if (resource === "folders") {
-      if (path[0] === "reorder") {
-        await bookmarkStore.reorderFolders(body);
+      if (path.length === 1 && path[0] === "reorder") {
+        await bookmarkStore.reorderFolders(await readJson(request));
         return new Response(null, { status: 204 });
       }
-      if (path.length === 0) return NextResponse.json(await bookmarkStore.createFolder(body), { status: 201 });
+      if (path.length === 0) {
+        return NextResponse.json(await bookmarkStore.createFolder(await readJson(request)), { status: 201 });
+      }
     }
 
     if (resource === "sections") {
-      if (path[0] === "reorder") {
-        await bookmarkStore.reorderSections(body);
+      if (path.length === 1 && path[0] === "reorder") {
+        await bookmarkStore.reorderSections(await readJson(request));
         return new Response(null, { status: 204 });
       }
-      if (path.length === 0) return NextResponse.json(await bookmarkStore.createSection(body.folderId, body.name), { status: 201 });
+      if (path.length === 0) {
+        const body = await readJson(request);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          throw new StoreError("Section body is invalid.", 400);
+        }
+        const section = body as Record<string, unknown>;
+        if (
+          Object.keys(section).some((key) => !["folderId", "name"].includes(key)) ||
+          !Object.hasOwn(section, "folderId") ||
+          !Object.hasOwn(section, "name")
+        ) {
+          throw new StoreError("Section body requires only folderId and name.", 400);
+        }
+        return NextResponse.json(
+          await bookmarkStore.createSection(section.folderId, section.name),
+          { status: 201 }
+        );
+      }
     }
 
     return noRoute();
@@ -79,7 +107,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const id = path[0];
     if (!id || path.length !== 1) return noRoute();
 
-    const body = await request.json();
+    const body = await readJson(request);
     if (resource === "bookmarks") return NextResponse.json(await bookmarkStore.updateBookmark(id, body));
     if (resource === "folders") return NextResponse.json(await bookmarkStore.updateFolder(id, body));
     return noRoute();

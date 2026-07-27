@@ -7,10 +7,13 @@ describe("bookmark navigation", () => {
     render(<DashboardAccountMenu />);
     fireEvent.click(screen.getByLabelText("사용자 메뉴 열기"));
 
-    expect(screen.getByRole("menuitem", { name: "북마크" })).toHaveAttribute(
-      "href",
+    const menuItems = screen.getAllByRole("menuitem");
+    expect(menuItems.filter((item) => item instanceof HTMLAnchorElement)).toHaveLength(1);
+    expect(menuItems.filter((item) => item instanceof HTMLAnchorElement).map((item) => item.getAttribute("href"))).toEqual([
       "/bookmarks"
-    );
+    ]);
+    expect(screen.getByRole("menuitem", { name: "로그아웃" })).toBeDisabled();
+    expect(screen.queryByText("알림")).not.toBeInTheDocument();
     expect(screen.queryByText("Vercel 배포")).not.toBeInTheDocument();
     expect(screen.queryByText("Supabase")).not.toBeInTheDocument();
     expect(screen.queryByText("도구")).not.toBeInTheDocument();

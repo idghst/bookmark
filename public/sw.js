@@ -1,4 +1,4 @@
-const CACHE_NAME = "idghst-pwa-v1";
+const CACHE_NAME = "bookmark-pwa-v1";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_URLS = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png"];
 
