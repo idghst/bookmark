@@ -38,21 +38,28 @@ describe("bookmark API write boundary", () => {
   });
 
   it("normalizes an omitted bookmark URL scheme before writing", async () => {
-    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
+    vi.stubEnv(
+      "BOOKMARK_GRAPHQL_URL",
+      "https://graphql.example.com/api/graphql"
+    );
     vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          id: "bookmark-1",
-          title: "Example",
-          url: "https://example.com/",
-          description: null,
-          isFavorite: false,
-          folderId: null,
-          sectionId: null,
-          position: 1
+          data: {
+            createBookmark: {
+              id: "bookmark-1",
+              title: "Example",
+              url: "https://example.com/",
+              description: null,
+              isFavorite: false,
+              folderId: null,
+              sectionId: null,
+              position: 1
+            }
+          }
         }),
-        { status: 201 }
+        { status: 200 }
       )
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -71,9 +78,9 @@ describe("bookmark API write boundary", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toMatchObject({
-      url: "https://example.com/"
-    });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body)).variables
+    ).toMatchObject({ input: { url: "https://example.com/" } });
   });
 
   it.each([

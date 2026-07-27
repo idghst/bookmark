@@ -210,12 +210,12 @@ function validatePositionUpdates(value: unknown): PositionUpdate[] {
   });
 }
 
-function getFastApiConfig() {
-  const rawUrl = process.env.BOOKMARK_API_URL?.trim();
+function getGraphqlConfig() {
+  const rawUrl = process.env.BOOKMARK_GRAPHQL_URL?.trim();
   const apiKey = process.env.BOOKMARK_API_KEY?.trim();
   if (!rawUrl || !apiKey) {
     throw new StoreError(
-      "BOOKMARK_API_URL and BOOKMARK_API_KEY are required.",
+      "BOOKMARK_GRAPHQL_URL and BOOKMARK_API_KEY are required.",
       500
     );
   }
@@ -230,137 +230,222 @@ function getFastApiConfig() {
     ) {
       throw new Error();
     }
-    return { url: url.toString().replace(/\/$/, ""), apiKey };
+    return { url: url.toString(), apiKey };
   } catch {
-    throw new StoreError("BOOKMARK_API_URL must be a valid HTTP(S) URL.", 500);
+    throw new StoreError(
+      "BOOKMARK_GRAPHQL_URL must be a valid HTTP(S) URL.",
+      500
+    );
   }
 }
 
-async function readErrorMessage(response: Response) {
+const GRAPHQL_ERROR_STATUS: Record<string, number> = {
+  BAD_USER_INPUT: 400,
+  UNAUTHENTICATED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404
+};
+
+type GraphqlPayload<T> = {
+  data?: T | null;
+  errors?: Array<{
+    message?: string;
+    extensions?: { code?: string };
+  }>;
+};
+
+async function readGraphqlPayload<T>(response: Response) {
   try {
-    const payload = (await response.json()) as {
-      message?: string;
-      detail?: string | Array<{ msg?: string }>;
-    };
-    if (payload.message) return payload.message;
-    if (typeof payload.detail === "string") return payload.detail;
-    if (Array.isArray(payload.detail)) {
-      return payload.detail.find((item) => item.msg)?.msg ?? "FastAPI request failed.";
-    }
+    return (await response.json()) as GraphqlPayload<T>;
   } catch {
-    // Use the stable fallback below.
+    throw new StoreError(
+      response.statusText || "GraphQL request failed.",
+      response.ok ? 502 : response.status
+    );
   }
-  return response.statusText || "FastAPI request failed.";
 }
 
-async function fastApiRequest<T>(
-  path: string,
-  {
-    method = "GET",
-    body
-  }: {
-    method?: string;
-    body?: unknown;
-  } = {}
+async function graphqlRequest<T>(
+  query: string,
+  variables: Record<string, unknown> = {}
 ): Promise<T> {
-  const config = getFastApiConfig();
-  const endpoint = new URL(path.replace(/^\/+/, ""), `${config.url}/`);
+  const config = getGraphqlConfig();
   const headers = new Headers({
     Accept: "application/json",
+    "Content-Type": "application/json",
     "X-Bookmark-Key": config.apiKey
   });
-  if (body !== undefined) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(endpoint, {
-    method,
+  const response = await fetch(config.url, {
+    method: "POST",
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: JSON.stringify({ query, variables }),
     cache: "no-store"
   });
-  if (!response.ok) {
-    throw new StoreError(await readErrorMessage(response), response.status);
+  const payload = await readGraphqlPayload<T>(response);
+  const error = payload.errors?.[0];
+  if (error) {
+    const code = error.extensions?.code ?? "";
+    throw new StoreError(
+      error.message || "GraphQL request failed.",
+      GRAPHQL_ERROR_STATUS[code] ?? (response.ok ? 500 : response.status)
+    );
   }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (!response.ok) {
+    throw new StoreError(
+      response.statusText || "GraphQL request failed.",
+      response.status
+    );
+  }
+  if (!payload.data) {
+    throw new StoreError("GraphQL response is missing data.", 502);
+  }
+  return payload.data;
 }
 
+const BOOKMARK_SELECTION = `
+  id title url description isFavorite folderId sectionId position
+`;
+const FOLDER_SELECTION = `id name color position`;
+const SECTION_SELECTION = `id name folderId position`;
+
 export const bookmarkStore = {
-  listBookmarks: () => fastApiRequest<BookmarkItem[]>("/api/bookmarks"),
+  async listBookmarks() {
+    const data = await graphqlRequest<{ bookmarks: BookmarkItem[] }>(`
+      query ListBookmarks {
+        bookmarks { ${BOOKMARK_SELECTION} }
+      }
+    `);
+    return data.bookmarks;
+  },
 
   async createBookmark(value: unknown) {
-    return fastApiRequest<BookmarkItem>("/api/bookmarks", {
-      method: "POST",
-      body: validateBookmarkCreate(value)
-    });
+    const data = await graphqlRequest<{ createBookmark: BookmarkItem }>(
+      `mutation CreateBookmark($input: BookmarkCreateInput!) {
+        createBookmark(input: $input) { ${BOOKMARK_SELECTION} }
+      }`,
+      { input: validateBookmarkCreate(value) }
+    );
+    return data.createBookmark;
   },
 
   async updateBookmark(id: string, value: unknown) {
-    return fastApiRequest<BookmarkItem>(`/api/bookmarks/${id}`, {
-      method: "PATCH",
-      body: validateBookmarkPatch(value)
-    });
+    const data = await graphqlRequest<{ updateBookmark: BookmarkItem }>(
+      `mutation UpdateBookmark($id: ID!, $input: BookmarkUpdateInput!) {
+        updateBookmark(id: $id, input: $input) { ${BOOKMARK_SELECTION} }
+      }`,
+      { id, input: validateBookmarkPatch(value) }
+    );
+    return data.updateBookmark;
   },
 
-  deleteBookmark: (id: string) =>
-    fastApiRequest<void>(`/api/bookmarks/${id}`, { method: "DELETE" }),
+  async deleteBookmark(id: string) {
+    await graphqlRequest<{ deleteBookmark: boolean }>(
+      `mutation DeleteBookmark($id: ID!) {
+        deleteBookmark(id: $id)
+      }`,
+      { id }
+    );
+  },
 
   async reorderBookmarks(value: unknown) {
-    return fastApiRequest<void>("/api/bookmarks/reorder", {
-      method: "POST",
-      body: validatePositionUpdates(value)
-    });
+    await graphqlRequest<{ reorderBookmarks: boolean }>(
+      `mutation ReorderBookmarks($input: [PositionInput!]!) {
+        reorderBookmarks(input: $input)
+      }`,
+      { input: validatePositionUpdates(value) }
+    );
   },
 
-  listFolders: () => fastApiRequest<Folder[]>("/api/folders"),
+  async listFolders() {
+    const data = await graphqlRequest<{ folders: Folder[] }>(`
+      query ListFolders {
+        folders { ${FOLDER_SELECTION} }
+      }
+    `);
+    return data.folders;
+  },
 
   async createFolder(value: unknown) {
-    return fastApiRequest<Folder>("/api/folders", {
-      method: "POST",
-      body: validateFolderCreate(value)
-    });
+    const data = await graphqlRequest<{ createFolder: Folder }>(
+      `mutation CreateFolder($input: FolderCreateInput!) {
+        createFolder(input: $input) { ${FOLDER_SELECTION} }
+      }`,
+      { input: validateFolderCreate(value) }
+    );
+    return data.createFolder;
   },
 
   async updateFolder(id: string, value: unknown) {
-    return fastApiRequest<Folder>(`/api/folders/${id}`, {
-      method: "PATCH",
-      body: validateFolderPatch(value)
-    });
+    const data = await graphqlRequest<{ updateFolder: Folder }>(
+      `mutation UpdateFolder($id: ID!, $input: FolderUpdateInput!) {
+        updateFolder(id: $id, input: $input) { ${FOLDER_SELECTION} }
+      }`,
+      { id, input: validateFolderPatch(value) }
+    );
+    return data.updateFolder;
   },
 
-  deleteFolder: (id: string) =>
-    fastApiRequest<void>(`/api/folders/${id}`, { method: "DELETE" }),
+  async deleteFolder(id: string) {
+    await graphqlRequest<{ deleteFolder: boolean }>(
+      `mutation DeleteFolder($id: ID!) {
+        deleteFolder(id: $id)
+      }`,
+      { id }
+    );
+  },
 
   async reorderFolders(value: unknown) {
-    return fastApiRequest<void>("/api/folders/reorder", {
-      method: "POST",
-      body: validatePositionUpdates(value)
-    });
+    await graphqlRequest<{ reorderFolders: boolean }>(
+      `mutation ReorderFolders($input: [PositionInput!]!) {
+        reorderFolders(input: $input)
+      }`,
+      { input: validatePositionUpdates(value) }
+    );
   },
 
-  listSections: () => fastApiRequest<Section[]>("/api/sections"),
+  async listSections() {
+    const data = await graphqlRequest<{ sections: Section[] }>(`
+      query ListSections {
+        sections { ${SECTION_SELECTION} }
+      }
+    `);
+    return data.sections;
+  },
 
   async createSection(folderIdValue: unknown, nameValue: unknown) {
     const folderId = nonEmptyString(folderIdValue, "Section folderId");
     const name = nonEmptyString(nameValue, "Section name");
     const existing = findSectionByName(
-      await fastApiRequest<Section[]>("/api/sections"),
+      await bookmarkStore.listSections(),
       folderId,
       name
     );
     if (existing) return existing;
-    return fastApiRequest<Section>("/api/sections", {
-      method: "POST",
-      body: { folderId, name }
-    });
+    const data = await graphqlRequest<{ createSection: Section }>(
+      `mutation CreateSection($input: SectionCreateInput!) {
+        createSection(input: $input) { ${SECTION_SELECTION} }
+      }`,
+      { input: { folderId, name } }
+    );
+    return data.createSection;
   },
 
-  deleteSection: (id: string) =>
-    fastApiRequest<void>(`/api/sections/${id}`, { method: "DELETE" }),
+  async deleteSection(id: string) {
+    await graphqlRequest<{ deleteSection: boolean }>(
+      `mutation DeleteSection($id: ID!) {
+        deleteSection(id: $id)
+      }`,
+      { id }
+    );
+  },
 
   async reorderSections(value: unknown) {
-    return fastApiRequest<void>("/api/sections/reorder", {
-      method: "POST",
-      body: validatePositionUpdates(value)
-    });
+    await graphqlRequest<{ reorderSections: boolean }>(
+      `mutation ReorderSections($input: [PositionInput!]!) {
+        reorderSections(input: $input)
+      }`,
+      { input: validatePositionUpdates(value) }
+    );
   }
 };

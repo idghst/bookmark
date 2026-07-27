@@ -1,23 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-function configureFastApi() {
-  vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com/");
+function configureGraphql() {
+  vi.stubEnv(
+    "BOOKMARK_GRAPHQL_URL",
+    "https://graphql.example.com/api/graphql"
+  );
   vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
 }
 
-describe("bookmarkStore FastAPI transport", () => {
+function graphqlResponse(data: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify({ data }), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+
+describe("bookmarkStore GraphQL transport", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.resetModules();
   });
 
-  it("reads bookmarks through FastAPI with the server key", async () => {
-    configureFastApi();
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(
-        JSON.stringify([
+  it("reads bookmarks through GraphQL with the server key", async () => {
+    configureGraphql();
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) =>
+      graphqlResponse({
+        bookmarks: [
           {
             id: "bookmark-1",
             title: "Example",
@@ -28,9 +40,8 @@ describe("bookmarkStore FastAPI transport", () => {
             sectionId: null,
             position: 0
           }
-        ]),
-        { status: 200 }
-      )
+        ]
+      })
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -38,23 +49,29 @@ describe("bookmarkStore FastAPI transport", () => {
     await expect(bookmarkStore.listBookmarks()).resolves.toHaveLength(1);
 
     expect(String(fetchMock.mock.calls[0][0])).toBe(
-      "https://api.example.com/api/bookmarks"
+      "https://graphql.example.com/api/graphql"
     );
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
     expect(headers.get("X-Bookmark-Key")).toBe("bookmark-api-secret");
-    expect(headers.has("apikey")).toBe(false);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.query).toContain("bookmarks");
+    expect(body.variables).toEqual({});
   });
 
   it("returns the same-folder section when its name already exists", async () => {
-    configureFastApi();
+    configureGraphql();
     const existing = {
       id: "section-basic",
       name: "기본",
       folderId: "folder-1",
       position: 0
     };
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify([existing]), { status: 200 })
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) =>
+      graphqlResponse({ sections: [existing] })
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -65,37 +82,38 @@ describe("bookmarkStore FastAPI transport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("deletes a section through FastAPI", async () => {
-    configureFastApi();
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(null, { status: 204 })
+  it("deletes a section through GraphQL", async () => {
+    configureGraphql();
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) =>
+      graphqlResponse({ deleteSection: true })
     );
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
     await bookmarkStore.deleteSection("section-basic");
 
-    expect(String(fetchMock.mock.calls[0][0])).toBe(
-      "https://api.example.com/api/sections/section-basic"
-    );
-    expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.query).toContain("deleteSection");
+    expect(body.variables).toEqual({ id: "section-basic" });
   });
 
-  it("requires FastAPI server configuration before making a request", async () => {
+  it("requires GraphQL server configuration before making a request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
     await expect(bookmarkStore.listBookmarks()).rejects.toMatchObject({
-      message: "BOOKMARK_API_URL and BOOKMARK_API_KEY are required.",
+      message: "BOOKMARK_GRAPHQL_URL and BOOKMARK_API_KEY are required.",
       status: 500
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects a malformed bookmark before making a request", async () => {
-    configureFastApi();
+    configureGraphql();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -112,8 +130,8 @@ describe("bookmarkStore FastAPI transport", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("normalizes bookmark URLs before forwarding writes", async () => {
-    configureFastApi();
+  it("normalizes bookmark URLs in GraphQL variables", async () => {
+    configureGraphql();
     const bookmark = {
       id: "bookmark-1",
       title: "Example",
@@ -124,9 +142,11 @@ describe("bookmarkStore FastAPI transport", () => {
       sectionId: null,
       position: 0
     };
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(JSON.stringify(bookmark), { status: 201 })
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) =>
+      graphqlResponse({ createBookmark: bookmark })
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -140,36 +160,39 @@ describe("bookmarkStore FastAPI transport", () => {
       sectionId: null
     });
 
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
-      url: "https://example.com/"
-    });
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.variables.input.url).toBe("https://example.com/");
   });
 
-  it("surfaces FastAPI errors without leaking transport details", async () => {
-    configureFastApi();
+  it("maps GraphQL errors to the existing store error contract", async () => {
+    configureGraphql();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         new Response(
           JSON.stringify({
-            code: "resource_not_found",
-            message: "Bookmark not found",
-            request_id: "req-1"
+            data: null,
+            errors: [
+              {
+                message: "Not found",
+                extensions: { code: "NOT_FOUND" }
+              }
+            ]
           }),
-          { status: 404 }
+          { status: 200 }
         )
       )
     );
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
     await expect(bookmarkStore.deleteBookmark("missing")).rejects.toMatchObject({
-      message: "Bookmark not found",
+      message: "Not found",
       status: 404
     });
   });
 
   it("rejects malformed reorder data before forwarding", async () => {
-    configureFastApi();
+    configureGraphql();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
