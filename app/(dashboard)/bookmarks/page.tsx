@@ -183,6 +183,36 @@ function moveById<T extends { id: string; position: number }>(items: T[], active
   return normalizePositions(next);
 }
 
+type PositionChange = {
+  id: string;
+  previousPosition: number;
+  optimisticPosition: number;
+};
+
+function getPositionChanges<T extends { id: string; position: number }>(previous: T[], optimistic: T[]) {
+  const previousPositions = new Map(previous.map(({ id, position }) => [id, position]));
+  return optimistic.flatMap(({ id, position }) => {
+    const previousPosition = previousPositions.get(id);
+    return previousPosition === undefined || previousPosition === position
+      ? []
+      : [{ id, previousPosition, optimisticPosition: position }];
+  });
+}
+
+function updateMatchingPositions<T extends { id: string; position: number }>(
+  items: T[],
+  changes: PositionChange[],
+  direction: "apply" | "rollback"
+) {
+  const byId = new Map(changes.map((change) => [change.id, change]));
+  return items.map((item) => {
+    const change = byId.get(item.id);
+    const expectedPosition = direction === "apply" ? change?.previousPosition : change?.optimisticPosition;
+    const nextPosition = direction === "apply" ? change?.optimisticPosition : change?.previousPosition;
+    return change && item.position === expectedPosition ? { ...item, position: nextPosition } : item;
+  });
+}
+
 async function apiRequest<T>(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -683,17 +713,29 @@ export default function BookmarksPage() {
   function toggleFavorite(id: string) {
     const bookmark = bookmarks.find((item) => item.id === id);
     if (!bookmark) return;
-    const previous = bookmarks;
-    const next = bookmarks.map((item) =>
-      item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
-    );
+    const previousFavorite = bookmark.isFavorite;
+    const optimisticFavorite = !previousFavorite;
     void persistOptimisticMutation(
-      () => setBookmarks(next),
-      () => setBookmarks(previous),
+      () =>
+        setBookmarks((current) =>
+          current.map((item) =>
+            item.id === id && item.isFavorite === previousFavorite
+              ? { ...item, isFavorite: optimisticFavorite }
+              : item
+          )
+        ),
+      () =>
+        setBookmarks((current) =>
+          current.map((item) =>
+            item.id === id && item.isFavorite === optimisticFavorite
+              ? { ...item, isFavorite: previousFavorite }
+              : item
+          )
+        ),
       () =>
         apiRequest<BookmarkItem>(`/api/bookmarks/${id}`, {
           method: "PATCH",
-          body: JSON.stringify({ isFavorite: !bookmark.isFavorite })
+          body: JSON.stringify({ isFavorite: optimisticFavorite })
         }),
       "즐겨찾기 변경에 실패했습니다."
     );
@@ -701,11 +743,11 @@ export default function BookmarksPage() {
 
   function dropFolder(targetFolderId: string) {
     if (!draggingFolderId) return;
-    const previous = folders;
     const moved = moveById(orderedFolders, draggingFolderId, targetFolderId);
+    const changes = getPositionChanges(orderedFolders, moved);
     void persistOptimisticMutation(
-      () => setFolders(moved),
-      () => setFolders(previous),
+      () => setFolders((current) => updateMatchingPositions(current, changes, "apply")),
+      () => setFolders((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
       "폴더 순서 저장에 실패했습니다."
     );
@@ -717,11 +759,10 @@ export default function BookmarksPage() {
     if (!selectedFolder || !draggingSectionId) return;
     const scoped = sections.filter((section) => section.folderId === selectedFolder.id).sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingSectionId, targetSectionId);
-    const previous = sections;
-    const next = sections.map((section) => moved.find((item) => item.id === section.id) ?? section);
+    const changes = getPositionChanges(scoped, moved);
     void persistOptimisticMutation(
-      () => setSections(next),
-      () => setSections(previous),
+      () => setSections((current) => updateMatchingPositions(current, changes, "apply")),
+      () => setSections((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/sections/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
       "섹션 순서 저장에 실패했습니다."
     );
@@ -742,11 +783,10 @@ export default function BookmarksPage() {
       .filter((bookmark) => bookmark.folderId === selectedFolder.id && bookmark.sectionId === active.sectionId)
       .sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingBookmarkId, targetBookmarkId);
-    const previous = bookmarks;
-    const next = bookmarks.map((bookmark) => moved.find((item) => item.id === bookmark.id) ?? bookmark);
+    const changes = getPositionChanges(scoped, moved);
     void persistOptimisticMutation(
-      () => setBookmarks(next),
-      () => setBookmarks(previous),
+      () => setBookmarks((current) => updateMatchingPositions(current, changes, "apply")),
+      () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
       "북마크 순서 저장에 실패했습니다."
     );

@@ -1,14 +1,18 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BookmarksPage from "@/app/(dashboard)/bookmarks/page";
-import type { BookmarkItem, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 
-function stubBookmarkCache(bookmarks: BookmarkItem[] = [], sections: Section[] = []) {
+function stubBookmarkCache(
+  bookmarks: BookmarkItem[] = [],
+  sections: Section[] = [],
+  folders: Folder[] = [{ id: "work", name: "작업", color: "#4f46e5", position: 0 }]
+) {
   const cache = JSON.stringify({
     version: 1,
     apiBacked: true,
     savedAt: Date.now(),
-    folders: [{ id: "work", name: "작업", color: "#4f46e5", position: 0 }],
+    folders,
     sections,
     bookmarks,
     selectedFolderId: "work"
@@ -139,6 +143,79 @@ describe("bookmark database saving feedback", () => {
     });
   });
 
+  it("rolls back folder order and cache when reorder saving fails", async () => {
+    const folders: Folder[] = [
+      { id: "work", name: "작업", color: "#4f46e5", position: 0 },
+      { id: "docs", name: "문서", color: "#2166d7", position: 1 }
+    ];
+    const { setItem } = stubBookmarkCache([], [], folders);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ detail: "폴더 순서 저장에 실패했습니다." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+    );
+    render(<BookmarksPage />);
+
+    const folderNavigation = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const work = within(folderNavigation).getByRole("button", { name: "작업 0" });
+    const docs = within(folderNavigation).getByRole("button", { name: "문서 0" });
+    fireEvent.dragStart(work);
+    fireEvent.dragOver(docs);
+    fireEvent.drop(docs);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("폴더 순서 저장에 실패했습니다.");
+    expect(work.compareDocumentPosition(docs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.folders).toMatchObject([
+        { id: "work", position: 0 },
+        { id: "docs", position: 1 }
+      ]);
+    });
+  });
+
+  it("rolls back section order and cache when reorder saving fails", async () => {
+    const sections: Section[] = [
+      { id: "section-a", name: "기본", folderId: "work", position: 0 },
+      { id: "section-b", name: "메일", folderId: "work", position: 1 }
+    ];
+    const bookmarks: BookmarkItem[] = [
+      { id: "bm-a", title: "첫 북마크", url: "https://a.example.com", description: null, isFavorite: false, folderId: "work", sectionId: "section-a", position: 0 },
+      { id: "bm-b", title: "둘째 북마크", url: "https://b.example.com", description: null, isFavorite: false, folderId: "work", sectionId: "section-b", position: 1 }
+    ];
+    const { setItem } = stubBookmarkCache(bookmarks, sections);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ detail: "섹션 순서 저장에 실패했습니다." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+    );
+    render(<BookmarksPage />);
+
+    const first = await screen.findByRole("heading", { name: "기본" });
+    const second = screen.getByRole("heading", { name: "메일" });
+    fireEvent.dragStart(first);
+    fireEvent.dragOver(second);
+    fireEvent.drop(second);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("섹션 순서 저장에 실패했습니다.");
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.sections).toMatchObject([
+        { id: "section-a", position: 0 },
+        { id: "section-b", position: 1 }
+      ]);
+    });
+  });
+
   it("rolls back favorite state and cache when saving fails", async () => {
     const bookmark = {
       id: "bm-1",
@@ -171,6 +248,81 @@ describe("bookmark database saving feedback", () => {
     await waitFor(() => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved.bookmarks[0]).toMatchObject({ id: "bm-1", isFavorite: false });
+    });
+  });
+
+  it("preserves a later successful favorite change when an earlier request fails", async () => {
+    const first = {
+      id: "bm-a",
+      title: "First",
+      url: "https://a.example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: null,
+      position: 0
+    } satisfies BookmarkItem;
+    const second = {
+      id: "bm-b",
+      title: "Second",
+      url: "https://b.example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: null,
+      position: 1
+    } satisfies BookmarkItem;
+    const { setItem } = stubBookmarkCache([first, second]);
+    let failFirst!: (response: Response) => void;
+    const firstRequest = new Promise<Response>((resolve) => {
+      failFirst = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).endsWith("/bm-a")
+          ? firstRequest
+          : Promise.resolve(
+              new Response(JSON.stringify({ ...second, isFavorite: true }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+              })
+            )
+      )
+    );
+    render(<BookmarksPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "First 즐겨찾기" }));
+    fireEvent.click(screen.getByRole("button", { name: "Second 즐겨찾기" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Second 즐겨찾기" }).querySelector("svg")).toHaveClass(
+        "fill-[var(--color-brand)]"
+      )
+    );
+
+    await act(async () => {
+      failFirst(
+        new Response(JSON.stringify({ detail: "첫 즐겨찾기 저장에 실패했습니다." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+      await firstRequest;
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("첫 즐겨찾기 저장에 실패했습니다.");
+    expect(screen.getByRole("button", { name: "First 즐겨찾기" }).querySelector("svg")).not.toHaveClass(
+      "fill-[var(--color-brand)]"
+    );
+    expect(screen.getByRole("button", { name: "Second 즐겨찾기" }).querySelector("svg")).toHaveClass(
+      "fill-[var(--color-brand)]"
+    );
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved.bookmarks).toMatchObject([
+        { id: "bm-a", isFavorite: false },
+        { id: "bm-b", isFavorite: true }
+      ]);
     });
   });
 
