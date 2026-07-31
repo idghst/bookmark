@@ -14,6 +14,7 @@ import {
   List,
   LoaderCircle,
   Menu,
+  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCcw,
@@ -74,7 +75,7 @@ const FOLDER_COLORS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#
 const FOLDER_COLOR_FALLBACK = "#797979";
 const BOOKMARK_APP_HEADER_CLASS = "min-h-[var(--dashboard-header-height)] lg:h-[var(--dashboard-header-height)]";
 const BOOKMARK_SECTION_HEADER_CLASS =
-  "flex h-14 items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-white px-5 transition";
+  "flex min-h-12 items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-white px-3 transition lg:h-14 lg:gap-3 lg:px-5";
 
 const INITIAL_FOLDERS: Folder[] = [
   { id: "work", name: "작업", color: "#4f46e5", position: 0 },
@@ -251,6 +252,14 @@ function safeUrl(value: string) {
     return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
   } catch {
     return null;
+  }
+}
+
+function bookmarkHost(value: string) {
+  try {
+    return new URL(normalizeUrl(value)).hostname.replace(/^www\./i, "");
+  } catch {
+    return value;
   }
 }
 
@@ -876,7 +885,7 @@ export default function BookmarksPage() {
 
   return (
     <div
-      className="fade-in flex h-full min-h-[640px] overflow-hidden bg-white"
+      className="fade-in flex h-full min-h-0 overflow-hidden bg-white sm:min-h-[640px]"
       aria-busy={bootstrapping}
     >
       <FolderSidebar
@@ -939,16 +948,63 @@ export default function BookmarksPage() {
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header
+          className="shrink-0 border-b border-[var(--border-subtle)] bg-white px-3 py-2 lg:hidden"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => setMobileFoldersOpen(true)}>
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">폴더 메뉴 열기</span>
+            </Button>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <h1 className="truncate text-base font-bold text-[var(--text-heading)] sm:text-lg">{selectedFolder?.name ?? "북마크"}</h1>
+              <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 text-xs tabular-nums text-[var(--text-muted)]">
+                {currentCount}
+              </span>
+            </div>
+            <Button
+              variant={favoriteOnly ? "default" : "outline"}
+              size="icon"
+              data-template-action-ignore
+              aria-pressed={favoriteOnly}
+              aria-label={`즐겨찾기 ${currentFavoriteCount}개만 보기`}
+              onClick={() => setFavoriteOnly((value) => !value)}
+              className="h-10 w-10"
+            >
+              <Star className={cn("h-4 w-4", favoriteOnly && "fill-current")} />
+            </Button>
+            <Button size="sm" disabled={bootstrapping || !selectedFolder} onClick={() => openBookmarkDialog()} className="hidden h-10 shrink-0 sm:inline-flex">
+              <Plus className="h-4 w-4" />
+              북마크 추가
+            </Button>
+          </div>
+          <label className="relative mt-2 block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="북마크 검색..."
+              className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[#F8FAFC] pl-10 pr-11 text-sm outline-none transition focus:border-[var(--color-brand)] focus:bg-white"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-[var(--text-muted)] hover:bg-white"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">검색어 지우기</span>
+              </button>
+            ) : null}
+          </label>
+        </header>
+
+        <header
           className={cn(
-            "grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-white px-4 md:px-5",
+            "hidden shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-white px-5 lg:grid",
             BOOKMARK_APP_HEADER_CLASS
           )}
         >
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileFoldersOpen(true)}>
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">폴더 메뉴 열기</span>
-          </Button>
-          <div className="hidden min-w-0 items-center gap-2 md:flex">
+          <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate text-lg font-bold text-[var(--text-heading)]">{selectedFolder?.name ?? "북마크"}</h1>
             <span className="flex h-6 min-w-6 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 text-xs tabular-nums text-[var(--text-muted)]">
               {currentCount}
@@ -974,7 +1030,7 @@ export default function BookmarksPage() {
             ) : null}
           </label>
           <div className="flex shrink-0 items-center gap-2">
-            <div className="hidden rounded-lg border border-[var(--border-subtle)] bg-[#F8FAFC] p-0.5 sm:flex" aria-label="보기 방식">
+            <div className="rounded-lg border border-[var(--border-subtle)] bg-[#F8FAFC] p-0.5" aria-label="보기 방식">
               <Button
                 variant={viewMode === "list" ? "default" : "ghost"}
                 size="icon-sm"
@@ -999,23 +1055,31 @@ export default function BookmarksPage() {
               size="sm"
               data-template-action-ignore
               onClick={() => setFavoriteOnly((value) => !value)}
-              className="hidden sm:inline-flex"
             >
               <Star className={cn("h-4 w-4", favoriteOnly && "fill-current")} />
               즐겨찾기
               <span className="tabular-nums">{currentFavoriteCount}</span>
             </Button>
-            <Button size="sm" disabled={bootstrapping || !selectedFolder} onClick={() => openBookmarkDialog()} className="hidden sm:inline-flex">
+            <Button size="sm" disabled={bootstrapping || !selectedFolder} onClick={() => openBookmarkDialog()}>
               <Plus className="h-4 w-4" />
               북마크 추가
             </Button>
           </div>
         </header>
 
-        <div className="border-b border-[var(--border-subtle)] bg-[#F8FAFC] px-4 py-3 lg:hidden">
-          <div className="scrollbar-hidden flex gap-2 overflow-x-auto">
+        <div className="border-b border-[var(--border-subtle)] bg-[#F8FAFC] px-3 py-2.5 lg:hidden">
+          <div className="scrollbar-hidden -mx-3 flex snap-x gap-2 overflow-x-auto px-3">
             {orderedFolders.map((folder) => (
-              <button key={folder.id} type="button" onClick={() => selectFolder(folder.id)}>
+              <button
+                key={folder.id}
+                type="button"
+                aria-pressed={folder.id === selectedFolder?.id}
+                className="shrink-0 snap-start"
+                onClick={(event) => {
+                  selectFolder(folder.id);
+                  event.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                }}
+              >
                 <Badge variant={folder.id === selectedFolder?.id ? "default" : "outline"}>
                   {folder.name}
                   <span className="ml-1 tabular-nums">{getFolderVisibleCount(folder.id)}</span>
@@ -1026,7 +1090,7 @@ export default function BookmarksPage() {
         </div>
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
-          <div className="mx-auto w-full max-w-[1480px] space-y-6 p-4 md:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-[1480px] space-y-4 p-3 sm:space-y-6 sm:p-4 md:p-6 lg:p-8">
             {mutationError ? (
               <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">
                 {mutationError}
@@ -1043,7 +1107,7 @@ export default function BookmarksPage() {
               </div>
             ) : (
               groups.map((group) => (
-                <section key={group.id} className="space-y-4">
+                <section key={group.id} className="space-y-3 sm:space-y-4">
                   <div
                     draggable={!bootstrapping && group.id !== NO_SECTION}
                     onDragStart={() => {
@@ -1068,9 +1132,9 @@ export default function BookmarksPage() {
                       draggingSectionId === group.id && "opacity-60"
                     )}
                   >
-                    <span className="h-7 w-1 bg-[var(--color-brand)]" />
-                    <h2 className="min-w-0 flex-1 truncate text-2xl font-bold text-[var(--text-heading)]">{group.label}</h2>
-                    <span className="rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2.5 py-1 text-xs tabular-nums text-[var(--text-muted)]">
+                    <span className="h-6 w-1 shrink-0 bg-[var(--color-brand)] lg:h-7" />
+                    <h2 className="min-w-0 flex-1 truncate text-lg font-bold leading-snug text-[var(--text-heading)] lg:text-2xl">{group.label}</h2>
+                    <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)] lg:px-2.5">
                       {group.items.length}
                     </span>
                     {group.id !== NO_SECTION ? (
@@ -1078,7 +1142,7 @@ export default function BookmarksPage() {
                         <button
                           type="button"
                           disabled={bootstrapping}
-                          className="rounded p-1 text-[var(--text-muted)] hover:bg-red-50 hover:text-destructive"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-red-50 hover:text-destructive lg:h-auto lg:w-auto lg:p-1"
                           onClick={(event) => {
                             event.stopPropagation();
                             setDeleteTarget({ type: "section", id: group.id });
@@ -1091,7 +1155,7 @@ export default function BookmarksPage() {
                           type="button"
                           disabled={bootstrapping}
                           draggable={!bootstrapping}
-                          className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC]"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC] lg:h-auto lg:w-auto lg:p-1"
                           onDragStart={() => {
                             if (!bootstrapping) setDraggingSectionId(group.id);
                           }}
@@ -1108,7 +1172,7 @@ export default function BookmarksPage() {
                       </>
                     ) : null}
                   </div>
-                  <div className={cn("grid grid-cols-1", viewMode === "list" ? "gap-3" : "gap-4 lg:grid-cols-2 2xl:grid-cols-3")}>
+                  <div className={cn("grid grid-cols-1", viewMode === "list" ? "gap-2.5 sm:gap-3" : "gap-3 sm:gap-4 lg:grid-cols-2 2xl:grid-cols-3")}>
                     {group.items.map((bookmark) => (
                       <BookmarkCard
                         key={bookmark.id}
@@ -1141,7 +1205,12 @@ export default function BookmarksPage() {
           </div>
         </main>
 
-        <Button size="icon-lg" disabled={bootstrapping || !selectedFolder} className="fixed bottom-4 right-4 z-40 sm:hidden" onClick={() => openBookmarkDialog()}>
+        <Button
+          size="icon-lg"
+          disabled={bootstrapping || !selectedFolder}
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-40 h-12 w-12 shadow-lg sm:hidden"
+          onClick={() => openBookmarkDialog()}
+        >
           <Plus className="h-5 w-5" />
           <span className="sr-only">북마크 추가</span>
         </Button>
@@ -1151,7 +1220,15 @@ export default function BookmarksPage() {
         <Modal title={bookmarkDialog.mode === "edit" ? "북마크 편집" : "북마크 추가"} onClose={() => setBookmarkDialog(null)} closeDisabled={saving || creatingSection}>
           <form className="space-y-4" onSubmit={saveBookmark} aria-busy={saving || creatingSection}>
             <Field label="URL">
-              <Input value={bookmarkDraft.url} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, url: event.target.value }))} placeholder="https://example.com" />
+              <Input
+                type="url"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                value={bookmarkDraft.url}
+                onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, url: event.target.value }))}
+                placeholder="https://example.com"
+              />
             </Field>
             <Field label="제목">
               <Input value={bookmarkDraft.title} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, title: event.target.value }))} placeholder="북마크 제목" />
@@ -1368,7 +1445,7 @@ export default function BookmarksPage() {
 
 function BookmarksLoading() {
   return (
-    <div className="fade-in flex h-full min-h-[640px] overflow-hidden bg-white">
+    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white sm:min-h-[640px]">
       <aside className="hidden w-[280px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F8FAFC] lg:flex">
         <div className={cn("flex shrink-0 flex-col justify-center border-b border-[var(--border-subtle)] px-4 py-3", BOOKMARK_APP_HEADER_CLASS)}>
           <div className="h-5 w-24 rounded bg-slate-200" />
@@ -1587,13 +1664,14 @@ function BookmarkCard({
   onDelete: (bookmark: BookmarkItem) => void;
   onToggleFavorite: (id: string) => void;
 }) {
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const openBookmark = () => window.open(bookmark.url, "_blank", "noopener,noreferrer");
 
   return (
     <Card
       className={cn(
-        "group rounded-lg border border-[var(--border-subtle)] bg-white shadow-none transition",
-        viewMode === "list" ? "min-h-[104px]" : "min-h-[132px]",
+        "group relative rounded-lg border border-[var(--border-subtle)] bg-white py-3 shadow-none transition lg:py-4",
+        viewMode === "list" ? "min-h-[96px] lg:min-h-[104px]" : "min-h-[120px] lg:min-h-[132px]",
         dragging ? "opacity-60" : "cursor-pointer hover:border-[var(--color-brand)] hover:bg-white",
         dragOver && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25"
       )}
@@ -1619,16 +1697,19 @@ function BookmarkCard({
         if (event.key === "Enter") openBookmark();
       }}
     >
-      <CardHeader className="px-5 pb-0">
+      <CardHeader className="px-4 pb-0 lg:px-5">
         <div className="flex items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC]">
             <Favicon url={bookmark.url} />
           </div>
           <div className="min-w-0 w-0 flex-1 space-y-1">
             <span className="block truncate text-base font-bold text-[var(--text-heading)]">{bookmark.title}</span>
-            <p className="break-all text-sm leading-5 text-[var(--text-muted)]">{bookmark.url}</p>
+            <p aria-label={bookmark.url} className="line-clamp-1 break-all text-xs leading-5 text-[var(--text-muted)] lg:line-clamp-none lg:text-sm">
+              <span aria-hidden="true" className="lg:hidden">{bookmarkHost(bookmark.url)}</span>
+              <span aria-hidden="true" className="hidden lg:inline">{bookmark.url}</span>
+            </p>
           </div>
-          <div className="-mr-1 -mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100" onClick={(event) => event.stopPropagation()}>
+          <div className="-mr-1 -mt-1 hidden items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 lg:flex [@media(hover:none)]:opacity-100" onClick={(event) => event.stopPropagation()}>
             <GripVertical className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
             <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onEdit(bookmark)}>
               <Pencil className="h-4 w-4" />
@@ -1639,11 +1720,42 @@ function BookmarkCard({
               <span className="sr-only">{bookmark.title} 삭제</span>
             </Button>
           </div>
+          <details
+            className="relative -mr-2 -mt-2 shrink-0 lg:hidden"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            onToggle={(event) => setMobileActionsOpen(event.currentTarget.open)}
+          >
+            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded text-[var(--text-muted)] outline-none hover:bg-[#F8FAFC] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 [&::-webkit-details-marker]:hidden">
+              <MoreHorizontal className="h-5 w-5" />
+              <span className="sr-only">{bookmark.title} 메뉴</span>
+            </summary>
+            <div hidden={!mobileActionsOpen} className="absolute right-0 z-10 mt-1 w-28 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg">
+              <button
+                type="button"
+                disabled={mutationsDisabled}
+                className="flex h-10 w-full items-center gap-2 rounded px-3 text-left text-sm font-medium text-[var(--text-heading)] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => onEdit(bookmark)}
+              >
+                <Pencil className="h-4 w-4" />
+                편집
+              </button>
+              <button
+                type="button"
+                disabled={mutationsDisabled}
+                className="flex h-10 w-full items-center gap-2 rounded px-3 text-left text-sm font-medium text-destructive hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => onDelete(bookmark)}
+              >
+                <Trash2 className="h-4 w-4" />
+                삭제
+              </button>
+            </div>
+          </details>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col space-y-3 px-5 pt-1">
-        {bookmark.description ? <p className="line-clamp-2 text-sm text-[var(--text-muted)]">{bookmark.description}</p> : null}
-        <div className="mt-auto flex min-w-0 items-end gap-2">
+      <CardContent className="flex flex-1 flex-col space-y-2 px-4 pt-1 lg:space-y-3 lg:px-5">
+        {bookmark.description ? <p className="line-clamp-1 text-xs leading-5 text-[var(--text-muted)] lg:line-clamp-2 lg:text-sm">{bookmark.description}</p> : null}
+        <div className="mt-auto flex min-w-0 items-center gap-2 lg:items-end">
           <div className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-hidden">
             {folder ? <Badge variant="secondary">{folder.name}</Badge> : null}
             {section ? <Badge variant="outline">{section.name}</Badge> : null}
@@ -1653,13 +1765,18 @@ function BookmarkCard({
               variant="ghost"
               size="icon-xs"
               disabled={mutationsDisabled}
-              className="border border-[var(--border-subtle)] bg-[#F8FAFC]"
+              className="h-10 w-10 border border-[var(--border-subtle)] bg-[#F8FAFC] lg:h-6 lg:w-6"
               onClick={() => onToggleFavorite(bookmark.id)}
             >
               <Star className={cn("h-4 w-4", bookmark.isFavorite ? "fill-[var(--color-brand)] text-[var(--color-brand)]" : "text-[var(--text-muted)]")} />
               <span className="sr-only">{bookmark.title} 즐겨찾기</span>
             </Button>
-            <Button variant="ghost" size="icon-xs" className="border border-[var(--border-subtle)] bg-[#F8FAFC]" onClick={openBookmark}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="h-10 w-10 border border-[var(--border-subtle)] bg-[#F8FAFC] lg:h-6 lg:w-6"
+              onClick={openBookmark}
+            >
               <ExternalLink className="h-4 w-4" />
               <span className="sr-only">{bookmark.title} 열기</span>
             </Button>
@@ -1713,8 +1830,8 @@ function Modal({ title, children, onClose, closeDisabled = false }: { title: str
   }, [closeDisabled, onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="w-full max-w-md rounded-lg border border-[var(--border-subtle)] bg-white p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg sm:p-5">
         <div className="mb-4 flex items-center gap-3">
           <h2 id={titleId} className="min-w-0 flex-1 text-lg font-bold text-[var(--text-heading)]">
             {title}
