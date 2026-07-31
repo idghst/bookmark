@@ -52,6 +52,10 @@ type FolderDialog =
   | { mode: "create"; folderId?: never }
   | { mode: "edit"; folderId: string };
 
+type SectionDialog = {
+  sectionId: string;
+};
+
 type DeleteTarget =
   | { type: "bookmark"; id: string }
   | { type: "section"; id: string }
@@ -314,6 +318,9 @@ export default function BookmarksPage() {
   const [folderDialog, setFolderDialog] = useState<FolderDialog | null>(null);
   const [folderDraft, setFolderDraft] = useState({ name: "", color: FOLDER_COLORS[0] });
   const [folderError, setFolderError] = useState("");
+  const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null);
+  const [sectionDraft, setSectionDraft] = useState({ name: "" });
+  const [sectionError, setSectionError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [mutationError, setMutationError] = useState("");
@@ -447,6 +454,8 @@ export default function BookmarksPage() {
       .sort((a, b) => a.position - b.position);
   }, [bookmarks, favoriteOnly, query, selectedFolder]);
 
+  const hasActiveFilter = favoriteOnly || query.trim().length > 0;
+
   const groups = useMemo(() => {
     if (!selectedFolder) return [];
     const folderSections = sections
@@ -460,16 +469,17 @@ export default function BookmarksPage() {
 
     const sectionGroups = folderSections.flatMap((section) => {
       const items = bySection.get(section.id) ?? [];
-      return items.length ? [{ id: section.id, label: section.name, items }] : [];
+      return items.length || !hasActiveFilter
+        ? [{ id: section.id, label: section.name, items }]
+        : [];
     });
     const unassigned = bySection.get(null) ?? [];
     return unassigned.length ? [...sectionGroups, { id: NO_SECTION, label: "섹션 없음", items: unassigned }] : sectionGroups;
-  }, [filtered, sections, selectedFolder]);
+  }, [filtered, hasActiveFilter, sections, selectedFolder]);
 
   const currentFolderBookmarks = selectedFolder
     ? bookmarks.filter((bookmark) => bookmark.folderId === selectedFolder.id)
     : [];
-  const hasActiveFilter = favoriteOnly || query.trim().length > 0;
   const currentFavoriteCount = countBookmarks(currentFolderBookmarks, { favoriteOnly: true });
   const currentCount = hasActiveFilter ? filtered.length : currentFolderBookmarks.length;
   const emptyMessage = query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다.";
@@ -515,6 +525,13 @@ export default function BookmarksPage() {
     }
     setFolderDialog({ mode: "create" });
     setFolderDraft({ name: "", color: FOLDER_COLORS[folders.length % FOLDER_COLORS.length] });
+  }
+
+  function openSectionDialog(section: Section) {
+    if (bootstrapping) return;
+    setSectionError("");
+    setSectionDialog({ sectionId: section.id });
+    setSectionDraft({ name: section.name });
   }
 
   async function createSectionFromBookmarkDialog() {
@@ -667,6 +684,39 @@ export default function BookmarksPage() {
       setFolderDialog(null);
     } catch (error) {
       setFolderError(error instanceof Error ? error.message : "폴더 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveSection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (bootstrapping || saving || !sectionDialog) return;
+    const name = sectionDraft.name.trim();
+    if (!name) {
+      setSectionError("섹션 이름을 입력하세요.");
+      return;
+    }
+
+    setSectionError("");
+    setSaving(true);
+    try {
+      if (apiBacked) {
+        const updated = await apiRequest<Section>(`/api/sections/${sectionDialog.sectionId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name })
+        });
+        setSections((current) => current.map((section) => (section.id === updated.id ? updated : section)));
+      } else {
+        setSections((current) =>
+          current.map((section) =>
+            section.id === sectionDialog.sectionId ? { ...section, name } : section
+          )
+        );
+      }
+      setSectionDialog(null);
+    } catch (error) {
+      setSectionError(error instanceof Error ? error.message : "섹션 저장에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -1073,7 +1123,7 @@ export default function BookmarksPage() {
                 {mutationError}
               </div>
             ) : null}
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && (hasActiveFilter || groups.length === 0) ? (
               <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-white px-6 text-center">
                 <div className="mb-3 h-1.5 w-12 rounded-full bg-[var(--color-brand)]" />
                 <p className="text-base font-bold text-[var(--text-heading)]">{emptyMessage}</p>
@@ -1116,6 +1166,19 @@ export default function BookmarksPage() {
                     </span>
                     {group.id !== NO_SECTION ? (
                       <>
+                        <button
+                          type="button"
+                          disabled={bootstrapping}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const section = sections.find((item) => item.id === group.id);
+                            if (section) openSectionDialog(section);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          <span className="sr-only">{group.label} 섹션 편집</span>
+                        </button>
                         <button
                           type="button"
                           disabled={bootstrapping}
@@ -1375,6 +1438,27 @@ export default function BookmarksPage() {
             {folderError ? <p className="text-sm font-bold text-destructive">{folderError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" disabled={saving} onClick={() => setFolderDialog(null)}>
+                취소
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? <LoaderCircle className="animate-spin" /> : null}
+                {saving ? "저장 중..." : "저장"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {sectionDialog ? (
+        <Modal title="섹션 편집" onClose={() => setSectionDialog(null)} closeDisabled={saving}>
+          <form className="space-y-4" onSubmit={saveSection} aria-busy={saving}>
+            <Field label="이름">
+              <Input value={sectionDraft.name} onChange={(event) => setSectionDraft({ name: event.target.value })} placeholder="섹션 이름" />
+            </Field>
+            {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
+            {sectionError ? <p className="text-sm font-bold text-destructive">{sectionError}</p> : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" disabled={saving} onClick={() => setSectionDialog(null)}>
                 취소
               </Button>
               <Button type="submit" disabled={saving}>

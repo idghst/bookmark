@@ -37,6 +37,10 @@ export type FolderFormData = {
   color?: string | null;
 };
 
+export type SectionFormData = {
+  name: string;
+};
+
 export type PositionUpdate = {
   id: string;
   position: number;

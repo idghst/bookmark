@@ -126,4 +126,39 @@ describe("bookmark API write boundary", () => {
     expect(response.status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("forwards section PATCH requests to GraphQL", async () => {
+    vi.stubEnv(
+      "BOOKMARK_GRAPHQL_URL",
+      "https://graphql.example.com/api/graphql"
+    );
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            updateSection: {
+              id: "section-1",
+              name: "수정된 섹션",
+              folderId: "folder-1",
+              position: 0
+            }
+          }
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { PATCH } = await import("@/app/api/[resource]/[[...path]]/route");
+
+    const response = await PATCH(
+      request("/api/sections/section-1", "PATCH", { name: "수정된 섹션" }),
+      context("sections", ["section-1"])
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables
+    ).toEqual({ id: "section-1", input: { name: "수정된 섹션" } });
+  });
 });

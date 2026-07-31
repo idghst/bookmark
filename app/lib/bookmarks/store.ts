@@ -5,7 +5,8 @@ import type {
   Folder,
   FolderFormData,
   PositionUpdate,
-  Section
+  Section,
+  SectionFormData
 } from "@/app/lib/bookmarks/types";
 
 const BOOKMARK_FIELDS = new Set([
@@ -17,6 +18,7 @@ const BOOKMARK_FIELDS = new Set([
   "sectionId"
 ]);
 const FOLDER_FIELDS = new Set(["name", "color"]);
+const SECTION_FIELDS = new Set(["name"]);
 
 export class StoreError extends Error {
   constructor(message: string, public readonly status = 500) {
@@ -184,6 +186,17 @@ function validateFolderPatch(value: unknown): Partial<FolderFormData> {
       invalid("Folder color must be a string or null.");
     }
     result.color = data.color as string | null;
+  }
+  return result;
+}
+
+function validateSectionPatch(value: unknown): Partial<SectionFormData> {
+  const data = record(value, "Section");
+  assertAllowedFields(data, SECTION_FIELDS, "Section");
+  if (!Object.keys(data).length) invalid("Section PATCH body must not be empty.");
+  const result: Partial<SectionFormData> = {};
+  if (Object.hasOwn(data, "name")) {
+    result.name = nonEmptyString(data.name, "Section name");
   }
   return result;
 }
@@ -429,6 +442,16 @@ export const bookmarkStore = {
       { input: { folderId, name } }
     );
     return data.createSection;
+  },
+
+  async updateSection(id: string, value: unknown) {
+    const data = await graphqlRequest<{ updateSection: Section }>(
+      `mutation UpdateSection($id: ID!, $input: SectionUpdateInput!) {
+        updateSection(id: $id, input: $input) { ${SECTION_SELECTION} }
+      }`,
+      { id, input: validateSectionPatch(value) }
+    );
+    return data.updateSection;
   },
 
   async deleteSection(id: string) {

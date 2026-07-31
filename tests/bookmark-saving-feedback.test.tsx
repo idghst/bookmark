@@ -929,16 +929,40 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByRole("link", { name: /보존할 북마크/ })).toBeInTheDocument();
   });
 
-  it("offers deletion for a selected empty section", async () => {
+  it("edits a section in its folder", async () => {
+    const section = { id: "section-basic", name: "기본", folderId: "work", position: 0 } satisfies Section;
+    const updated = { ...section, name: "수정된 섹션" };
+    stubBookmarkCache(
+      [{ id: "bm-1", title: "북마크", url: "https://example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 }],
+      [section]
+    );
+    const fetchMock = stubRemote(async (input, init) => {
+      expect(String(input)).toBe(`/api/sections/${section.id}`);
+      expect(init).toMatchObject({ method: "PATCH" });
+      expect(JSON.parse(String(init?.body))).toEqual({ name: updated.name });
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    render(<BookmarksPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "기본 섹션 편집" }));
+    const dialog = screen.getByRole("dialog", { name: "섹션 편집" });
+    fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: updated.name } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+    expect(screen.getByRole("heading", { name: updated.name })).toBeInTheDocument();
+  });
+
+  it("offers deletion for an empty section in its folder", async () => {
     const section = { id: "section-empty", name: "빈 섹션", folderId: "work", position: 0 } satisfies Section;
     stubBookmarkCache([], [section]);
     render(<BookmarksPage />);
 
-    fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
-    const sectionSelect = screen.getByRole("combobox", { name: "섹션" });
-    fireEvent.keyDown(sectionSelect, { key: "ArrowDown" });
-    fireEvent.click(await screen.findByRole("option", { name: section.name }));
-    fireEvent.click(screen.getByRole("button", { name: "선택한 섹션 삭제" }));
+    expect(await screen.findByRole("heading", { name: section.name })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "빈 섹션 섹션 삭제" }));
 
     expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toBeInTheDocument();
   });

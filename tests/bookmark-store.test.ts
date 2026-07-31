@@ -100,6 +100,36 @@ describe("bookmarkStore GraphQL transport", () => {
     expect(body.variables).toEqual({ id: "section-basic" });
   });
 
+  it("updates a section through GraphQL", async () => {
+    configureGraphql();
+    const updated = {
+      id: "section-basic",
+      name: "수정된 기본",
+      folderId: "folder-1",
+      position: 0
+    };
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) => graphqlResponse({ updateSection: updated }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(
+      bookmarkStore.updateSection("section-basic", " 수정된 기본 ")
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      bookmarkStore.updateSection("section-basic", { name: " 수정된 기본 " })
+    ).resolves.toEqual(updated);
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.query).toContain("updateSection");
+    expect(body.variables).toEqual({
+      id: "section-basic",
+      input: { name: "수정된 기본" }
+    });
+  });
+
   it("requires GraphQL server configuration before making a request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

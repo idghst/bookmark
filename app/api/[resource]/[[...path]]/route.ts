@@ -110,6 +110,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = await readJson(request);
     if (resource === "bookmarks") return NextResponse.json(await bookmarkStore.updateBookmark(id, body));
     if (resource === "folders") return NextResponse.json(await bookmarkStore.updateFolder(id, body));
+    if (resource === "sections") return NextResponse.json(await bookmarkStore.updateSection(id, body));
     return noRoute();
   } catch (error) {
     return jsonError(error);
