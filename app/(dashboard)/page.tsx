@@ -472,7 +472,6 @@ export default function BookmarksPage() {
   const currentFavoriteCount = countBookmarks(currentFolderBookmarks, { favoriteOnly: true });
   const currentCount = hasActiveFilter ? filtered.length : currentFolderBookmarks.length;
   const emptyMessage = query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다.";
-  const getFolderVisibleCount = (folderId: string) => countBookmarks(bookmarks, { folderId, favoriteOnly });
   const folderSections = sections
     .filter((section) => section.folderId === bookmarkDraft.folderId)
     .sort((a, b) => a.position - b.position);
@@ -1066,28 +1065,6 @@ export default function BookmarksPage() {
             </Button>
           </div>
         </header>
-
-        <div className="border-b border-[var(--border-subtle)] bg-[#F8FAFC] px-3 py-2.5 lg:hidden">
-          <div className="scrollbar-hidden -mx-3 flex snap-x gap-2 overflow-x-auto px-3">
-            {orderedFolders.map((folder) => (
-              <button
-                key={folder.id}
-                type="button"
-                aria-pressed={folder.id === selectedFolder?.id}
-                className="shrink-0 snap-start"
-                onClick={(event) => {
-                  selectFolder(folder.id);
-                  event.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-                }}
-              >
-                <Badge variant={folder.id === selectedFolder?.id ? "default" : "outline"}>
-                  {folder.name}
-                  <span className="ml-1 tabular-nums">{getFolderVisibleCount(folder.id)}</span>
-                </Badge>
-              </button>
-            ))}
-          </div>
-        </div>
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
           <div className="mx-auto w-full max-w-[1480px] space-y-4 p-3 sm:space-y-6 sm:p-4 md:p-6 lg:p-8">
