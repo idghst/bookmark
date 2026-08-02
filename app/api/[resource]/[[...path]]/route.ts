@@ -117,7 +117,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { resource, path } = await routeParts(context);
     const id = path[0];
@@ -128,7 +128,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return new Response(null, { status: 204 });
     }
     if (resource === "folders") {
-      await bookmarkStore.deleteFolder(id);
+      const destinationFolderId =
+        request.nextUrl.searchParams.get("destination_folder_id") ??
+        request.nextUrl.searchParams.get("destinationFolderId") ??
+        undefined;
+      await bookmarkStore.deleteFolder(id, destinationFolderId);
       return new Response(null, { status: 204 });
     }
     if (resource === "sections") {

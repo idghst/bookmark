@@ -2,12 +2,8 @@
 
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
-import type { Route } from "next";
 import {
-  Bookmark,
   ExternalLink,
-  FolderPlus,
   Grid2X2,
   Globe,
   GripVertical,
@@ -17,7 +13,6 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  RefreshCcw,
   Search,
   Star,
   Trash2,
@@ -30,9 +25,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { countBookmarks, matchesBookmarkFilters } from "@/app/lib/bookmarks/counts";
-import { BRAND } from "@/app/lib/config/brand";
+import { ConsoleSidebar } from "@/app/(dashboard)/ConsoleSidebar";
+import {
+  flattenFolderResponse,
+  folderDescendantIds,
+  folderParentId,
+  normalizeFolderPositions
+} from "@/app/lib/bookmarks/folder-tree";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
-import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, Folder, FolderTreeItem, Section } from "@/app/lib/bookmarks/types";
 import { cn } from "@/lib/utils";
 
 type BookmarkDraft = {
@@ -64,7 +65,7 @@ type DeleteTarget =
 type ViewMode = "list" | "grid";
 
 type BookmarkCache = {
-  version: 1;
+  version: 2;
   apiBacked: boolean;
   savedAt: number;
   folders: Folder[];
@@ -75,6 +76,7 @@ type BookmarkCache = {
 
 const STORAGE_KEY = "bookmark-cache";
 const NO_SECTION = "__none__";
+const ROOT_FOLDER = "__root__";
 const FOLDER_COLORS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#797979"];
 const FOLDER_COLOR_FALLBACK = "#797979";
 const BOOKMARK_APP_HEADER_CLASS = "min-h-[var(--dashboard-header-height)] lg:h-[var(--dashboard-header-height)]";
@@ -83,10 +85,10 @@ const BOOKMARK_SECTION_HEADER_CLASS =
   "flex h-12 items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-white px-3 transition";
 
 const INITIAL_FOLDERS: Folder[] = [
-  { id: "work", name: "작업", color: "#4f46e5", position: 0 },
-  { id: "docs", name: "문서", color: "#2166d7", position: 1 },
-  { id: "tools", name: "도구", color: "#16a34a", position: 2 },
-  { id: "reference", name: "참고", color: "#797979", position: 3 }
+  { id: "work", name: "작업", color: "#4f46e5", parentId: null, position: 0 },
+  { id: "docs", name: "문서", color: "#2166d7", parentId: null, position: 1 },
+  { id: "tools", name: "도구", color: "#16a34a", parentId: null, position: 2 },
+  { id: "reference", name: "참고", color: "#797979", parentId: "docs", position: 0 }
 ];
 
 const INITIAL_SECTIONS: Section[] = [
@@ -268,11 +270,6 @@ function bookmarkHost(value: string) {
   }
 }
 
-function folderColor(value: string | null) {
-  if (!value) return FOLDER_COLOR_FALLBACK;
-  return value.startsWith("--") ? `var(${value})` : value;
-}
-
 function emptyBookmarkDraft(folderId: string): BookmarkDraft {
   return {
     title: "",
@@ -316,7 +313,7 @@ export default function BookmarksPage() {
   const [sectionCreateMessage, setSectionCreateMessage] = useState("");
   const [creatingSection, setCreatingSection] = useState(false);
   const [folderDialog, setFolderDialog] = useState<FolderDialog | null>(null);
-  const [folderDraft, setFolderDraft] = useState({ name: "", color: FOLDER_COLORS[0] });
+  const [folderDraft, setFolderDraft] = useState({ name: "", color: FOLDER_COLORS[0], parentId: ROOT_FOLDER });
   const [folderError, setFolderError] = useState("");
   const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null);
   const [sectionDraft, setSectionDraft] = useState({ name: "" });
@@ -346,7 +343,7 @@ export default function BookmarksPage() {
       try {
         const cache = readBookmarkCache();
         if (cache?.folders?.length) {
-          setFolders(normalizePositions(cache.folders));
+          setFolders(normalizeFolderPositions(cache.folders));
           setSections(normalizePositions(cache.sections ?? []));
           setBookmarks(normalizePositions(cache.bookmarks ?? []));
           setSelectedFolderId(cache.selectedFolderId ?? cache.folders[0].id);
@@ -384,7 +381,7 @@ export default function BookmarksPage() {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 1,
+        version: 2,
         apiBacked,
         savedAt: Date.now(),
         folders,
@@ -409,16 +406,17 @@ export default function BookmarksPage() {
     setRefreshing(true);
     try {
       const [remoteFolders, remoteSections, remoteBookmarks] = await Promise.all([
-        apiRequest<Folder[]>("/api/folders"),
+        apiRequest<FolderTreeItem[]>("/api/folders"),
         apiRequest<Section[]>("/api/sections"),
         apiRequest<BookmarkItem[]>("/api/bookmarks")
       ]);
       if (isCancelled()) return false;
-      if (!remoteFolders.length) throw new Error("폴더 데이터가 없습니다.");
-      setFolders(remoteFolders);
+      const flatFolders = flattenFolderResponse(remoteFolders);
+      if (!flatFolders.length) throw new Error("폴더 데이터가 없습니다.");
+      setFolders(flatFolders);
       setSections(remoteSections);
       setBookmarks(remoteBookmarks);
-      setSelectedFolderId((current) => (remoteFolders.some((folder) => folder.id === current) ? current : remoteFolders[0].id));
+      setSelectedFolderId((current) => (flatFolders.some((folder) => folder.id === current) ? current : flatFolders[0].id));
       setApiBacked(true);
       if (reapplyOptimistic) pendingOptimistic.current.forEach((reapply) => reapply());
       return true;
@@ -486,10 +484,24 @@ export default function BookmarksPage() {
   const folderSections = sections
     .filter((section) => section.folderId === bookmarkDraft.folderId)
     .sort((a, b) => a.position - b.position);
+  const parentFolderOptions = folderDialog?.mode === "edit"
+    ? orderedFolders.filter((folder) => {
+        const blocked = folderDescendantIds(folders, folderDialog.folderId);
+        return folder.id !== folderDialog.folderId && !blocked.has(folder.id);
+      })
+    : orderedFolders;
 
   function selectFolder(folderId: string) {
     setSelectedFolderId(folderId);
     setMobileFoldersOpen(false);
+  }
+
+  function requestFolderDelete(folder: Folder) {
+    if (folders.some((item) => folderParentId(item) === folder.id)) {
+      setMutationError("하위 폴더를 먼저 이동하거나 삭제하세요.");
+      return;
+    }
+    setDeleteTarget({ type: "folder", id: folder.id });
   }
 
   function openBookmarkDialog(bookmark?: BookmarkItem) {
@@ -515,16 +527,24 @@ export default function BookmarksPage() {
     setBookmarkDraft(emptyBookmarkDraft(selectedFolder?.id ?? orderedFolders[0]?.id ?? ""));
   }
 
-  function openFolderDialog(folder?: Folder) {
+  function openFolderDialog(folder?: Folder, parentId: string | null = null) {
     if (bootstrapping) return;
     setFolderError("");
     if (folder) {
       setFolderDialog({ mode: "edit", folderId: folder.id });
-      setFolderDraft({ name: folder.name, color: folder.color ?? FOLDER_COLOR_FALLBACK });
+      setFolderDraft({
+        name: folder.name,
+        color: folder.color ?? FOLDER_COLOR_FALLBACK,
+        parentId: folderParentId(folder) ?? ROOT_FOLDER
+      });
       return;
     }
     setFolderDialog({ mode: "create" });
-    setFolderDraft({ name: "", color: FOLDER_COLORS[folders.length % FOLDER_COLORS.length] });
+    setFolderDraft({
+      name: "",
+      color: FOLDER_COLORS[folders.length % FOLDER_COLORS.length],
+      parentId: parentId ?? ROOT_FOLDER
+    });
   }
 
   function openSectionDialog(section: Section) {
@@ -649,6 +669,15 @@ export default function BookmarksPage() {
       setFolderError("폴더 이름을 입력하세요.");
       return;
     }
+    const parentId = folderDraft.parentId === ROOT_FOLDER ? null : folderDraft.parentId;
+    const editingFolder = folderDialog?.mode === "edit"
+      ? folders.find((folder) => folder.id === folderDialog.folderId)
+      : undefined;
+    const forbiddenParentIds = editingFolder ? folderDescendantIds(folders, editingFolder.id) : new Set<string>();
+    if (parentId && (!folders.some((folder) => folder.id === parentId) || parentId === editingFolder?.id || forbiddenParentIds.has(parentId))) {
+      setFolderError("상위 폴더로 자신 또는 하위 폴더를 선택할 수 없습니다.");
+      return;
+    }
 
     setFolderError("");
     setSaving(true);
@@ -657,27 +686,38 @@ export default function BookmarksPage() {
         if (apiBacked) {
           const updated = await apiRequest<Folder>(`/api/folders/${folderDialog.folderId}`, {
             method: "PATCH",
-            body: JSON.stringify({ name, color: folderDraft.color })
+            body: JSON.stringify({ name, color: folderDraft.color, parentId })
           });
-          setFolders((current) => current.map((folder) => (folder.id === updated.id ? updated : folder)));
+          setFolders((current) => normalizeFolderPositions(current.map((folder) => (folder.id === updated.id ? updated : folder))));
         } else {
-          setFolders((current) =>
-            current.map((folder) => (folder.id === folderDialog.folderId ? { ...folder, name, color: folderDraft.color } : folder))
-          );
+          setFolders((current) => {
+            const existing = current.find((folder) => folder.id === folderDialog.folderId);
+            const position = existing && folderParentId(existing) === parentId
+              ? existing.position
+              : current.filter((folder) => folderParentId(folder) === parentId).length;
+            return normalizeFolderPositions(
+              current.map((folder) =>
+                folder.id === folderDialog.folderId
+                  ? { ...folder, name, color: folderDraft.color, parentId, position }
+                  : folder
+              )
+            );
+          });
         }
       } else {
         const folder = apiBacked
           ? await apiRequest<Folder>("/api/folders", {
               method: "POST",
-              body: JSON.stringify({ name, color: folderDraft.color })
+              body: JSON.stringify({ name, color: folderDraft.color, parentId })
             })
           : {
               id: createId("folder"),
               name,
               color: folderDraft.color,
-              position: folders.length
+              parentId,
+              position: folders.filter((item) => folderParentId(item) === parentId).length
             };
-        setFolders((current) => [...current, folder]);
+        setFolders((current) => normalizeFolderPositions([...current, folder]));
         setSelectedFolderId(folder.id);
       }
 
@@ -754,11 +794,24 @@ export default function BookmarksPage() {
         return;
       }
 
-      const fallbackFolderId = folders.find((folder) => folder.id !== deleteTarget.id)?.id ?? "";
-      if (apiBacked) {
-        await apiRequest<void>(`/api/folders/${deleteTarget.id}`, { method: "DELETE" });
+      const folderToDelete = folders.find((folder) => folder.id === deleteTarget.id);
+      const hasChildren = folders.some((folder) => folderParentId(folder) === deleteTarget.id);
+      if (!folderToDelete || hasChildren) {
+        setDeleteError("하위 폴더를 먼저 이동하거나 삭제하세요.");
+        return;
       }
-      setFolders((current) => normalizePositions(current.filter((folder) => folder.id !== deleteTarget.id)));
+      const fallbackFolderId =
+        folders.find((folder) => folder.id !== deleteTarget.id && folder.id !== folderParentId(folderToDelete))?.id
+        ?? folderParentId(folderToDelete)
+        ?? "";
+      if (!fallbackFolderId) {
+        setDeleteError("북마크를 이동할 대상 폴더가 없습니다.");
+        return;
+      }
+      if (apiBacked) {
+        await apiRequest<void>(`/api/folders/${deleteTarget.id}?destination_folder_id=${encodeURIComponent(fallbackFolderId)}`, { method: "DELETE" });
+      }
+      setFolders((current) => normalizeFolderPositions(current.filter((folder) => folder.id !== deleteTarget.id)));
       setSections((current) => normalizePositions(current.filter((section) => section.folderId !== deleteTarget.id)));
       setBookmarks((current) =>
         current.map((bookmark) =>
@@ -768,6 +821,7 @@ export default function BookmarksPage() {
         )
       );
       if (selectedFolderId === deleteTarget.id) setSelectedFolderId(fallbackFolderId);
+      if (apiBacked) await refreshBookmarks();
       setDeleteTarget(null);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : "삭제에 실패했습니다.");
@@ -865,8 +919,23 @@ export default function BookmarksPage() {
 
   function dropFolder(targetFolderId: string) {
     if (bootstrapping || !draggingFolderId) return;
-    const moved = moveById(orderedFolders, draggingFolderId, targetFolderId);
-    const changes = getPositionChanges(orderedFolders, moved);
+    const source = folders.find((folder) => folder.id === draggingFolderId);
+    const target = folders.find((folder) => folder.id === targetFolderId);
+    if (!source || !target || folderParentId(source) !== folderParentId(target)) {
+      setDraggingFolderId(null);
+      setDragOverFolderId(null);
+      return;
+    }
+    const siblings = folders
+      .filter((folder) => folderParentId(folder) === folderParentId(source))
+      .sort((a, b) => a.position - b.position);
+    const moved = moveById(siblings, draggingFolderId, targetFolderId);
+    const changes = getPositionChanges(siblings, moved);
+    if (!changes.length) {
+      setDraggingFolderId(null);
+      setDragOverFolderId(null);
+      return;
+    }
     void persistOptimisticMutation(
       "reorder:folders",
       () => setFolders((current) => applyPositions(current, moved)),
@@ -938,7 +1007,7 @@ export default function BookmarksPage() {
       className="fade-in flex h-full min-h-0 overflow-hidden bg-white"
       aria-busy={bootstrapping}
     >
-      <FolderSidebar
+      <ConsoleSidebar
         folders={orderedFolders}
         bookmarks={bookmarks}
         favoriteOnly={favoriteOnly}
@@ -946,9 +1015,9 @@ export default function BookmarksPage() {
         draggingFolderId={draggingFolderId}
         dragOverFolderId={dragOverFolderId}
         onSelectFolder={selectFolder}
-        onAddFolder={() => openFolderDialog()}
+        onAddFolder={(parentId) => openFolderDialog(undefined, parentId ?? null)}
         onEditFolder={openFolderDialog}
-        onDeleteFolder={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
+        onDeleteFolder={requestFolderDelete}
         onRefresh={() => void refreshBookmarks()}
         refreshing={refreshing}
         mutationsDisabled={bootstrapping}
@@ -963,14 +1032,15 @@ export default function BookmarksPage() {
       />
 
       {mobileFoldersOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="북마크 메뉴" onKeyDown={(event) => event.key === "Escape" && setMobileFoldersOpen(false)}>
           <button
             type="button"
             aria-label="폴더 메뉴 닫기"
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileFoldersOpen(false)}
           />
-          <FolderSidebar
+          <ConsoleSidebar
+            id="mobile-console-sidebar"
             folders={orderedFolders}
             bookmarks={bookmarks}
             favoriteOnly={favoriteOnly}
@@ -978,9 +1048,9 @@ export default function BookmarksPage() {
             draggingFolderId={draggingFolderId}
             dragOverFolderId={dragOverFolderId}
             onSelectFolder={selectFolder}
-            onAddFolder={() => openFolderDialog()}
+            onAddFolder={(parentId) => openFolderDialog(undefined, parentId ?? null)}
             onEditFolder={openFolderDialog}
-            onDeleteFolder={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
+            onDeleteFolder={requestFolderDelete}
             onRefresh={() => void refreshBookmarks()}
             refreshing={refreshing}
             mutationsDisabled={bootstrapping}
@@ -1001,7 +1071,7 @@ export default function BookmarksPage() {
           className="shrink-0 border-b border-[var(--border-subtle)] bg-white px-3 py-2 lg:hidden"
         >
           <div className="flex min-w-0 items-center gap-2">
-            <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)}>
+            <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)} aria-expanded={mobileFoldersOpen} aria-controls="mobile-console-sidebar">
               <Menu className="h-5 w-5" />
               <span className="sr-only">폴더 메뉴 열기</span>
             </Button>
@@ -1116,7 +1186,7 @@ export default function BookmarksPage() {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
+        <main id="bookmark-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
           <div className="mx-auto w-full max-w-[1480px] space-y-4 p-[clamp(0.75rem,2vw,2rem)]">
             {mutationError ? (
               <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">
@@ -1417,6 +1487,21 @@ export default function BookmarksPage() {
             <Field label="이름">
               <Input value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="폴더 이름" />
             </Field>
+            <Field label="상위 폴더">
+              <Select value={folderDraft.parentId} onValueChange={(parentId) => setFolderDraft((draft) => ({ ...draft, parentId }))}>
+                <SelectTrigger aria-label="상위 폴더" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ROOT_FOLDER}>최상위 폴더</SelectItem>
+                  {parentFolderOptions.map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
             <Field label="색상">
               <div className="flex flex-wrap gap-2">
                 {FOLDER_COLORS.map((color) => (
@@ -1481,7 +1566,7 @@ export default function BookmarksPage() {
               ? "이 북마크를 삭제합니다."
               : deleteTarget.type === "section"
                 ? "이 섹션을 삭제합니다. 북마크는 삭제하지 않고 섹션 없음으로 이동합니다."
-              : "이 폴더를 삭제하고, 안의 북마크는 다른 폴더로 이동합니다."}
+              : "이 폴더를 삭제하고, 안의 북마크는 다른 폴더로 안전하게 이동합니다. 하위 폴더가 있으면 먼저 이동해야 합니다."}
           </p>
           {deleting ? (
             <div className="mt-4">
@@ -1546,151 +1631,6 @@ function BookmarksLoading() {
         </main>
       </section>
     </div>
-  );
-}
-
-function FolderSidebar({
-  folders,
-  bookmarks,
-  favoriteOnly,
-  selectedFolderId,
-  draggingFolderId,
-  dragOverFolderId,
-  onSelectFolder,
-  onAddFolder,
-  onEditFolder,
-  onDeleteFolder,
-  onRefresh,
-  refreshing,
-  mutationsDisabled,
-  onDragFolder,
-  onDragOverFolder,
-  onDropFolder,
-  className
-}: {
-  folders: Folder[];
-  bookmarks: BookmarkItem[];
-  favoriteOnly: boolean;
-  selectedFolderId: string;
-  draggingFolderId: string | null;
-  dragOverFolderId: string | null;
-  onSelectFolder: (id: string) => void;
-  onAddFolder: () => void;
-  onEditFolder: (folder: Folder) => void;
-  onDeleteFolder: (folder: Folder) => void;
-  onRefresh: () => void;
-  refreshing: boolean;
-  mutationsDisabled: boolean;
-  onDragFolder: (folderId: string | null) => void;
-  onDragOverFolder: (folderId: string | null) => void;
-  onDropFolder: (folderId: string) => void;
-  className?: string;
-}) {
-  const visibleBookmarkCount = countBookmarks(bookmarks, { favoriteOnly });
-
-  return (
-    <aside className={cn("w-[280px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F8FAFC]", className)}>
-      <div className={cn("flex shrink-0 flex-col justify-center border-b border-[var(--border-subtle)] px-4 py-3", BOOKMARK_APP_HEADER_CLASS)}>
-        <div className="flex items-center gap-2">
-          <Link
-            href={"/" as Route}
-            aria-label={`${BRAND.appName} 홈으로 이동`}
-            className="min-w-0 flex-1 truncate rounded text-xl font-bold tracking-tight text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
-          >
-            {BRAND.appName}
-          </Link>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-white text-[var(--text-muted)] transition hover:text-[var(--color-brand)] disabled:opacity-50"
-            aria-label="북마크 새로고침"
-            title="북마크 새로고침"
-          >
-            <RefreshCcw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-          </button>
-        </div>
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          <Bookmark className="h-3.5 w-3.5 shrink-0 text-[var(--color-brand)]" />
-          <span className="font-bold text-[var(--text-heading)]">폴더</span>
-          <span className="text-[var(--text-muted)]">
-            {visibleBookmarkCount.toLocaleString()}개 {favoriteOnly ? "즐겨찾기" : "북마크"}
-          </span>
-        </div>
-      </div>
-
-      <nav className="min-h-0 flex-1 overflow-y-auto p-3" aria-label="북마크 폴더">
-        <div className="space-y-1">
-          {folders.map((folder) => {
-            const active = folder.id === selectedFolderId;
-            const count = countBookmarks(bookmarks, { folderId: folder.id, favoriteOnly });
-            return (
-              <div
-                key={folder.id}
-                draggable={!mutationsDisabled}
-                onDragStart={() => onDragFolder(folder.id)}
-                onDragEnd={() => onDragFolder(null)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  onDragOverFolder(folder.id);
-                }}
-                onDrop={() => onDropFolder(folder.id)}
-                className={cn(
-                  "group relative flex items-center rounded transition",
-                  draggingFolderId === folder.id && "opacity-60",
-                  dragOverFolderId === folder.id && "bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25"
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelectFolder(folder.id)}
-                  className={cn(
-                    "flex min-h-10 flex-1 items-center gap-2.5 rounded border border-transparent px-3 py-2 pr-20 text-sm font-bold transition",
-                    active
-                      ? "border-l-2 border-l-[var(--color-brand)] border-y-[var(--border-subtle)] border-r-[var(--border-subtle)] bg-white text-[var(--text-heading)]"
-                      : "text-[#334155] hover:border-[var(--border-subtle)] hover:bg-white"
-                  )}
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: folderColor(folder.color) }} />
-                  <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
-                  <span className="text-xs tabular-nums text-[var(--text-muted)]">{count}</span>
-                </button>
-                <div className="absolute right-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                  <GripVertical className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
-                  <button
-                    disabled={mutationsDisabled}
-                    className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC]"
-                    onClick={() => onEditFolder(folder)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    <span className="sr-only">{folder.name} 편집</span>
-                  </button>
-                  <button
-                    disabled={mutationsDisabled}
-                    className="rounded p-1 text-destructive hover:bg-[#F8FAFC]"
-                    onClick={() => onDeleteFolder(folder)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span className="sr-only">{folder.name} 삭제</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </nav>
-
-      <div className="shrink-0 space-y-1.5 border-t border-[var(--border-subtle)] p-3">
-        <button
-          disabled={mutationsDisabled}
-          className="flex min-h-9 w-full items-center gap-2 rounded px-3 text-sm font-bold text-[#334155] hover:bg-white"
-          onClick={onAddFolder}
-        >
-          <FolderPlus className="h-4 w-4" />
-          새 폴더
-        </button>
-      </div>
-    </aside>
   );
 }
 

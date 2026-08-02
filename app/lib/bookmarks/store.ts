@@ -17,7 +17,7 @@ const BOOKMARK_FIELDS = new Set([
   "folderId",
   "sectionId"
 ]);
-const FOLDER_FIELDS = new Set(["name", "color"]);
+const FOLDER_FIELDS = new Set(["name", "color", "parentId"]);
 const SECTION_FIELDS = new Set(["name"]);
 
 export class StoreError extends Error {
@@ -167,9 +167,20 @@ function validateFolderCreate(value: unknown): FolderFormData {
   ) {
     invalid("Folder color must be a string or null.");
   }
+  if (
+    data.parentId !== undefined &&
+    data.parentId !== null &&
+    typeof data.parentId !== "string"
+  ) {
+    invalid("Folder parentId must be a string or null.");
+  }
   return {
     name: nonEmptyString(data.name, "Folder name"),
-    color: data.color as string | null | undefined
+    color: data.color as string | null | undefined,
+    parentId:
+      data.parentId === undefined || data.parentId === null
+        ? data.parentId as null | undefined
+        : nonEmptyString(data.parentId, "Folder parentId")
   };
 }
 
@@ -186,6 +197,15 @@ function validateFolderPatch(value: unknown): Partial<FolderFormData> {
       invalid("Folder color must be a string or null.");
     }
     result.color = data.color as string | null;
+  }
+  if (Object.hasOwn(data, "parentId")) {
+    if (data.parentId !== null && typeof data.parentId !== "string") {
+      invalid("Folder parentId must be a string or null.");
+    }
+    result.parentId =
+      data.parentId === null
+        ? null
+        : nonEmptyString(data.parentId, "Folder parentId");
   }
   return result;
 }
@@ -319,7 +339,7 @@ async function graphqlRequest<T>(
 const BOOKMARK_SELECTION = `
   id title url description isFavorite folderId sectionId position
 `;
-const FOLDER_SELECTION = `id name color position`;
+const FOLDER_SELECTION = `id name color parentId position`;
 const SECTION_SELECTION = `id name folderId position`;
 
 export const bookmarkStore = {
@@ -399,12 +419,15 @@ export const bookmarkStore = {
     return data.updateFolder;
   },
 
-  async deleteFolder(id: string) {
+  async deleteFolder(id: string, destinationFolderId?: string) {
+    const destination = destinationFolderId === undefined
+      ? null
+      : nonEmptyString(destinationFolderId, "Destination folder id");
     await graphqlRequest<{ deleteFolder: boolean }>(
-      `mutation DeleteFolder($id: ID!) {
-        deleteFolder(id: $id)
+      `mutation DeleteFolder($id: ID!, $destinationFolderId: ID) {
+        deleteFolder(id: $id, destinationFolderId: $destinationFolderId)
       }`,
-      { id }
+      { id, destinationFolderId: destination }
     );
   },
 

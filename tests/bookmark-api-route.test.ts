@@ -161,4 +161,63 @@ describe("bookmark API write boundary", () => {
       JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables
     ).toEqual({ id: "section-1", input: { name: "수정된 섹션" } });
   });
+
+  it("forwards folder parentId and destination_folder_id to GraphQL", async () => {
+    vi.stubEnv(
+      "BOOKMARK_GRAPHQL_URL",
+      "https://graphql.example.com/api/graphql"
+    );
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              updateFolder: {
+                id: "child-folder",
+                name: "하위 폴더",
+                color: "#4f46e5",
+                parentId: "root-folder",
+                position: 0
+              }
+            }
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { deleteFolder: true } }), {
+          status: 200
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { DELETE, PATCH } = await import("@/app/api/[resource]/[[...path]]/route");
+
+    const patchResponse = await PATCH(
+      request("/api/folders/child-folder", "PATCH", {
+        name: "하위 폴더",
+        parentId: "root-folder"
+      }),
+      context("folders", ["child-folder"])
+    );
+    const deleteResponse = await DELETE(
+      new NextRequest(
+        "http://localhost/api/folders/child-folder?destination_folder_id=fallback-folder",
+        { method: "DELETE" }
+      ),
+      context("folders", ["child-folder"])
+    );
+
+    expect(patchResponse.status).toBe(200);
+    expect(deleteResponse.status).toBe(204);
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables).toEqual({
+      id: "child-folder",
+      input: { name: "하위 폴더", parentId: "root-folder" }
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).variables).toEqual({
+      id: "child-folder",
+      destinationFolderId: "fallback-folder"
+    });
+  });
 });

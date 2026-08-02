@@ -194,6 +194,44 @@ describe("bookmarkStore GraphQL transport", () => {
     expect(body.variables.input.url).toBe("https://example.com/");
   });
 
+  it("forwards folder parentId and deletion destination through GraphQL", async () => {
+    configureGraphql();
+    const folder = {
+      id: "child-folder",
+      name: "하위 폴더",
+      color: "#4f46e5",
+      parentId: "root-folder",
+      position: 0
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(graphqlResponse({ createFolder: folder }))
+      .mockResolvedValueOnce(graphqlResponse({ deleteFolder: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(
+      bookmarkStore.createFolder({
+        name: " 하위 폴더 ",
+        color: "#4f46e5",
+        parentId: " root-folder "
+      })
+    ).resolves.toEqual(folder);
+    await bookmarkStore.deleteFolder("child-folder", "fallback-folder");
+
+    const createBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(createBody.query).toContain("parentId");
+    expect(createBody.variables).toEqual({
+      input: { name: "하위 폴더", color: "#4f46e5", parentId: "root-folder" }
+    });
+    const deleteBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(deleteBody.query).toContain("destinationFolderId");
+    expect(deleteBody.variables).toEqual({
+      id: "child-folder",
+      destinationFolderId: "fallback-folder"
+    });
+  });
+
   it("maps GraphQL errors to the existing store error contract", async () => {
     configureGraphql();
     vi.stubGlobal(
