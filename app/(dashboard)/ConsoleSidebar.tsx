@@ -6,15 +6,12 @@ import {
   Bookmark,
   ChevronDown,
   ChevronRight,
-  Database,
   Folder as FolderIcon,
   FolderOpen,
   FolderPlus,
   GripVertical,
-  LayoutDashboard,
   Pencil,
   RefreshCcw,
-  Settings,
   Trash2
 } from "lucide-react";
 import { countBookmarks } from "@/app/lib/bookmarks/counts";
@@ -22,8 +19,6 @@ import { buildFolderTree, folderParentId, type FolderTreeNode } from "@/app/lib/
 import { BRAND } from "@/app/lib/config/brand";
 import type { BookmarkItem, Folder } from "@/app/lib/bookmarks/types";
 import { cn } from "@/lib/utils";
-
-type SidebarSection = "overview" | "data" | "management";
 
 export type ConsoleSidebarProps = {
   folders: Folder[];
@@ -66,16 +61,7 @@ export function ConsoleSidebar({
   className,
   id
 }: ConsoleSidebarProps) {
-  const [openSections, setOpenSections] = useState<Record<SidebarSection, boolean>>({
-    overview: false,
-    data: true,
-    management: false
-  });
   const visibleBookmarkCount = countBookmarks(bookmarks, { favoriteOnly });
-
-  function toggleSection(section: SidebarSection) {
-    setOpenSections((current) => ({ ...current, [section]: !current[section] }));
-  }
 
   return (
     <aside
@@ -109,124 +95,43 @@ export function ConsoleSidebar({
         <span className="mt-1 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">BOOKMARK CONSOLE</span>
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="콘솔 탐색">
-        <SidebarSection
-          label="현황"
-          icon={LayoutDashboard}
-          expanded={openSections.overview}
-          onToggle={() => toggleSection("overview")}
-        >
-          <a
-            href="#bookmark-content"
-            className="ml-7 flex min-h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-[var(--text-secondary)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
-          >
-            <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-            대시보드
-          </a>
-        </SidebarSection>
-
-        <SidebarSection
-          label="데이터"
-          icon={Database}
-          expanded={openSections.data}
-          onToggle={() => toggleSection("data")}
-        >
-          <div className="ml-3 border-l border-[#E5E7EB] pl-2">
-            <div className="flex min-h-9 items-center gap-2 px-2 text-sm font-bold text-[var(--text-heading)]">
-              <Bookmark className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate">북마크</span>
-              <span className="text-xs font-medium tabular-nums text-[var(--text-muted)]">
-                {visibleBookmarkCount.toLocaleString()}
-              </span>
-            </div>
-            <nav aria-label="북마크 폴더">
-              <FolderTree
-                folders={folders}
-                bookmarks={bookmarks}
-                favoriteOnly={favoriteOnly}
-                selectedFolderId={selectedFolderId}
-                draggingFolderId={draggingFolderId}
-                dragOverFolderId={dragOverFolderId}
-                mutationsDisabled={mutationsDisabled}
-                onSelectFolder={onSelectFolder}
-                onAddFolder={onAddFolder}
-                onEditFolder={onEditFolder}
-                onDeleteFolder={onDeleteFolder}
-                onDragFolder={onDragFolder}
-                onDragOverFolder={onDragOverFolder}
-                onDropFolder={onDropFolder}
-              />
-            </nav>
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="북마크 폴더">
+        <div className="ml-3 border-l border-[#E5E7EB] pl-2">
+          <div className="flex min-h-9 items-center gap-2 px-2 text-sm font-bold text-[var(--text-heading)]">
+            <Bookmark className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">북마크</span>
+            <span className="text-xs font-medium tabular-nums text-[var(--text-muted)]">
+              {visibleBookmarkCount.toLocaleString()}
+            </span>
           </div>
-        </SidebarSection>
-
-        <SidebarSection
-          label="관리"
-          icon={Settings}
-          expanded={openSections.management}
-          onToggle={() => toggleSection("management")}
-        >
-          <span
-            className="ml-7 flex min-h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-[var(--text-muted)]"
-            aria-disabled="true"
-            title="API 설정 화면은 준비 중입니다."
-          >
-            <Settings className="h-4 w-4" aria-hidden="true" />
-            API 설정
-          </span>
-        </SidebarSection>
-      </nav>
-
-      <div className="shrink-0 border-t border-[var(--border-subtle)] p-3">
+          <FolderTree
+            folders={folders}
+            bookmarks={bookmarks}
+            favoriteOnly={favoriteOnly}
+            selectedFolderId={selectedFolderId}
+            draggingFolderId={draggingFolderId}
+            dragOverFolderId={dragOverFolderId}
+            mutationsDisabled={mutationsDisabled}
+            onSelectFolder={onSelectFolder}
+            onAddFolder={onAddFolder}
+            onEditFolder={onEditFolder}
+            onDeleteFolder={onDeleteFolder}
+            onDragFolder={onDragFolder}
+            onDragOverFolder={onDragOverFolder}
+            onDropFolder={onDropFolder}
+          />
+        </div>
         <button
           type="button"
           disabled={mutationsDisabled}
-          className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-3 mr-3 mt-2 flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
           onClick={() => onAddFolder(null)}
         >
           <FolderPlus className="h-4 w-4" aria-hidden="true" />
           새 폴더
         </button>
-      </div>
+      </nav>
     </aside>
-  );
-}
-
-function SidebarSection({
-  label,
-  icon: Icon,
-  expanded,
-  onToggle,
-  children
-}: {
-  label: string;
-  icon: typeof LayoutDashboard;
-  expanded: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  const contentId = useId();
-
-  return (
-    <section className="mb-1">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={contentId}
-        onClick={onToggle}
-        className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-extrabold text-[var(--text-heading)] transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
-      >
-        <Icon className="h-[18px] w-[18px] shrink-0 text-[var(--text-secondary)]" aria-hidden="true" />
-        <span className="min-w-0 flex-1">{label}</span>
-        <ChevronDown
-          className={cn("h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform", !expanded && "-rotate-90")}
-          aria-hidden="true"
-        />
-      </button>
-      <div id={contentId} hidden={!expanded} className="pb-1">
-        {children}
-      </div>
-    </section>
   );
 }
 
