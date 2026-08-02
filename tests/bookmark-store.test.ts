@@ -142,6 +142,22 @@ describe("bookmarkStore GraphQL transport", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("uses a legacy BOOKMARK_API_URL base as the GraphQL endpoint", async () => {
+    vi.stubEnv("BOOKMARK_GRAPHQL_URL", "");
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com/");
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) => graphqlResponse({ folders: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.listFolders()).resolves.toEqual([]);
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.example.com/graphql");
+  });
+
   it("rejects a malformed bookmark before making a request", async () => {
     configureGraphql();
     const fetchMock = vi.fn();

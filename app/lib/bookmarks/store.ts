@@ -244,7 +244,8 @@ function validatePositionUpdates(value: unknown): PositionUpdate[] {
 }
 
 function getGraphqlConfig() {
-  const rawUrl = process.env.BOOKMARK_GRAPHQL_URL?.trim();
+  const rawGraphqlUrl = process.env.BOOKMARK_GRAPHQL_URL?.trim();
+  const rawUrl = rawGraphqlUrl || process.env.BOOKMARK_API_URL?.trim();
   const apiKey = process.env.BOOKMARK_API_KEY?.trim();
   if (!rawUrl || !apiKey) {
     throw new StoreError(
@@ -262,6 +263,11 @@ function getGraphqlConfig() {
       url.password
     ) {
       throw new Error();
+    }
+    if (!rawGraphqlUrl) {
+      url.pathname = "/graphql";
+      url.search = "";
+      url.hash = "";
     }
     return { url: url.toString(), apiKey };
   } catch {
