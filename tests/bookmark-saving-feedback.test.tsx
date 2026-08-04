@@ -66,6 +66,30 @@ describe("bookmark database saving feedback", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uses the fixed four-column grid without a list view selector", async () => {
+    stubBookmarkCache([
+      {
+        id: "bookmark-grid",
+        title: "격자 북마크",
+        url: "https://grid.example.com",
+        description: null,
+        isFavorite: false,
+        folderId: "work",
+        sectionId: null,
+        position: 0
+      }
+    ]);
+    stubRemote(async () => new Response(null, { status: 204 }));
+    render(<BookmarksPage />);
+
+    const card = await screen.findByRole("link", { name: /격자 북마크/ });
+    expect(screen.queryByRole("button", { name: "리스트" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "그리드" })).not.toBeInTheDocument();
+    expect(card.parentElement).toHaveClass("lg:grid-cols-2", "xl:grid-cols-4");
+    expect(card).toHaveAttribute("draggable", "true");
+    expect(screen.getByTitle("드래그해서 위치 변경")).toBeInTheDocument();
+  });
+
   it("portals the modal overlay to the viewport layer", async () => {
     stubBookmarkCache();
     render(<BookmarksPage />);

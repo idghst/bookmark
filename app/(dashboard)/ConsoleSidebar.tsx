@@ -67,7 +67,7 @@ export function ConsoleSidebar({
     <aside
       id={id}
       className={cn(
-        "flex w-[18rem] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F7F8FB] text-[var(--text-primary)]",
+        "flex w-[20rem] max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F7F8FB] text-[var(--text-primary)] xl:w-[22rem]",
         className
       )}
       aria-label="북마크 콘솔 사이드바"

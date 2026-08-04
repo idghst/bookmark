@@ -4,10 +4,8 @@ import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ExternalLink,
-  Grid2X2,
   Globe,
   GripVertical,
-  List,
   LoaderCircle,
   Menu,
   MoreHorizontal,
@@ -61,8 +59,6 @@ type DeleteTarget =
   | { type: "bookmark"; id: string }
   | { type: "section"; id: string }
   | { type: "folder"; id: string };
-
-type ViewMode = "list" | "grid";
 
 type BookmarkCache = {
   version: 2;
@@ -297,7 +293,6 @@ export default function BookmarksPage() {
   const [selectedFolderId, setSelectedFolderId] = useState("");
   const [query, setQuery] = useState("");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
   const [draggingBookmarkId, setDraggingBookmarkId] = useState<string | null>(null);
@@ -1146,28 +1141,6 @@ export default function BookmarksPage() {
             ) : null}
           </label>
           <div className="flex shrink-0 items-center gap-2">
-            <div className="rounded-lg border border-[var(--border-subtle)] bg-[#F8FAFC] p-0.5" aria-label="보기 방식">
-              <Button
-                variant={viewMode === "list" ? "default" : "ghost"}
-                size="icon"
-                data-template-action-ignore
-                onClick={() => setViewMode("list")}
-                className={BOOKMARK_TOUCH_TARGET_CLASS}
-              >
-                <List className="h-4 w-4" />
-                <span className="sr-only">리스트</span>
-              </Button>
-              <Button
-                variant={viewMode === "grid" ? "default" : "ghost"}
-                size="icon"
-                data-template-action-ignore
-                onClick={() => setViewMode("grid")}
-                className={BOOKMARK_TOUCH_TARGET_CLASS}
-              >
-                <Grid2X2 className="h-4 w-4" />
-                <span className="sr-only">그리드</span>
-              </Button>
-            </div>
             <Button
               variant={favoriteOnly ? "default" : "outline"}
               size="sm"
@@ -1282,14 +1255,13 @@ export default function BookmarksPage() {
                       </>
                     ) : null}
                   </div>
-                  <div className={cn("grid grid-cols-1", viewMode === "list" ? "gap-3" : "gap-3 lg:grid-cols-2 2xl:grid-cols-3")}>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4" aria-label={`${group.label} 북마크, 드래그해서 위치 변경`}>
                     {group.items.map((bookmark) => (
                       <BookmarkCard
                         key={bookmark.id}
                         bookmark={bookmark}
                         folder={selectedFolder}
                         section={sections.find((section) => section.id === bookmark.sectionId) ?? null}
-                        viewMode={viewMode}
                         dragging={draggingBookmarkId === bookmark.id}
                         dragOver={dragOverBookmarkId === bookmark.id}
                         mutationsDisabled={bootstrapping}
@@ -1592,7 +1564,7 @@ export default function BookmarksPage() {
 function BookmarksLoading() {
   return (
     <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white">
-      <aside className="hidden w-[280px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F8FAFC] lg:flex">
+      <aside className="hidden w-[20rem] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F8FAFC] xl:w-[22rem] lg:flex">
         <div className={cn("flex shrink-0 flex-col justify-center border-b border-[var(--border-subtle)] px-4 py-3", BOOKMARK_APP_HEADER_CLASS)}>
           <div className="h-5 w-24 rounded bg-slate-200" />
           <div className="mt-2 h-4 w-32 rounded bg-slate-100" />
@@ -1638,7 +1610,6 @@ function BookmarkCard({
   bookmark,
   folder,
   section,
-  viewMode,
   dragging,
   dragOver,
   mutationsDisabled,
@@ -1653,7 +1624,6 @@ function BookmarkCard({
   bookmark: BookmarkItem;
   folder: Folder | null;
   section: Section | null;
-  viewMode: ViewMode;
   dragging: boolean;
   dragOver: boolean;
   mutationsDisabled: boolean;
@@ -1671,9 +1641,8 @@ function BookmarkCard({
   return (
     <Card
       className={cn(
-        "group relative rounded-lg border border-[var(--border-subtle)] bg-white py-3 shadow-none transition",
-        viewMode === "list" ? "min-h-[96px]" : "min-h-[120px]",
-        dragging ? "opacity-60" : "cursor-pointer hover:border-[var(--color-brand)] hover:bg-white",
+        "group relative min-h-[120px] rounded-lg border border-[var(--border-subtle)] bg-white py-3 shadow-none transition",
+        dragging ? "cursor-grabbing opacity-60" : "cursor-grab hover:border-[var(--color-brand)] hover:bg-white",
         dragOver && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25"
       )}
       draggable={!mutationsDisabled}
@@ -1709,16 +1678,21 @@ function BookmarkCard({
               <span aria-hidden="true">{bookmarkHost(bookmark.url)}</span>
             </p>
           </div>
-          <div className="-mr-1 -mt-1 hidden items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 lg:flex [@media(hover:none)]:opacity-100" onClick={(event) => event.stopPropagation()}>
-            <GripVertical className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-            <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onEdit(bookmark)}>
-              <Pencil className="h-4 w-4" />
-              <span className="sr-only">{bookmark.title} 편집</span>
-            </Button>
-            <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onDelete(bookmark)}>
-              <Trash2 className="h-4 w-4 text-destructive" />
-              <span className="sr-only">{bookmark.title} 삭제</span>
-            </Button>
+          <div className="-mr-1 -mt-1 hidden items-center gap-1 lg:flex" onClick={(event) => event.stopPropagation()}>
+            <span className="flex h-6 w-5 cursor-grab items-center justify-center text-[var(--text-muted)]/70 active:cursor-grabbing" title="드래그해서 위치 변경">
+              <GripVertical className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">{bookmark.title} 위치 변경</span>
+            </span>
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onEdit(bookmark)}>
+                <Pencil className="h-4 w-4" />
+                <span className="sr-only">{bookmark.title} 편집</span>
+              </Button>
+              <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onDelete(bookmark)}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+                <span className="sr-only">{bookmark.title} 삭제</span>
+              </Button>
+            </div>
           </div>
           <details
             className="relative -mr-2 -mt-2 shrink-0 lg:hidden"
