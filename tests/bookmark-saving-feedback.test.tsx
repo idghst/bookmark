@@ -90,6 +90,26 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByTitle("드래그해서 위치 변경")).toBeInTheDocument();
   });
 
+  it("groups sidebar folder actions in an ellipsis menu", async () => {
+    stubBookmarkCache();
+    stubRemote(async () => new Response(null, { status: 204 }));
+    render(<BookmarksPage />);
+
+    const folderNavigation = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const menuTrigger = within(folderNavigation).getByLabelText("작업 메뉴");
+    await waitFor(() => expect(menuTrigger).toBeEnabled());
+    fireEvent.keyDown(menuTrigger, { key: "Enter" });
+
+    const menu = screen.getByRole("menu", { name: "작업 메뉴" });
+    expect(within(menu).getByRole("menuitem", { name: "하위 폴더 추가" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "편집" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "삭제" })).toBeInTheDocument();
+    expect(within(folderNavigation).queryByRole("button", { name: "작업 하위 폴더 추가" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "하위 폴더 추가" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("새 폴더");
+  });
+
   it("expands a selected parent folder and shows bookmarks in its descendant folders", async () => {
     const folders: Folder[] = [
       { id: "work", name: "상위", color: "#4f46e5", parentId: null, position: 0 },
@@ -308,8 +328,7 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByRole("button", { name: "Example 삭제" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "기본 섹션 삭제" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "기본 섹션 순서 변경" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "작업 편집" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "작업 삭제" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "작업 메뉴" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "새 폴더" })).toBeDisabled();
     screen.getAllByRole("button", { name: "북마크 추가" }).forEach((button) => {
       expect(button).toBeDisabled();

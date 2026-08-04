@@ -9,11 +9,12 @@ import {
   Folder as FolderIcon,
   FolderOpen,
   FolderPlus,
-  GripVertical,
+  MoreHorizontal,
   Pencil,
   RefreshCcw,
   Trash2
 } from "lucide-react";
+import { DropdownMenu } from "radix-ui";
 import { countBookmarks } from "@/app/lib/bookmarks/counts";
 import { buildFolderTree, folderParentId, type FolderTreeNode } from "@/app/lib/bookmarks/folder-tree";
 import { BRAND } from "@/app/lib/config/brand";
@@ -379,36 +380,13 @@ function FolderTreeRow({
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           <span className="shrink-0 text-xs font-medium tabular-nums text-[var(--text-muted)]">{count}</span>
         </button>
-        <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:none)]:opacity-100">
-          <GripVertical className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
-          <button
-            type="button"
-            disabled={mutationsDisabled}
-            className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => onAddFolder(folder.id)}
-          >
-            <FolderPlus className="h-3.5 w-3.5" />
-            <span className="sr-only">{folder.name} 하위 폴더 추가</span>
-          </button>
-          <button
-            type="button"
-            disabled={mutationsDisabled}
-            className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => onEditFolder(folder)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            <span className="sr-only">{folder.name} 편집</span>
-          </button>
-          <button
-            type="button"
-            disabled={mutationsDisabled}
-            className="flex h-7 w-7 items-center justify-center rounded text-destructive hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => onDeleteFolder(folder)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span className="sr-only">{folder.name} 삭제</span>
-          </button>
-        </div>
+        <FolderActionsMenu
+          folder={folder}
+          mutationsDisabled={mutationsDisabled}
+          onAddFolder={onAddFolder}
+          onEditFolder={onEditFolder}
+          onDeleteFolder={onDeleteFolder}
+        />
       </div>
       {hasChildren && expanded ? (
         <ul id={`folder-children-${folder.id}`} role="group" className="space-y-0.5">
@@ -438,5 +416,66 @@ function FolderTreeRow({
         </ul>
       ) : null}
     </li>
+  );
+}
+
+function FolderActionsMenu({
+  folder,
+  mutationsDisabled,
+  onAddFolder,
+  onEditFolder,
+  onDeleteFolder
+}: {
+  folder: Folder;
+  mutationsDisabled: boolean;
+  onAddFolder: (parentId?: string | null) => void;
+  onEditFolder: (folder: Folder) => void;
+  onDeleteFolder: (folder: Folder) => void;
+}) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          disabled={mutationsDisabled}
+          aria-label={`${folder.name} 메뉴`}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--text-muted)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          aria-label={`${folder.name} 메뉴`}
+          side="bottom"
+          align="end"
+          sideOffset={6}
+          className="z-[80] min-w-40 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg outline-none"
+        >
+          <DropdownMenu.Item
+            onSelect={() => onAddFolder(folder.id)}
+            className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
+          >
+            <FolderPlus className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+            하위 폴더 추가
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => onEditFolder(folder)}
+            className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
+          >
+            <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+            편집
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
+          <DropdownMenu.Item
+            onSelect={() => onDeleteFolder(folder)}
+            className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-destructive outline-none hover:bg-red-50 focus:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            삭제
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
