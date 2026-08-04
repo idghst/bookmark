@@ -82,14 +82,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
         const section = body as Record<string, unknown>;
         if (
-          Object.keys(section).some((key) => !["folderId", "name"].includes(key)) ||
+          Object.keys(section).some((key) => !["folderId", "name", "color"].includes(key)) ||
           !Object.hasOwn(section, "folderId") ||
           !Object.hasOwn(section, "name")
         ) {
-          throw new StoreError("Section body requires only folderId and name.", 400);
+          throw new StoreError("Section body requires folderId and name, with an optional color.", 400);
         }
         return NextResponse.json(
-          await bookmarkStore.createSection(section.folderId, section.name),
+          await bookmarkStore.createSection(section.folderId, section.name, section.color),
           { status: 201 }
         );
       }

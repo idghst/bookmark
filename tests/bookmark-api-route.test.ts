@@ -127,7 +127,7 @@ describe("bookmark API write boundary", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("forwards section PATCH requests to GraphQL", async () => {
+  it("forwards section PATCH color requests to GraphQL", async () => {
     vi.stubEnv(
       "BOOKMARK_GRAPHQL_URL",
       "https://graphql.example.com/api/graphql"
@@ -140,6 +140,7 @@ describe("bookmark API write boundary", () => {
             updateSection: {
               id: "section-1",
               name: "수정된 섹션",
+              color: "#16a34a",
               folderId: "folder-1",
               position: 0
             }
@@ -152,14 +153,61 @@ describe("bookmark API write boundary", () => {
     const { PATCH } = await import("@/app/api/[resource]/[[...path]]/route");
 
     const response = await PATCH(
-      request("/api/sections/section-1", "PATCH", { name: "수정된 섹션" }),
+      request("/api/sections/section-1", "PATCH", { name: "수정된 섹션", color: "#16a34a" }),
       context("sections", ["section-1"])
     );
 
     expect(response.status).toBe(200);
     expect(
       JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables
-    ).toEqual({ id: "section-1", input: { name: "수정된 섹션" } });
+    ).toEqual({ id: "section-1", input: { name: "수정된 섹션", color: "#16a34a" } });
+  });
+
+  it("forwards a section color on creation", async () => {
+    vi.stubEnv(
+      "BOOKMARK_GRAPHQL_URL",
+      "https://graphql.example.com/api/graphql"
+    );
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { sections: [] } }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              createSection: {
+                id: "section-1",
+                name: "새 섹션",
+                color: "#db2777",
+                folderId: "folder-1",
+                position: 0
+              }
+            }
+          }),
+          { status: 200 }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("@/app/api/[resource]/[[...path]]/route");
+
+    const response = await POST(
+      request("/api/sections", "POST", {
+        folderId: "folder-1",
+        name: "새 섹션",
+        color: "#db2777"
+      }),
+      context("sections")
+    );
+
+    expect(response.status).toBe(201);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).variables
+    ).toEqual({
+      input: { folderId: "folder-1", name: "새 섹션", color: "#db2777" }
+    });
   });
 
   it("forwards folder parentId and destination_folder_id to GraphQL", async () => {

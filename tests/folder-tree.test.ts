@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFolderTree,
+  flattenFolderTree,
   flattenFolderResponse,
   folderDescendantIds
 } from "@/app/lib/bookmarks/folder-tree";
@@ -40,6 +41,12 @@ describe("folder tree helpers", () => {
     expect(tree.map((node) => node.folder.id)).toEqual(["other", "root"]);
     expect(tree[1].children[0].folder.id).toBe("child");
     expect(tree[1].children[0].children[0].depth).toBe(3);
+    expect(flattenFolderTree(folders).map((node) => node.folder.id)).toEqual([
+      "other",
+      "root",
+      "child",
+      "grandchild"
+    ]);
     expect(folderDescendantIds(folders, "root")).toEqual(new Set(["child", "grandchild"]));
   });
 });

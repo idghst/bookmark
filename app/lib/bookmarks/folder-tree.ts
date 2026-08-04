@@ -109,6 +109,19 @@ export function buildFolderTree(folders: Folder[]) {
   return roots;
 }
 
+/** 트리의 표시 순서를 유지한 flat 목록이다. 폴더 선택창 등 트리 순서가 필요한 UI에서 쓴다. */
+export function flattenFolderTree(folders: Folder[]) {
+  const nodes: FolderTreeNode[] = [];
+  const visit = (items: FolderTreeNode[]) => {
+    items.forEach((item) => {
+      nodes.push(item);
+      visit(item.children);
+    });
+  };
+  visit(buildFolderTree(folders));
+  return nodes;
+}
+
 export function folderDescendantIds(folders: Folder[], folderId: string) {
   const descendants = new Set<string>();
   const childrenByParent = new Map<string, string[]>();

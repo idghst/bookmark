@@ -18,7 +18,7 @@ const BOOKMARK_FIELDS = new Set([
   "sectionId"
 ]);
 const FOLDER_FIELDS = new Set(["name", "color", "parentId"]);
-const SECTION_FIELDS = new Set(["name"]);
+const SECTION_FIELDS = new Set(["name", "color"]);
 
 export class StoreError extends Error {
   constructor(message: string, public readonly status = 500) {
@@ -218,6 +218,12 @@ function validateSectionPatch(value: unknown): Partial<SectionFormData> {
   if (Object.hasOwn(data, "name")) {
     result.name = nonEmptyString(data.name, "Section name");
   }
+  if (Object.hasOwn(data, "color")) {
+    if (data.color !== null && typeof data.color !== "string") {
+      invalid("Section color must be a string or null.");
+    }
+    result.color = data.color as string | null;
+  }
   return result;
 }
 
@@ -346,7 +352,7 @@ const BOOKMARK_SELECTION = `
   id title url description isFavorite folderId sectionId position
 `;
 const FOLDER_SELECTION = `id name color parentId position`;
-const SECTION_SELECTION = `id name folderId position`;
+const SECTION_SELECTION = `id name color folderId position`;
 
 export const bookmarkStore = {
   async listBookmarks() {
@@ -455,9 +461,13 @@ export const bookmarkStore = {
     return data.sections;
   },
 
-  async createSection(folderIdValue: unknown, nameValue: unknown) {
+  async createSection(folderIdValue: unknown, nameValue: unknown, colorValue?: unknown) {
     const folderId = nonEmptyString(folderIdValue, "Section folderId");
     const name = nonEmptyString(nameValue, "Section name");
+    if (colorValue !== undefined && colorValue !== null && typeof colorValue !== "string") {
+      invalid("Section color must be a string or null.");
+    }
+    const color = colorValue as string | null | undefined;
     const existing = findSectionByName(
       await bookmarkStore.listSections(),
       folderId,
@@ -468,7 +478,7 @@ export const bookmarkStore = {
       `mutation CreateSection($input: SectionCreateInput!) {
         createSection(input: $input) { ${SECTION_SELECTION} }
       }`,
-      { input: { folderId, name } }
+      { input: { folderId, name, color } }
     );
     return data.createSection;
   },

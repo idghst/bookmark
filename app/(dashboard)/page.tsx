@@ -6,7 +6,6 @@ import { DropdownMenu } from "radix-ui";
 import {
   ExternalLink,
   Globe,
-  GripVertical,
   LoaderCircle,
   Menu,
   MoreHorizontal,
@@ -17,7 +16,6 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { countBookmarks, matchesBookmarkFilters } from "@/app/lib/bookmarks/counts";
 import { ConsoleSidebar } from "@/app/(dashboard)/ConsoleSidebar";
 import {
+  flattenFolderTree,
   flattenFolderResponse,
   folderDescendantIds,
   folderParentId,
@@ -82,8 +81,8 @@ type BookmarkCache = {
 const STORAGE_KEY = "bookmark-cache";
 const NO_SECTION = "__none__";
 const ROOT_FOLDER = "__root__";
-const FOLDER_COLORS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#797979"];
-const FOLDER_COLOR_FALLBACK = "#797979";
+const COLOR_OPTIONS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#797979"];
+const COLOR_FALLBACK = "#797979";
 const BOOKMARK_APP_HEADER_CLASS = "min-h-[var(--dashboard-header-height)] lg:h-[var(--dashboard-header-height)]";
 const BOOKMARK_TOUCH_TARGET_CLASS = "h-10 w-10";
 const BOOKMARK_SECTION_HEADER_CLASS =
@@ -317,10 +316,11 @@ export default function BookmarksPage() {
   const [sectionCreateMessage, setSectionCreateMessage] = useState("");
   const [creatingSection, setCreatingSection] = useState(false);
   const [folderDialog, setFolderDialog] = useState<FolderDialog | null>(null);
-  const [folderDraft, setFolderDraft] = useState({ name: "", color: FOLDER_COLORS[0], parentId: ROOT_FOLDER });
+  const [folderDraft, setFolderDraft] = useState({ name: "", color: COLOR_OPTIONS[0], parentId: ROOT_FOLDER });
   const [folderError, setFolderError] = useState("");
   const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null);
-  const [sectionDraft, setSectionDraft] = useState({ name: "" });
+  const [sectionDraft, setSectionDraft] = useState<{ name: string; color: string | null }>({ name: "", color: null });
+  const [sectionColorDraft, setSectionColorDraft] = useState<string | null>(null);
   const [sectionError, setSectionError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState("");
@@ -441,7 +441,8 @@ export default function BookmarksPage() {
     }
   }
 
-  const orderedFolders = useMemo(() => [...folders].sort((a, b) => a.position - b.position), [folders]);
+  const orderedFolderNodes = useMemo(() => flattenFolderTree(folders), [folders]);
+  const orderedFolders = useMemo(() => orderedFolderNodes.map((node) => node.folder), [orderedFolderNodes]);
   const selectedFolder = orderedFolders.find((folder) => folder.id === selectedFolderId) ?? orderedFolders[0] ?? null;
   const visibleFolderIds = useMemo(
     () => (selectedFolder ? new Set([selectedFolder.id, ...folderDescendantIds(folders, selectedFolder.id)]) : new Set<string>()),
@@ -545,11 +546,11 @@ export default function BookmarksPage() {
     .filter((section) => section.folderId === bookmarkDraft.folderId)
     .sort((a, b) => a.position - b.position);
   const parentFolderOptions = folderDialog?.mode === "edit"
-    ? orderedFolders.filter((folder) => {
+    ? orderedFolderNodes.filter(({ folder }) => {
         const blocked = folderDescendantIds(folders, folderDialog.folderId);
         return folder.id !== folderDialog.folderId && !blocked.has(folder.id);
       })
-    : orderedFolders;
+    : orderedFolderNodes;
 
   function selectFolder(folderId: string) {
     setSelectedFolderId(folderId);
@@ -571,6 +572,7 @@ export default function BookmarksPage() {
     setBookmarkError("");
     setSectionCreatorOpen(false);
     setSectionNameDraft("");
+    setSectionColorDraft(null);
     setSectionCreateMessage("");
     if (bookmark) {
       setBookmarkDialog({ mode: "edit", bookmarkId: bookmark.id });
@@ -600,7 +602,7 @@ export default function BookmarksPage() {
       setFolderDialog({ mode: "edit", folderId: folder.id });
       setFolderDraft({
         name: folder.name,
-        color: folder.color ?? FOLDER_COLOR_FALLBACK,
+        color: folder.color ?? COLOR_FALLBACK,
         parentId: folderParentId(folder) ?? ROOT_FOLDER
       });
       return;
@@ -608,7 +610,7 @@ export default function BookmarksPage() {
     setFolderDialog({ mode: "create" });
     setFolderDraft({
       name: "",
-      color: FOLDER_COLORS[folders.length % FOLDER_COLORS.length],
+      color: COLOR_OPTIONS[folders.length % COLOR_OPTIONS.length],
       parentId: parentId ?? ROOT_FOLDER
     });
   }
@@ -617,7 +619,7 @@ export default function BookmarksPage() {
     if (bootstrapping) return;
     setSectionError("");
     setSectionDialog({ sectionId: section.id });
-    setSectionDraft({ name: section.name });
+    setSectionDraft({ name: section.name, color: section.color ?? null });
   }
 
   async function createSectionFromBookmarkDialog() {
@@ -640,11 +642,12 @@ export default function BookmarksPage() {
       const section = apiBacked
         ? await apiRequest<Section>("/api/sections", {
             method: "POST",
-            body: JSON.stringify({ folderId: bookmarkDraft.folderId, name })
+            body: JSON.stringify({ folderId: bookmarkDraft.folderId, name, color: sectionColorDraft })
           })
         : {
             id: createId("section"),
             name,
+            color: sectionColorDraft,
             folderId: bookmarkDraft.folderId,
             position: sections.filter((item) => item.folderId === bookmarkDraft.folderId).length
           };
@@ -810,13 +813,13 @@ export default function BookmarksPage() {
       if (apiBacked) {
         const updated = await apiRequest<Section>(`/api/sections/${sectionDialog.sectionId}`, {
           method: "PATCH",
-          body: JSON.stringify({ name })
+          body: JSON.stringify({ name, color: sectionDraft.color })
         });
         setSections((current) => current.map((section) => (section.id === updated.id ? updated : section)));
       } else {
         setSections((current) =>
           current.map((section) =>
-            section.id === sectionDialog.sectionId ? { ...section, name } : section
+            section.id === sectionDialog.sectionId ? { ...section, name, color: sectionDraft.color } : section
           )
         );
       }
@@ -1161,10 +1164,10 @@ export default function BookmarksPage() {
             </Button>
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <span
-                data-folder-color={selectedFolder?.color ?? FOLDER_COLOR_FALLBACK}
+                data-folder-color={selectedFolder?.color ?? COLOR_FALLBACK}
                 aria-hidden="true"
                 className="h-5 w-1 shrink-0 rounded-full"
-                style={{ backgroundColor: selectedFolder?.color ?? FOLDER_COLOR_FALLBACK }}
+                style={{ backgroundColor: selectedFolder?.color ?? COLOR_FALLBACK }}
               />
               <h1 className="truncate text-lg font-bold text-[var(--text-heading)]">{selectedFolder?.name ?? "북마크"}</h1>
               <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 text-xs tabular-nums text-[var(--text-muted)]">
@@ -1212,10 +1215,10 @@ export default function BookmarksPage() {
         >
           <div className="flex min-w-0 max-w-[clamp(9rem,16vw,18rem)] items-center gap-2">
             <span
-              data-folder-color={selectedFolder?.color ?? FOLDER_COLOR_FALLBACK}
+              data-folder-color={selectedFolder?.color ?? COLOR_FALLBACK}
               aria-hidden="true"
               className="h-5 w-1 shrink-0 rounded-full"
-              style={{ backgroundColor: selectedFolder?.color ?? FOLDER_COLOR_FALLBACK }}
+              style={{ backgroundColor: selectedFolder?.color ?? COLOR_FALLBACK }}
             />
             <h1 className="truncate text-lg font-bold text-[var(--text-heading)]">{selectedFolder?.name ?? "북마크"}</h1>
             <span className="flex h-6 min-w-6 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 text-xs tabular-nums text-[var(--text-muted)]">
@@ -1263,7 +1266,7 @@ export default function BookmarksPage() {
         <main id="bookmark-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
           <div className="mx-auto w-full max-w-[1480px] space-y-4 p-[clamp(0.75rem,2vw,2rem)]">
             {mutationError ? (
-              <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">
+              <div role="alert" className="break-words rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">
                 {mutationError}
               </div>
             ) : null}
@@ -1305,75 +1308,28 @@ export default function BookmarksPage() {
                     )}
                   >
                     <span
-                      data-folder-color={group.folder.color ?? FOLDER_COLOR_FALLBACK}
+                      data-section-color={group.section?.color ?? group.folder.color ?? COLOR_FALLBACK}
                       aria-hidden="true"
                       className="h-6 w-1 shrink-0 rounded-full"
-                      style={{ backgroundColor: group.folder.color ?? FOLDER_COLOR_FALLBACK }}
+                      style={{ backgroundColor: group.section?.color ?? group.folder.color ?? COLOR_FALLBACK }}
                     />
                     <h2 className="min-w-0 flex-1 truncate text-lg font-bold leading-snug text-[var(--text-heading)]">{group.label}</h2>
                     <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">
                       {group.items.length}
                     </span>
                     {group.section ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={bootstrapping}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC] hover:text-[var(--color-brand)]"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openBookmarkDialog(undefined, {
-                              folderId: group.folder.id,
-                              sectionId: group.section!.id
-                            });
-                          }}
-                        >
-                          <Plus className="h-4 w-4" />
-                          <span className="sr-only">{group.label}에 북마크 추가</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={bootstrapping}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC]"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openSectionDialog(group.section!);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          <span className="sr-only">{group.label} 섹션 편집</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={bootstrapping}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-red-50 hover:text-destructive"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setDeleteTarget({ type: "section", id: group.section!.id });
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">{group.label} 섹션 삭제</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={bootstrapping}
-                          draggable={!bootstrapping}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC]"
-                          onDragStart={() => {
-                            if (!bootstrapping) setDraggingSectionId(group.section!.id);
-                          }}
-                          onDragEnd={() => {
-                            setDraggingSectionId(null);
-                            setDragOverSectionId(null);
-                          }}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={() => dropSection(group.section!.id)}
-                        >
-                          <GripVertical className="h-4 w-4" />
-                          <span className="sr-only">{group.label} 섹션 순서 변경</span>
-                        </button>
-                      </>
+                      <SectionActionsMenu
+                        section={group.section}
+                        folder={group.folder}
+                        label={group.label}
+                        mutationsDisabled={bootstrapping}
+                        onAddBookmark={(section, folder) => openBookmarkDialog(undefined, {
+                          folderId: folder.id,
+                          sectionId: section.id
+                        })}
+                        onEdit={openSectionDialog}
+                        onDelete={(section) => setDeleteTarget({ type: "section", id: section.id })}
+                      />
                     ) : null}
                   </div>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4" aria-label={`${group.label} 북마크, 드래그해서 위치 변경`}>
@@ -1381,8 +1337,6 @@ export default function BookmarksPage() {
                       <BookmarkCard
                         key={bookmark.id}
                         bookmark={bookmark}
-                        folder={group.folder}
-                        section={group.section}
                         dragging={draggingBookmarkId === bookmark.id}
                         dragOver={dragOverBookmarkId === bookmark.id}
                         mutationsDisabled={bootstrapping}
@@ -1447,6 +1401,7 @@ export default function BookmarksPage() {
                     setBookmarkDraft((draft) => ({ ...draft, folderId, sectionId: NO_SECTION }));
                     setSectionCreatorOpen(false);
                     setSectionNameDraft("");
+                    setSectionColorDraft(null);
                     setSectionCreateMessage("");
                   }}
                 >
@@ -1454,9 +1409,11 @@ export default function BookmarksPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {orderedFolders.map((folder) => (
+                    {orderedFolderNodes.map(({ folder, depth }) => (
                       <SelectItem key={folder.id} value={folder.id}>
-                        {folder.name}
+                        <span className="block min-w-0 truncate" style={{ paddingLeft: `${Math.max(depth - 1, 0) * 12}px` }}>
+                          {folder.name}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1526,6 +1483,34 @@ export default function BookmarksPage() {
                       placeholder="섹션 이름"
                     />
                   </Field>
+                  <Field label="색상">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        aria-label="폴더 색상 사용"
+                        onClick={() => setSectionColorDraft(null)}
+                        className={cn(
+                          "h-8 rounded border border-[var(--border-subtle)] px-2 text-xs font-medium text-[var(--text-secondary)]",
+                          sectionColorDraft === null && "ring-2 ring-[var(--color-brand)] ring-offset-2"
+                        )}
+                      >
+                        기본
+                      </button>
+                      {COLOR_OPTIONS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          aria-label={`색상 ${color}`}
+                          onClick={() => setSectionColorDraft(color)}
+                          className={cn(
+                            "h-8 w-8 rounded border border-[var(--border-subtle)]",
+                            sectionColorDraft === color && "ring-2 ring-[var(--color-brand)] ring-offset-2"
+                          )}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                  </Field>
                   <div className="flex justify-end gap-2">
                     <Button
                       type="button"
@@ -1536,6 +1521,7 @@ export default function BookmarksPage() {
                       onClick={() => {
                         setSectionCreatorOpen(false);
                         setSectionNameDraft("");
+                        setSectionColorDraft(null);
                         setSectionCreateMessage("");
                       }}
                     >
@@ -1548,7 +1534,7 @@ export default function BookmarksPage() {
                   </div>
                 </div>
               )}
-              {sectionCreateMessage ? <p role="status" className="text-xs font-medium text-[var(--text-muted)]">{sectionCreateMessage}</p> : null}
+              {sectionCreateMessage ? <p role="status" className="break-words text-xs font-medium text-[var(--text-muted)]">{sectionCreateMessage}</p> : null}
             </div>
             <label className="flex items-center gap-2 text-sm font-bold text-[var(--text-heading)]">
               <input
@@ -1560,7 +1546,7 @@ export default function BookmarksPage() {
               즐겨찾기
             </label>
             {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
-            {bookmarkError ? <p className="text-sm font-bold text-destructive">{bookmarkError}</p> : null}
+            {bookmarkError ? <p className="break-words text-sm font-bold text-destructive">{bookmarkError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" disabled={saving || creatingSection} onClick={() => setBookmarkDialog(null)}>
                 취소
@@ -1587,9 +1573,11 @@ export default function BookmarksPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ROOT_FOLDER}>최상위 폴더</SelectItem>
-                  {parentFolderOptions.map((folder) => (
+                  {parentFolderOptions.map(({ folder, depth }) => (
                     <SelectItem key={folder.id} value={folder.id}>
-                      {folder.name}
+                      <span className="block min-w-0 truncate" style={{ paddingLeft: `${Math.max(depth - 1, 0) * 12}px` }}>
+                        {folder.name}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1597,7 +1585,7 @@ export default function BookmarksPage() {
             </Field>
             <Field label="색상">
               <div className="flex flex-wrap gap-2">
-                {FOLDER_COLORS.map((color) => (
+                {COLOR_OPTIONS.map((color) => (
                   <button
                     key={color}
                     type="button"
@@ -1613,7 +1601,7 @@ export default function BookmarksPage() {
               </div>
             </Field>
             {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
-            {folderError ? <p className="text-sm font-bold text-destructive">{folderError}</p> : null}
+            {folderError ? <p className="break-words text-sm font-bold text-destructive">{folderError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" disabled={saving} onClick={() => setFolderDialog(null)}>
                 취소
@@ -1631,10 +1619,38 @@ export default function BookmarksPage() {
         <Modal title="섹션 편집" onClose={() => setSectionDialog(null)} closeDisabled={saving}>
           <form className="space-y-4" onSubmit={saveSection} aria-busy={saving}>
             <Field label="이름">
-              <Input value={sectionDraft.name} onChange={(event) => setSectionDraft({ name: event.target.value })} placeholder="섹션 이름" />
+              <Input value={sectionDraft.name} onChange={(event) => setSectionDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="섹션 이름" />
+            </Field>
+            <Field label="색상">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-label="폴더 색상 사용"
+                  onClick={() => setSectionDraft((draft) => ({ ...draft, color: null }))}
+                  className={cn(
+                    "h-8 rounded border border-[var(--border-subtle)] px-2 text-xs font-medium text-[var(--text-secondary)]",
+                    sectionDraft.color === null && "ring-2 ring-[var(--color-brand)] ring-offset-2"
+                  )}
+                >
+                  기본
+                </button>
+                {COLOR_OPTIONS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={`색상 ${color}`}
+                    onClick={() => setSectionDraft((draft) => ({ ...draft, color }))}
+                    className={cn(
+                      "h-8 w-8 rounded border border-[var(--border-subtle)]",
+                      sectionDraft.color === color && "ring-2 ring-[var(--color-brand)] ring-offset-2"
+                    )}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
             </Field>
             {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
-            {sectionError ? <p className="text-sm font-bold text-destructive">{sectionError}</p> : null}
+            {sectionError ? <p className="break-words text-sm font-bold text-destructive">{sectionError}</p> : null}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" disabled={saving} onClick={() => setSectionDialog(null)}>
                 취소
@@ -1653,6 +1669,7 @@ export default function BookmarksPage() {
           title={deleteTarget.type === "bookmark" ? "북마크 삭제" : deleteTarget.type === "section" ? "섹션 삭제" : "폴더 삭제"}
           onClose={() => setDeleteTarget(null)}
           closeDisabled={deleting}
+          onConfirm={() => void confirmDelete()}
         >
           <p className="text-sm text-[var(--text-secondary)]">
             {deleteTarget.type === "bookmark"
@@ -1666,7 +1683,7 @@ export default function BookmarksPage() {
               <DatabaseProgressStatus title="데이터베이스에서 삭제 중" />
             </div>
           ) : null}
-          {deleteError ? <p className="mt-4 text-sm font-bold text-destructive">{deleteError}</p> : null}
+          {deleteError ? <p className="mt-4 break-words text-sm font-bold text-destructive">{deleteError}</p> : null}
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>
               취소
@@ -1729,8 +1746,6 @@ function BookmarksLoading() {
 
 function BookmarkCard({
   bookmark,
-  folder,
-  section,
   dragging,
   dragOver,
   mutationsDisabled,
@@ -1743,8 +1758,6 @@ function BookmarkCard({
   onToggleFavorite
 }: {
   bookmark: BookmarkItem;
-  folder: Folder | null;
-  section: Section | null;
   dragging: boolean;
   dragOver: boolean;
   mutationsDisabled: boolean;
@@ -1788,7 +1801,7 @@ function BookmarkCard({
       }}
     >
       <CardHeader className="px-4 pb-0">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC]">
             <Favicon url={bookmark.url} />
           </div>
@@ -1808,22 +1821,7 @@ function BookmarkCard({
       </CardHeader>
       <CardContent className="flex flex-1 flex-col space-y-2 px-4 pt-1">
         {bookmark.description ? <p className="line-clamp-1 text-xs leading-5 text-[var(--text-muted)]">{bookmark.description}</p> : null}
-        <div className="mt-auto flex min-w-0 items-center gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-hidden">
-            {folder ? (
-              <Badge
-                variant="secondary"
-                data-folder-color={folder.color ?? FOLDER_COLOR_FALLBACK}
-                style={{
-                  borderColor: folder.color ?? FOLDER_COLOR_FALLBACK,
-                  color: folder.color ?? FOLDER_COLOR_FALLBACK
-                }}
-              >
-                {folder.name}
-              </Badge>
-            ) : null}
-            {section ? <Badge variant="outline">{section.name}</Badge> : null}
-          </div>
+        <div className="mt-auto flex justify-end">
           <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
             <Button
               variant="ghost"
@@ -1848,6 +1846,78 @@ function BookmarkCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function SectionActionsMenu({
+  section,
+  folder,
+  label,
+  mutationsDisabled,
+  onAddBookmark,
+  onEdit,
+  onDelete
+}: {
+  section: Section;
+  folder: Folder;
+  label: string;
+  mutationsDisabled: boolean;
+  onAddBookmark: (section: Section, folder: Folder) => void;
+  onEdit: (section: Section) => void;
+  onDelete: (section: Section) => void;
+}) {
+  return (
+    <div
+      className="-mr-1 shrink-0"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onDragStart={(event) => event.stopPropagation()}
+    >
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            disabled={mutationsDisabled}
+            aria-label={`${label} 섹션 메뉴`}
+            className="flex h-8 w-8 items-center justify-center rounded text-[var(--text-muted)] transition hover:bg-[#F8FAFC] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            aria-label={`${label} 섹션 메뉴`}
+            side="bottom"
+            align="end"
+            sideOffset={6}
+            className="z-[80] min-w-36 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg outline-none"
+          >
+            <DropdownMenu.Item
+              onSelect={() => onAddBookmark(section, folder)}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
+            >
+              <Plus className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+              북마크 추가
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => onEdit(section)}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
+            >
+              <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+              편집
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
+            <DropdownMenu.Item
+              onSelect={() => onDelete(section)}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-destructive outline-none hover:bg-red-50 focus:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              삭제
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
   );
 }
 
@@ -1939,23 +2009,56 @@ function Favicon({ url }: { url: string }) {
   );
 }
 
-function Modal({ title, children, onClose, closeDisabled = false }: { title: string; children: React.ReactNode; onClose: () => void; closeDisabled?: boolean }) {
+function Modal({
+  title,
+  children,
+  onClose,
+  onConfirm,
+  closeDisabled = false
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  onConfirm?: () => void;
+  closeDisabled?: boolean;
+}) {
   const titleId = useId();
+  const modalId = useId();
 
   useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !closeDisabled) onClose();
+    function handleShortcut(event: KeyboardEvent) {
+      const modals = document.querySelectorAll<HTMLElement>("[data-bookmark-modal]");
+      const topmostModal = modals.item(modals.length - 1);
+      if (event.defaultPrevented || topmostModal?.dataset.bookmarkModal !== modalId) return;
+
+      if (event.key === "Escape" && !closeDisabled) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onClose();
+        return;
+      }
+      if (event.key === "Enter" && onConfirm && !closeDisabled) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onConfirm();
+      }
     }
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [closeDisabled, onClose]);
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [closeDisabled, modalId, onClose, onConfirm]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <div
+      data-bookmark-modal={modalId}
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/35 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg sm:p-5">
         <div className="mb-4 flex items-center gap-3">
-          <h2 id={titleId} className="min-w-0 flex-1 text-lg font-bold text-[var(--text-heading)]">
+          <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--text-heading)]">
             {title}
           </h2>
           <button type="button" disabled={closeDisabled} className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-40" onClick={onClose}>
@@ -1974,8 +2077,8 @@ function DatabaseProgressStatus({ title }: { title: string }) {
   return (
     <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-[var(--color-brand)]/30 bg-indigo-50 px-4 py-3">
       <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-[var(--color-brand)]" />
-      <div>
-        <p className="text-sm font-bold text-[var(--text-heading)]">{title}</p>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold text-[var(--text-heading)]">{title}</p>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">완료될 때까지 잠시 기다려 주세요.</p>
       </div>
     </div>

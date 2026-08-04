@@ -3,7 +3,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Bookmark,
   ChevronDown,
   ChevronRight,
   Folder as FolderIcon,
@@ -62,8 +61,6 @@ export function ConsoleSidebar({
   className,
   id
 }: ConsoleSidebarProps) {
-  const visibleBookmarkCount = countBookmarks(bookmarks, { favoriteOnly });
-
   return (
     <aside
       id={id}
@@ -97,14 +94,7 @@ export function ConsoleSidebar({
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="북마크 폴더">
-        <div className="ml-3 border-l border-[#E5E7EB] pl-2">
-          <div className="flex min-h-9 items-center gap-2 px-2 text-sm font-bold text-[var(--text-heading)]">
-            <Bookmark className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">북마크</span>
-            <span className="text-xs font-medium tabular-nums text-[var(--text-muted)]">
-              {visibleBookmarkCount.toLocaleString()}
-            </span>
-          </div>
+        <div className="border-l border-[#E5E7EB] pl-0">
           <FolderTree
             folders={folders}
             bookmarks={bookmarks}
@@ -125,7 +115,7 @@ export function ConsoleSidebar({
         <button
           type="button"
           disabled={mutationsDisabled}
-          className="ml-3 mr-3 mt-2 flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mr-3 mt-2 flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
           onClick={() => onAddFolder(null)}
         >
           <FolderPlus className="h-4 w-4" aria-hidden="true" />
@@ -342,7 +332,7 @@ function FolderTreeRow({
         onDropFolder(folder.id);
       }}
     >
-      <div className="flex min-h-9 items-center gap-0.5" style={{ paddingLeft: `${Math.max(depth - 1, 0) * 14}px` }}>
+      <div className="flex min-h-9 items-center gap-0.5" style={{ paddingLeft: `${Math.max(depth - 1, 0) * 10}px` }}>
         {hasChildren ? (
           <button
             type="button"

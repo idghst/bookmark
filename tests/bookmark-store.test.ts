@@ -105,6 +105,7 @@ describe("bookmarkStore GraphQL transport", () => {
     const updated = {
       id: "section-basic",
       name: "수정된 기본",
+      color: "#16a34a",
       folderId: "folder-1",
       position: 0
     };
@@ -119,14 +120,44 @@ describe("bookmarkStore GraphQL transport", () => {
       bookmarkStore.updateSection("section-basic", " 수정된 기본 ")
     ).rejects.toMatchObject({ status: 400 });
     await expect(
-      bookmarkStore.updateSection("section-basic", { name: " 수정된 기본 " })
+      bookmarkStore.updateSection("section-basic", {
+        name: " 수정된 기본 ",
+        color: "#16a34a"
+      })
     ).resolves.toEqual(updated);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.query).toContain("updateSection");
     expect(body.variables).toEqual({
       id: "section-basic",
-      input: { name: "수정된 기본" }
+      input: { name: "수정된 기본", color: "#16a34a" }
+    });
+  });
+
+  it("creates a section with its color through GraphQL", async () => {
+    configureGraphql();
+    const created = {
+      id: "section-colored",
+      name: "색상 섹션",
+      color: "#db2777",
+      folderId: "folder-1",
+      position: 0
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(graphqlResponse({ sections: [] }))
+      .mockResolvedValueOnce(graphqlResponse({ createSection: created }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(
+      bookmarkStore.createSection("folder-1", " 색상 섹션 ", created.color)
+    ).resolves.toEqual(created);
+
+    const body = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(body.query).toContain("createSection");
+    expect(body.variables).toEqual({
+      input: { folderId: "folder-1", name: "색상 섹션", color: created.color }
     });
   });
 

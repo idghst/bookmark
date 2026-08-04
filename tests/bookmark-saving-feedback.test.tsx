@@ -61,6 +61,12 @@ function mutationCalls(fetchMock: ReturnType<typeof vi.fn>) {
   return fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET") !== "GET");
 }
 
+async function openSectionMenu(label: string) {
+  const trigger = await screen.findByRole("button", { name: `${label} 섹션 메뉴` });
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  return screen.findByRole("menu", { name: `${label} 섹션 메뉴` });
+}
+
 describe("bookmark database saving feedback", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -90,9 +96,15 @@ describe("bookmark database saving feedback", () => {
     expect(screen.queryByTitle("드래그해서 위치 변경")).not.toBeInTheDocument();
   });
 
-  it("reflects a folder color and creates a bookmark in the section that added it", async () => {
+  it("reflects a section color, hides card tags, and creates a bookmark from its menu", async () => {
     const folder = { id: "work", name: "작업", color: "#d97706", position: 0 } satisfies Folder;
-    const section = { id: "section-operations", name: "운영", folderId: folder.id, position: 0 } satisfies Section;
+    const section = {
+      id: "section-operations",
+      name: "운영",
+      color: "#db2777",
+      folderId: folder.id,
+      position: 0
+    } satisfies Section;
     const existing = {
       id: "bookmark-colored",
       title: "색상 북마크",
@@ -127,12 +139,15 @@ describe("bookmark database saving feedback", () => {
     const folderNavigation = await screen.findByRole("navigation", { name: "북마크 폴더" });
     const folderSelect = within(folderNavigation).getByText(folder.name).closest("button");
     expect(folderSelect?.querySelector("[data-folder-color]")).toHaveAttribute("data-folder-color", folder.color);
-    expect(screen.getByRole("heading", { name: section.name }).parentElement?.querySelector("[data-folder-color]")).toHaveAttribute("data-folder-color", folder.color);
+    const sectionMarker = screen.getByRole("heading", { name: section.name }).parentElement?.querySelector("[data-section-color]");
+    if (!sectionMarker) throw new Error("섹션 색상 표시를 찾을 수 없습니다.");
+    expect(sectionMarker).toHaveAttribute("data-section-color", section.color);
 
     const card = await screen.findByRole("link", { name: /색상 북마크/ });
-    expect(within(card).getByText(folder.name)).toHaveAttribute("data-folder-color", folder.color);
+    expect(within(card).queryByText(folder.name)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: `${section.name}에 북마크 추가` }));
+    const menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "북마크 추가" }));
     const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
     expect(within(dialog).getByRole("combobox", { name: "폴더" })).toHaveTextContent(folder.name);
     expect(within(dialog).getByRole("combobox", { name: "섹션" })).toHaveTextContent(section.name);
@@ -226,7 +241,7 @@ describe("bookmark database saving feedback", () => {
     expect(within(folderNavigation).getByText("하위")).toBeVisible();
     expect(parentSelect).toHaveTextContent("1");
     const descendantCard = await screen.findByRole("link", { name: /하위 북마크/ });
-    expect(within(descendantCard).getByText("손자")).toBeInTheDocument();
+    expect(within(descendantCard).queryByText("손자")).not.toBeInTheDocument();
   });
 
   it("keeps the mobile folder menu open while expanding a parent folder", async () => {
@@ -406,9 +421,7 @@ describe("bookmark database saving feedback", () => {
     expect(card).toHaveAttribute("draggable", "false");
     expect(favorite).toBeDisabled();
     expect(screen.getByRole("button", { name: "Example 메뉴" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "기본 섹션 삭제" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "기본에 북마크 추가" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "기본 섹션 순서 변경" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "기본 섹션 메뉴" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "작업 메뉴" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "새 폴더" })).toBeDisabled();
     screen.getAllByRole("button", { name: "북마크 추가" }).forEach((button) => {
@@ -495,14 +508,19 @@ describe("bookmark database saving feedback", () => {
     });
   });
 
-  it("opens folder choices above the bookmark modal", async () => {
+  it("opens folder choices above the bookmark modal and lets Escape close the choices first", async () => {
     stubBookmarkCache();
     render(<BookmarksPage />);
 
     fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
     fireEvent.keyDown(screen.getByRole("combobox", { name: "폴더" }), { key: "ArrowDown" });
 
-    expect(await screen.findByRole("listbox")).toHaveClass("z-[80]");
+    const listbox = await screen.findByRole("listbox");
+    expect(listbox).toHaveClass("z-[110]");
+    fireEvent.keyDown(listbox, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "북마크 추가" })).toBeInTheDocument();
   });
 
   it("does not move a bookmark across section boundaries", async () => {
@@ -1040,11 +1058,22 @@ describe("bookmark database saving feedback", () => {
     expect(c.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("creates a section separately and waits for the user to select it", async () => {
+  it("creates a colored section separately and waits for the user to select it", async () => {
     stubBookmarkCache();
-    const section = { id: "section-project", name: "프로젝트", folderId: "work", position: 0 } satisfies Section;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const section = {
+      id: "section-project",
+      name: "프로젝트",
+      color: "#16a34a",
+      folderId: "work",
+      position: 0
+    } satisfies Section;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("/api/sections");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        folderId: "work",
+        name: section.name,
+        color: section.color
+      });
       return new Response(JSON.stringify(section), {
         status: 201,
         headers: { "Content-Type": "application/json" }
@@ -1057,6 +1086,7 @@ describe("bookmark database saving feedback", () => {
     expect(screen.queryByLabelText("새 섹션 이름")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "새 섹션 만들기" }));
     fireEvent.change(screen.getByLabelText("새 섹션 이름"), { target: { value: section.name } });
+    fireEvent.click(screen.getByRole("button", { name: `색상 ${section.color}` }));
     fireEvent.click(screen.getByRole("button", { name: "만들기" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -1098,9 +1128,17 @@ describe("bookmark database saving feedback", () => {
     const fetchMock = stubRemote(async () => new Response(null, { status: 204 }));
     render(<BookmarksPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "기본 섹션 삭제" }));
+    let menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "삭제" }));
     expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toHaveTextContent("북마크는 삭제하지 않고 섹션 없음으로 이동합니다");
-    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "섹션 삭제" })).not.toBeInTheDocument();
+    expect(mutationCalls(fetchMock)).toHaveLength(0);
+
+    menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "삭제" }));
+    expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Enter" });
 
     await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
     expect(mutationCalls(fetchMock)[0]).toEqual([
@@ -1112,9 +1150,28 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByRole("link", { name: /보존할 북마크/ })).toBeInTheDocument();
   });
 
-  it("edits a section in its folder", async () => {
+  it("cancels a nested section deletion without closing the bookmark dialog", async () => {
     const section = { id: "section-basic", name: "기본", folderId: "work", position: 0 } satisfies Section;
-    const updated = { ...section, name: "수정된 섹션" };
+    stubBookmarkCache([], [section]);
+    render(<BookmarksPage />);
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
+    const bookmarkDialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    const sectionSelect = within(bookmarkDialog).getByRole("combobox", { name: "섹션" });
+    fireEvent.keyDown(sectionSelect, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: section.name }));
+    fireEvent.click(within(bookmarkDialog).getByRole("button", { name: "선택한 섹션 삭제" }));
+
+    expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "섹션 삭제" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "북마크 추가" })).toBeInTheDocument();
+  });
+
+  it("edits a section in its folder", async () => {
+    const section = { id: "section-basic", name: "기본", color: null, folderId: "work", position: 0 } satisfies Section;
+    const updated = { ...section, name: "수정된 섹션", color: "#16a34a" };
     stubBookmarkCache(
       [{ id: "bm-1", title: "북마크", url: "https://example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 }],
       [section]
@@ -1122,7 +1179,7 @@ describe("bookmark database saving feedback", () => {
     const fetchMock = stubRemote(async (input, init) => {
       expect(String(input)).toBe(`/api/sections/${section.id}`);
       expect(init).toMatchObject({ method: "PATCH" });
-      expect(JSON.parse(String(init?.body))).toEqual({ name: updated.name });
+      expect(JSON.parse(String(init?.body))).toEqual({ name: updated.name, color: updated.color });
       return new Response(JSON.stringify(updated), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -1130,13 +1187,18 @@ describe("bookmark database saving feedback", () => {
     });
     render(<BookmarksPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "기본 섹션 편집" }));
+    const menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
     const dialog = screen.getByRole("dialog", { name: "섹션 편집" });
     fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: updated.name } });
+    fireEvent.click(within(dialog).getByRole("button", { name: `색상 ${updated.color}` }));
     fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
 
     await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
     expect(screen.getByRole("heading", { name: updated.name })).toBeInTheDocument();
+    const sectionMarker = screen.getByRole("heading", { name: updated.name }).parentElement?.querySelector("[data-section-color]");
+    if (!sectionMarker) throw new Error("수정된 섹션 색상 표시를 찾을 수 없습니다.");
+    expect(sectionMarker).toHaveAttribute("data-section-color", updated.color);
   });
 
   it("offers deletion for an empty section in its folder", async () => {
@@ -1145,7 +1207,8 @@ describe("bookmark database saving feedback", () => {
     render(<BookmarksPage />);
 
     expect(await screen.findByRole("heading", { name: section.name })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "빈 섹션 섹션 삭제" }));
+    const menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "삭제" }));
 
     expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toBeInTheDocument();
   });

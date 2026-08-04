@@ -29,6 +29,7 @@ export type FolderTreeItem = Folder & {
 export type Section = {
   id: string;
   name: string;
+  color?: string | null;
   folderId: string;
   position: number;
 };
@@ -50,6 +51,7 @@ export type FolderFormData = {
 
 export type SectionFormData = {
   name: string;
+  color?: string | null;
 };
 
 export type PositionUpdate = {
