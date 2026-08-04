@@ -90,6 +90,65 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByTitle("드래그해서 위치 변경")).toBeInTheDocument();
   });
 
+  it("expands a selected parent folder and shows bookmarks in its descendant folders", async () => {
+    const folders: Folder[] = [
+      { id: "work", name: "상위", color: "#4f46e5", parentId: null, position: 0 },
+      { id: "child", name: "하위", color: "#2166d7", parentId: "work", position: 0 },
+      { id: "grandchild", name: "손자", color: "#16a34a", parentId: "child", position: 0 }
+    ];
+    const section = { id: "child-section", name: "연수", folderId: "grandchild", position: 0 } satisfies Section;
+    stubBookmarkCache(
+      [
+        {
+          id: "descendant-bookmark",
+          title: "하위 북마크",
+          url: "https://child.example.com",
+          description: null,
+          isFavorite: false,
+          folderId: "grandchild",
+          sectionId: section.id,
+          position: 0
+        }
+      ],
+      [section],
+      folders
+    );
+    stubRemote(async () => new Response(null, { status: 204 }));
+    render(<BookmarksPage />);
+
+    const folderNavigation = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const parentSelect = within(folderNavigation).getByText("상위").closest("button");
+    if (!parentSelect) throw new Error("상위 폴더 선택 버튼을 찾을 수 없습니다.");
+
+    fireEvent.click(parentSelect);
+
+    expect(within(folderNavigation).getByText("하위")).toBeVisible();
+    expect(parentSelect).toHaveTextContent("1");
+    const descendantCard = await screen.findByRole("link", { name: /하위 북마크/ });
+    expect(within(descendantCard).getByText("손자")).toBeInTheDocument();
+  });
+
+  it("keeps the mobile folder menu open while expanding a parent folder", async () => {
+    const folders: Folder[] = [
+      { id: "work", name: "상위", color: "#4f46e5", parentId: null, position: 0 },
+      { id: "child", name: "하위", color: "#2166d7", parentId: "work", position: 0 }
+    ];
+    stubBookmarkCache([], [], folders);
+    stubRemote(async () => new Response(null, { status: 204 }));
+    render(<BookmarksPage />);
+
+    const openMobileMenu = await screen.findByRole("button", { name: "폴더 메뉴 열기" });
+    fireEvent.click(openMobileMenu);
+    const mobileMenu = screen.getByRole("dialog", { name: "북마크 메뉴" });
+    const parentSelect = within(mobileMenu).getByText("상위").closest("button");
+    if (!parentSelect) throw new Error("상위 폴더 선택 버튼을 찾을 수 없습니다.");
+
+    fireEvent.click(parentSelect);
+
+    expect(screen.getByRole("dialog", { name: "북마크 메뉴" })).toBeInTheDocument();
+    expect(within(mobileMenu).getByText("하위")).toBeVisible();
+  });
+
   it("portals the modal overlay to the viewport layer", async () => {
     stubBookmarkCache();
     render(<BookmarksPage />);

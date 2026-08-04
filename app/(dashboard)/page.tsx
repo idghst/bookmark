@@ -60,6 +60,14 @@ type DeleteTarget =
   | { type: "section"; id: string }
   | { type: "folder"; id: string };
 
+type BookmarkGroup = {
+  key: string;
+  label: string;
+  folder: Folder;
+  section: Section | null;
+  items: BookmarkItem[];
+};
+
 type BookmarkCache = {
   version: 2;
   apiBacked: boolean;
@@ -434,6 +442,34 @@ export default function BookmarksPage() {
 
   const orderedFolders = useMemo(() => [...folders].sort((a, b) => a.position - b.position), [folders]);
   const selectedFolder = orderedFolders.find((folder) => folder.id === selectedFolderId) ?? orderedFolders[0] ?? null;
+  const visibleFolderIds = useMemo(
+    () => (selectedFolder ? new Set([selectedFolder.id, ...folderDescendantIds(folders, selectedFolder.id)]) : new Set<string>()),
+    [folders, selectedFolder]
+  );
+  const visibleFolders = useMemo(() => {
+    if (!selectedFolder) return [];
+
+    const childrenByParent = new Map<string, Folder[]>();
+    folders.forEach((folder) => {
+      const parentId = folderParentId(folder);
+      if (!parentId || !visibleFolderIds.has(folder.id) || !visibleFolderIds.has(parentId)) return;
+      childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), folder]);
+    });
+    childrenByParent.forEach((children) => {
+      children.sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ko"));
+    });
+
+    const ordered: Folder[] = [];
+    const seen = new Set<string>();
+    const visit = (folder: Folder) => {
+      if (seen.has(folder.id)) return;
+      seen.add(folder.id);
+      ordered.push(folder);
+      (childrenByParent.get(folder.id) ?? []).forEach(visit);
+    };
+    visit(selectedFolder);
+    return ordered;
+  }, [folders, selectedFolder, visibleFolderIds]);
 
   useEffect(() => {
     if (selectedFolderId && folders.some((folder) => folder.id === selectedFolderId)) return;
@@ -443,36 +479,64 @@ export default function BookmarksPage() {
   const filtered = useMemo(() => {
     if (!selectedFolder) return [];
     return bookmarks
-      .filter((bookmark) => matchesBookmarkFilters(bookmark, { folderId: selectedFolder.id, favoriteOnly, query }))
+      .filter(
+        (bookmark) =>
+          visibleFolderIds.has(bookmark.folderId ?? "") && matchesBookmarkFilters(bookmark, { favoriteOnly, query })
+      )
       .sort((a, b) => a.position - b.position);
-  }, [bookmarks, favoriteOnly, query, selectedFolder]);
+  }, [bookmarks, favoriteOnly, query, selectedFolder, visibleFolderIds]);
 
   const hasActiveFilter = favoriteOnly || query.trim().length > 0;
 
-  const groups = useMemo(() => {
-    if (!selectedFolder) return [];
-    const folderSections = sections
-      .filter((section) => section.folderId === selectedFolder.id)
-      .sort((a, b) => a.position - b.position);
-    const bySection = new Map<string | null, BookmarkItem[]>();
+  const groups = useMemo<BookmarkGroup[]>(() => {
+    const itemsByScope = new Map<string, BookmarkItem[]>();
+    const scopeKey = (folderId: string, sectionId: string | null) => `${folderId}:${sectionId ?? NO_SECTION}`;
     filtered.forEach((bookmark) => {
-      const key = bookmark.sectionId;
-      bySection.set(key, [...(bySection.get(key) ?? []), bookmark]);
+      if (!bookmark.folderId) return;
+      const key = scopeKey(bookmark.folderId, bookmark.sectionId);
+      itemsByScope.set(key, [...(itemsByScope.get(key) ?? []), bookmark]);
     });
 
-    const sectionGroups = folderSections.flatMap((section) => {
-      const items = bySection.get(section.id) ?? [];
-      return items.length || !hasActiveFilter
-        ? [{ id: section.id, label: section.name, items }]
-        : [];
+    const showFolderName = visibleFolders.length > 1;
+    return visibleFolders.flatMap((folder) => {
+      const folderSections = sections
+        .filter((section) => section.folderId === folder.id)
+        .sort((a, b) => a.position - b.position);
+      const sectionIds = new Set(folderSections.map((section) => section.id));
+      const sectionGroups = folderSections.flatMap((section) => {
+        const items = itemsByScope.get(scopeKey(folder.id, section.id)) ?? [];
+        return items.length || !hasActiveFilter
+          ? [
+              {
+                key: scopeKey(folder.id, section.id),
+                label: showFolderName ? `${folder.name} · ${section.name}` : section.name,
+                folder,
+                section,
+                items
+              }
+            ]
+          : [];
+      });
+      const unassigned = filtered.filter(
+        (bookmark) =>
+          bookmark.folderId === folder.id && (bookmark.sectionId === null || !sectionIds.has(bookmark.sectionId))
+      );
+      return unassigned.length
+        ? [
+            ...sectionGroups,
+            {
+              key: scopeKey(folder.id, null),
+              label: showFolderName ? `${folder.name} · 섹션 없음` : "섹션 없음",
+              folder,
+              section: null,
+              items: unassigned
+            }
+          ]
+        : sectionGroups;
     });
-    const unassigned = bySection.get(null) ?? [];
-    return unassigned.length ? [...sectionGroups, { id: NO_SECTION, label: "섹션 없음", items: unassigned }] : sectionGroups;
-  }, [filtered, hasActiveFilter, sections, selectedFolder]);
+  }, [filtered, hasActiveFilter, sections, visibleFolders]);
 
-  const currentFolderBookmarks = selectedFolder
-    ? bookmarks.filter((bookmark) => bookmark.folderId === selectedFolder.id)
-    : [];
+  const currentFolderBookmarks = bookmarks.filter((bookmark) => visibleFolderIds.has(bookmark.folderId ?? ""));
   const currentFavoriteCount = countBookmarks(currentFolderBookmarks, { favoriteOnly: true });
   const currentCount = hasActiveFilter ? filtered.length : currentFolderBookmarks.length;
   const emptyMessage = query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다.";
@@ -488,7 +552,9 @@ export default function BookmarksPage() {
 
   function selectFolder(folderId: string) {
     setSelectedFolderId(folderId);
-    setMobileFoldersOpen(false);
+    if (!folders.some((folder) => folder.id !== folderId && folderParentId(folder) === folderId)) {
+      setMobileFoldersOpen(false);
+    }
   }
 
   function requestFolderDelete(folder: Folder) {
@@ -944,12 +1010,24 @@ export default function BookmarksPage() {
   }
 
   function dropSection(targetSectionId: string) {
-    if (bootstrapping || !selectedFolder || !draggingSectionId) return;
-    const scoped = sections.filter((section) => section.folderId === selectedFolder.id).sort((a, b) => a.position - b.position);
+    if (bootstrapping || !draggingSectionId) return;
+    const active = sections.find((section) => section.id === draggingSectionId);
+    const target = sections.find((section) => section.id === targetSectionId);
+    if (!active || !target || !visibleFolderIds.has(active.folderId) || active.folderId !== target.folderId) {
+      setDraggingSectionId(null);
+      setDragOverSectionId(null);
+      return;
+    }
+    const scoped = sections.filter((section) => section.folderId === active.folderId).sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingSectionId, targetSectionId);
     const changes = getPositionChanges(scoped, moved);
+    if (!changes.length) {
+      setDraggingSectionId(null);
+      setDragOverSectionId(null);
+      return;
+    }
     void persistOptimisticMutation(
-      `reorder:sections:${selectedFolder.id}`,
+      `reorder:sections:${active.folderId}`,
       () => setSections((current) => applyPositions(current, moved)),
       () => setSections((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/sections/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
@@ -961,21 +1039,27 @@ export default function BookmarksPage() {
   }
 
   function dropBookmark(targetBookmarkId: string) {
-    if (bootstrapping || !selectedFolder || !draggingBookmarkId) return;
+    if (bootstrapping || !draggingBookmarkId) return;
     const active = bookmarks.find((bookmark) => bookmark.id === draggingBookmarkId);
     const target = bookmarks.find((bookmark) => bookmark.id === targetBookmarkId);
-    if (!active || !target || active.folderId !== selectedFolder.id || active.sectionId !== target.sectionId) {
+    if (
+      !active ||
+      !target ||
+      !visibleFolderIds.has(active.folderId ?? "") ||
+      active.folderId !== target.folderId ||
+      active.sectionId !== target.sectionId
+    ) {
       setDraggingBookmarkId(null);
       setDragOverBookmarkId(null);
       return;
     }
     const scoped = bookmarks
-      .filter((bookmark) => bookmark.folderId === selectedFolder.id && bookmark.sectionId === active.sectionId)
+      .filter((bookmark) => bookmark.folderId === active.folderId && bookmark.sectionId === active.sectionId)
       .sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, draggingBookmarkId, targetBookmarkId);
     const changes = getPositionChanges(scoped, moved);
     void persistOptimisticMutation(
-      `reorder:bookmarks:${selectedFolder.id}:${active.sectionId ?? NO_SECTION}`,
+      `reorder:bookmarks:${active.folderId}:${active.sectionId ?? NO_SECTION}`,
       () => setBookmarks((current) => applyPositions(current, moved)),
       () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
       () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
@@ -1177,29 +1261,30 @@ export default function BookmarksPage() {
               </div>
             ) : (
               groups.map((group) => (
-                <section key={group.id} className="space-y-3">
+                <section key={group.key} className="space-y-3">
                   <div
-                    draggable={!bootstrapping && group.id !== NO_SECTION}
+                    draggable={!bootstrapping && Boolean(group.section)}
                     onDragStart={() => {
-                      if (!bootstrapping && group.id !== NO_SECTION) setDraggingSectionId(group.id);
+                      if (!bootstrapping && group.section) setDraggingSectionId(group.section.id);
                     }}
                     onDragEnd={() => {
                       setDraggingSectionId(null);
                       setDragOverSectionId(null);
                     }}
                     onDragOver={(event) => {
-                      if (!draggingSectionId) return;
+                      const active = sections.find((section) => section.id === draggingSectionId);
+                      if (!group.section || !active || active.folderId !== group.folder.id) return;
                       event.preventDefault();
-                      setDragOverSectionId(group.id);
+                      setDragOverSectionId(group.section.id);
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
-                      if (draggingSectionId && group.id !== NO_SECTION) dropSection(group.id);
+                      if (draggingSectionId && group.section) dropSection(group.section.id);
                     }}
                     className={cn(
                       BOOKMARK_SECTION_HEADER_CLASS,
-                      dragOverSectionId === group.id && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25",
-                      draggingSectionId === group.id && "opacity-60"
+                      dragOverSectionId === group.section?.id && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25",
+                      draggingSectionId === group.section?.id && "opacity-60"
                     )}
                   >
                     <span className="h-6 w-1 shrink-0 bg-[var(--color-brand)]" />
@@ -1207,7 +1292,7 @@ export default function BookmarksPage() {
                     <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">
                       {group.items.length}
                     </span>
-                    {group.id !== NO_SECTION ? (
+                    {group.section ? (
                       <>
                         <button
                           type="button"
@@ -1215,8 +1300,7 @@ export default function BookmarksPage() {
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC]"
                           onClick={(event) => {
                             event.stopPropagation();
-                            const section = sections.find((item) => item.id === group.id);
-                            if (section) openSectionDialog(section);
+                            openSectionDialog(group.section!);
                           }}
                         >
                           <Pencil className="h-4 w-4" />
@@ -1228,7 +1312,7 @@ export default function BookmarksPage() {
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-red-50 hover:text-destructive"
                           onClick={(event) => {
                             event.stopPropagation();
-                            setDeleteTarget({ type: "section", id: group.id });
+                            setDeleteTarget({ type: "section", id: group.section!.id });
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1240,14 +1324,14 @@ export default function BookmarksPage() {
                           draggable={!bootstrapping}
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC]"
                           onDragStart={() => {
-                            if (!bootstrapping) setDraggingSectionId(group.id);
+                            if (!bootstrapping) setDraggingSectionId(group.section!.id);
                           }}
                           onDragEnd={() => {
                             setDraggingSectionId(null);
                             setDragOverSectionId(null);
                           }}
                           onDragOver={(event) => event.preventDefault()}
-                          onDrop={() => dropSection(group.id)}
+                          onDrop={() => dropSection(group.section!.id)}
                         >
                           <GripVertical className="h-4 w-4" />
                           <span className="sr-only">{group.label} 섹션 순서 변경</span>
@@ -1260,8 +1344,8 @@ export default function BookmarksPage() {
                       <BookmarkCard
                         key={bookmark.id}
                         bookmark={bookmark}
-                        folder={selectedFolder}
-                        section={sections.find((section) => section.id === bookmark.sectionId) ?? null}
+                        folder={group.folder}
+                        section={group.section}
                         dragging={draggingBookmarkId === bookmark.id}
                         dragOver={dragOverBookmarkId === bookmark.id}
                         mutationsDisabled={bootstrapping}

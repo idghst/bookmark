@@ -185,6 +185,15 @@ function FolderTree({
     });
   }
 
+  function expandFolder(folderId: string) {
+    setExpandedFolderIds((current) => {
+      if (current.has(folderId)) return current;
+      const next = new Set(current);
+      next.add(folderId);
+      return next;
+    });
+  }
+
   function handleTreeKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, node: FolderTreeNode) {
     const folderButtons = Array.from(treeRef.current?.querySelectorAll<HTMLButtonElement>("[data-folder-select]") ?? []);
     const currentIndex = folderButtons.indexOf(event.currentTarget);
@@ -238,6 +247,7 @@ function FolderTree({
             dragOverFolderId={dragOverFolderId}
             mutationsDisabled={mutationsDisabled}
             onToggleFolder={toggleFolder}
+            onExpandFolder={expandFolder}
             onSelectFolder={onSelectFolder}
             onAddFolder={onAddFolder}
             onEditFolder={onEditFolder}
@@ -263,6 +273,7 @@ function FolderTreeRow({
   dragOverFolderId,
   mutationsDisabled,
   onToggleFolder,
+  onExpandFolder,
   onSelectFolder,
   onAddFolder,
   onEditFolder,
@@ -281,6 +292,7 @@ function FolderTreeRow({
   dragOverFolderId: string | null;
   mutationsDisabled: boolean;
   onToggleFolder: (folderId: string) => void;
+  onExpandFolder: (folderId: string) => void;
   onSelectFolder: (folderId: string) => void;
   onAddFolder: (parentId?: string | null) => void;
   onEditFolder: (folder: Folder) => void;
@@ -294,7 +306,17 @@ function FolderTreeRow({
   const active = folder.id === selectedFolderId;
   const hasChildren = children.length > 0;
   const expanded = expandedFolderIds.has(folder.id);
-  const count = countBookmarks(bookmarks, { folderId: folder.id, favoriteOnly });
+  const descendantFolderIds = new Set<string>();
+  const collectFolderIds = (current: FolderTreeNode) => {
+    if (descendantFolderIds.has(current.folder.id)) return;
+    descendantFolderIds.add(current.folder.id);
+    current.children.forEach(collectFolderIds);
+  };
+  collectFolderIds(node);
+  const count = countBookmarks(
+    bookmarks.filter((bookmark) => descendantFolderIds.has(bookmark.folderId ?? "")),
+    { favoriteOnly }
+  );
 
   return (
     <li
@@ -338,7 +360,10 @@ function FolderTreeRow({
           data-folder-select={folder.id}
           aria-current={active ? "page" : undefined}
           onKeyDown={(event) => onTreeKeyDown(event, node)}
-          onClick={() => onSelectFolder(folder.id)}
+          onClick={() => {
+            onSelectFolder(folder.id);
+            if (hasChildren) onExpandFolder(folder.id);
+          }}
           className={cn(
             "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
             active
@@ -399,6 +424,7 @@ function FolderTreeRow({
               dragOverFolderId={dragOverFolderId}
               mutationsDisabled={mutationsDisabled}
               onToggleFolder={onToggleFolder}
+              onExpandFolder={onExpandFolder}
               onSelectFolder={onSelectFolder}
               onAddFolder={onAddFolder}
               onEditFolder={onEditFolder}
