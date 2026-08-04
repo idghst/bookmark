@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DropdownMenu } from "radix-ui";
 import {
   ExternalLink,
   Globe,
@@ -565,7 +566,7 @@ export default function BookmarksPage() {
     setDeleteTarget({ type: "folder", id: folder.id });
   }
 
-  function openBookmarkDialog(bookmark?: BookmarkItem) {
+  function openBookmarkDialog(bookmark?: BookmarkItem, target?: { folderId: string; sectionId: string }) {
     if (bootstrapping) return;
     setBookmarkError("");
     setSectionCreatorOpen(false);
@@ -584,8 +585,12 @@ export default function BookmarksPage() {
       return;
     }
 
+    const folderId = target?.folderId ?? selectedFolder?.id ?? orderedFolders[0]?.id ?? "";
     setBookmarkDialog({ mode: "create" });
-    setBookmarkDraft(emptyBookmarkDraft(selectedFolder?.id ?? orderedFolders[0]?.id ?? ""));
+    setBookmarkDraft({
+      ...emptyBookmarkDraft(folderId),
+      sectionId: target?.sectionId ?? NO_SECTION
+    });
   }
 
   function openFolderDialog(folder?: Folder, parentId: string | null = null) {
@@ -1155,6 +1160,12 @@ export default function BookmarksPage() {
               <span className="sr-only">폴더 메뉴 열기</span>
             </Button>
             <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span
+                data-folder-color={selectedFolder?.color ?? FOLDER_COLOR_FALLBACK}
+                aria-hidden="true"
+                className="h-5 w-1 shrink-0 rounded-full"
+                style={{ backgroundColor: selectedFolder?.color ?? FOLDER_COLOR_FALLBACK }}
+              />
               <h1 className="truncate text-lg font-bold text-[var(--text-heading)]">{selectedFolder?.name ?? "북마크"}</h1>
               <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 text-xs tabular-nums text-[var(--text-muted)]">
                 {currentCount}
@@ -1200,6 +1211,12 @@ export default function BookmarksPage() {
           )}
         >
           <div className="flex min-w-0 max-w-[clamp(9rem,16vw,18rem)] items-center gap-2">
+            <span
+              data-folder-color={selectedFolder?.color ?? FOLDER_COLOR_FALLBACK}
+              aria-hidden="true"
+              className="h-5 w-1 shrink-0 rounded-full"
+              style={{ backgroundColor: selectedFolder?.color ?? FOLDER_COLOR_FALLBACK }}
+            />
             <h1 className="truncate text-lg font-bold text-[var(--text-heading)]">{selectedFolder?.name ?? "북마크"}</h1>
             <span className="flex h-6 min-w-6 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 text-xs tabular-nums text-[var(--text-muted)]">
               {currentCount}
@@ -1287,13 +1304,33 @@ export default function BookmarksPage() {
                       draggingSectionId === group.section?.id && "opacity-60"
                     )}
                   >
-                    <span className="h-6 w-1 shrink-0 bg-[var(--color-brand)]" />
+                    <span
+                      data-folder-color={group.folder.color ?? FOLDER_COLOR_FALLBACK}
+                      aria-hidden="true"
+                      className="h-6 w-1 shrink-0 rounded-full"
+                      style={{ backgroundColor: group.folder.color ?? FOLDER_COLOR_FALLBACK }}
+                    />
                     <h2 className="min-w-0 flex-1 truncate text-lg font-bold leading-snug text-[var(--text-heading)]">{group.label}</h2>
                     <span className="shrink-0 rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">
                       {group.items.length}
                     </span>
                     {group.section ? (
                       <>
+                        <button
+                          type="button"
+                          disabled={bootstrapping}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[#F8FAFC] hover:text-[var(--color-brand)]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openBookmarkDialog(undefined, {
+                              folderId: group.folder.id,
+                              sectionId: group.section!.id
+                            });
+                          }}
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span className="sr-only">{group.label}에 북마크 추가</span>
+                        </button>
                         <button
                           type="button"
                           disabled={bootstrapping}
@@ -1719,7 +1756,6 @@ function BookmarkCard({
   onDelete: (bookmark: BookmarkItem) => void;
   onToggleFavorite: (id: string) => void;
 }) {
-  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const openBookmark = () => window.open(bookmark.url, "_blank", "noopener,noreferrer");
 
   return (
@@ -1762,60 +1798,30 @@ function BookmarkCard({
               <span aria-hidden="true">{bookmarkHost(bookmark.url)}</span>
             </p>
           </div>
-          <div className="-mr-1 -mt-1 hidden items-center gap-1 lg:flex" onClick={(event) => event.stopPropagation()}>
-            <span className="flex h-6 w-5 cursor-grab items-center justify-center text-[var(--text-muted)]/70 active:cursor-grabbing" title="드래그해서 위치 변경">
-              <GripVertical className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only">{bookmark.title} 위치 변경</span>
-            </span>
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-              <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onEdit(bookmark)}>
-                <Pencil className="h-4 w-4" />
-                <span className="sr-only">{bookmark.title} 편집</span>
-              </Button>
-              <Button variant="ghost" size="icon-xs" disabled={mutationsDisabled} onClick={() => onDelete(bookmark)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-                <span className="sr-only">{bookmark.title} 삭제</span>
-              </Button>
-            </div>
-          </div>
-          <details
-            className="relative -mr-2 -mt-2 shrink-0 lg:hidden"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-            onToggle={(event) => setMobileActionsOpen(event.currentTarget.open)}
-          >
-            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded text-[var(--text-muted)] outline-none hover:bg-[#F8FAFC] focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 [&::-webkit-details-marker]:hidden">
-              <MoreHorizontal className="h-5 w-5" />
-              <span className="sr-only">{bookmark.title} 메뉴</span>
-            </summary>
-            <div hidden={!mobileActionsOpen} className="absolute right-0 z-10 mt-1 w-28 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg">
-              <button
-                type="button"
-                disabled={mutationsDisabled}
-                className="flex h-10 w-full items-center gap-2 rounded px-3 text-left text-sm font-medium text-[var(--text-heading)] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => onEdit(bookmark)}
-              >
-                <Pencil className="h-4 w-4" />
-                편집
-              </button>
-              <button
-                type="button"
-                disabled={mutationsDisabled}
-                className="flex h-10 w-full items-center gap-2 rounded px-3 text-left text-sm font-medium text-destructive hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => onDelete(bookmark)}
-              >
-                <Trash2 className="h-4 w-4" />
-                삭제
-              </button>
-            </div>
-          </details>
+          <BookmarkActionsMenu
+            bookmark={bookmark}
+            mutationsDisabled={mutationsDisabled}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col space-y-2 px-4 pt-1">
         {bookmark.description ? <p className="line-clamp-1 text-xs leading-5 text-[var(--text-muted)]">{bookmark.description}</p> : null}
         <div className="mt-auto flex min-w-0 items-center gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-hidden">
-            {folder ? <Badge variant="secondary">{folder.name}</Badge> : null}
+            {folder ? (
+              <Badge
+                variant="secondary"
+                data-folder-color={folder.color ?? FOLDER_COLOR_FALLBACK}
+                style={{
+                  borderColor: folder.color ?? FOLDER_COLOR_FALLBACK,
+                  color: folder.color ?? FOLDER_COLOR_FALLBACK
+                }}
+              >
+                {folder.name}
+              </Badge>
+            ) : null}
             {section ? <Badge variant="outline">{section.name}</Badge> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
@@ -1842,6 +1848,64 @@ function BookmarkCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function BookmarkActionsMenu({
+  bookmark,
+  mutationsDisabled,
+  onEdit,
+  onDelete
+}: {
+  bookmark: BookmarkItem;
+  mutationsDisabled: boolean;
+  onEdit: (bookmark: BookmarkItem) => void;
+  onDelete: (bookmark: BookmarkItem) => void;
+}) {
+  return (
+    <div
+      className="-mr-1 -mt-1 shrink-0"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            disabled={mutationsDisabled}
+            aria-label={`${bookmark.title} 메뉴`}
+            className="flex h-8 w-8 items-center justify-center rounded text-[var(--text-muted)] transition hover:bg-[#F8FAFC] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            aria-label={`${bookmark.title} 메뉴`}
+            side="bottom"
+            align="end"
+            sideOffset={6}
+            className="z-[80] min-w-32 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg outline-none"
+          >
+            <DropdownMenu.Item
+              onSelect={() => onEdit(bookmark)}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
+            >
+              <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+              편집
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
+            <DropdownMenu.Item
+              onSelect={() => onDelete(bookmark)}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-destructive outline-none hover:bg-red-50 focus:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              삭제
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
   );
 }
 

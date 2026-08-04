@@ -87,7 +87,88 @@ describe("bookmark database saving feedback", () => {
     expect(screen.queryByRole("button", { name: "그리드" })).not.toBeInTheDocument();
     expect(card.parentElement).toHaveClass("lg:grid-cols-2", "xl:grid-cols-4");
     expect(card).toHaveAttribute("draggable", "true");
-    expect(screen.getByTitle("드래그해서 위치 변경")).toBeInTheDocument();
+    expect(screen.queryByTitle("드래그해서 위치 변경")).not.toBeInTheDocument();
+  });
+
+  it("reflects a folder color and creates a bookmark in the section that added it", async () => {
+    const folder = { id: "work", name: "작업", color: "#d97706", position: 0 } satisfies Folder;
+    const section = { id: "section-operations", name: "운영", folderId: folder.id, position: 0 } satisfies Section;
+    const existing = {
+      id: "bookmark-colored",
+      title: "색상 북마크",
+      url: "https://colored.example.com",
+      description: null,
+      isFavorite: false,
+      folderId: folder.id,
+      sectionId: section.id,
+      position: 0
+    } satisfies BookmarkItem;
+    const created = {
+      ...existing,
+      id: "bookmark-created",
+      title: "섹션에서 추가"
+    } satisfies BookmarkItem;
+    stubBookmarkCache([existing], [section], [folder]);
+    const fetchMock = stubRemote(async (input, init) => {
+      expect(String(input)).toBe("/api/bookmarks");
+      expect(init).toMatchObject({ method: "POST" });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        folderId: folder.id,
+        sectionId: section.id,
+        title: created.title
+      });
+      return new Response(JSON.stringify(created), {
+        status: 201,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    render(<BookmarksPage />);
+
+    const folderNavigation = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const folderSelect = within(folderNavigation).getByText(folder.name).closest("button");
+    expect(folderSelect?.querySelector("[data-folder-color]")).toHaveAttribute("data-folder-color", folder.color);
+    expect(screen.getByRole("heading", { name: section.name }).parentElement?.querySelector("[data-folder-color]")).toHaveAttribute("data-folder-color", folder.color);
+
+    const card = await screen.findByRole("link", { name: /색상 북마크/ });
+    expect(within(card).getByText(folder.name)).toHaveAttribute("data-folder-color", folder.color);
+
+    fireEvent.click(screen.getByRole("button", { name: `${section.name}에 북마크 추가` }));
+    const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    expect(within(dialog).getByRole("combobox", { name: "폴더" })).toHaveTextContent(folder.name);
+    expect(within(dialog).getByRole("combobox", { name: "섹션" })).toHaveTextContent(section.name);
+    fireEvent.change(within(dialog).getByLabelText("URL"), { target: { value: "https://created.example.com" } });
+    fireEvent.change(within(dialog).getByLabelText("제목"), { target: { value: created.title } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+  });
+
+  it("keeps card drag sorting while moving card actions into an ellipsis menu", async () => {
+    const bookmark = {
+      id: "bookmark-actions",
+      title: "메뉴 북마크",
+      url: "https://menu.example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "work",
+      sectionId: null,
+      position: 0
+    } satisfies BookmarkItem;
+    stubBookmarkCache([bookmark]);
+    stubRemote(async () => new Response(null, { status: 204 }));
+    render(<BookmarksPage />);
+
+    const card = await screen.findByRole("link", { name: /메뉴 북마크/ });
+    expect(card).toHaveAttribute("draggable", "true");
+    expect(within(card).queryByTitle("드래그해서 위치 변경")).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "메뉴 북마크 편집" })).not.toBeInTheDocument();
+
+    const menuTrigger = within(card).getByRole("button", { name: "메뉴 북마크 메뉴" });
+    await waitFor(() => expect(menuTrigger).toBeEnabled());
+    fireEvent.keyDown(menuTrigger, { key: "Enter" });
+    const menu = screen.getByRole("menu", { name: "메뉴 북마크 메뉴" });
+    expect(within(menu).getByRole("menuitem", { name: "편집" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "삭제" })).toBeInTheDocument();
   });
 
   it("groups sidebar folder actions in an ellipsis menu", async () => {
@@ -324,9 +405,9 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByRole("main").closest("[aria-busy]")).toHaveAttribute("aria-busy", "true");
     expect(card).toHaveAttribute("draggable", "false");
     expect(favorite).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Example 편집" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Example 삭제" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Example 메뉴" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "기본 섹션 삭제" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "기본에 북마크 추가" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "기본 섹션 순서 변경" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "작업 메뉴" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "새 폴더" })).toBeDisabled();
@@ -1131,8 +1212,11 @@ describe("bookmark database saving feedback", () => {
     stubRemote(async () => request);
 
     render(<BookmarksPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Example 삭제" }));
-    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    const menuTrigger = await screen.findByRole("button", { name: "Example 메뉴" });
+    fireEvent.keyDown(menuTrigger, { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "삭제" }));
+    const dialog = await screen.findByRole("dialog", { name: "북마크 삭제" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "삭제" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("데이터베이스에서 삭제 중");
     expect(screen.getByRole("button", { name: "삭제 중..." })).toBeDisabled();

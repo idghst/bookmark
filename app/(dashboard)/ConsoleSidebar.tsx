@@ -307,6 +307,7 @@ function FolderTreeRow({
   const active = folder.id === selectedFolderId;
   const hasChildren = children.length > 0;
   const expanded = expandedFolderIds.has(folder.id);
+  const folderColor = folder.color ?? "#797979";
   const descendantFolderIds = new Set<string>();
   const collectFolderIds = (current: FolderTreeNode) => {
     if (descendantFolderIds.has(current.folder.id)) return;
@@ -373,9 +374,19 @@ function FolderTreeRow({
           )}
         >
           {hasChildren && expanded ? (
-            <FolderOpen className="h-4 w-4 shrink-0 text-[var(--color-brand)]" aria-hidden="true" />
+            <FolderOpen
+              data-folder-color={folderColor}
+              className="h-4 w-4 shrink-0"
+              style={{ color: folderColor }}
+              aria-hidden="true"
+            />
           ) : (
-            <FolderIcon className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+            <FolderIcon
+              data-folder-color={folderColor}
+              className="h-4 w-4 shrink-0"
+              style={{ color: folderColor }}
+              aria-hidden="true"
+            />
           )}
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           <span className="shrink-0 text-xs font-medium tabular-nums text-[var(--text-muted)]">{count}</span>
