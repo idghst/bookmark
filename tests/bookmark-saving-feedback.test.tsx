@@ -1169,17 +1169,40 @@ describe("bookmark database saving feedback", () => {
     expect(screen.getByRole("dialog", { name: "북마크 추가" })).toBeInTheDocument();
   });
 
-  it("edits a section in its folder", async () => {
+  it("moves a section and its bookmarks to another folder while editing it", async () => {
+    const sourceFolder = { id: "work", name: "작업", color: "#4f46e5", position: 0 } satisfies Folder;
+    const destinationFolder = { id: "docs", name: "문서", color: "#2166d7", position: 1 } satisfies Folder;
     const section = { id: "section-basic", name: "기본", color: null, folderId: "work", position: 0 } satisfies Section;
-    const updated = { ...section, name: "수정된 섹션", color: "#16a34a" };
+    const updated = {
+      ...section,
+      name: "수정된 섹션",
+      color: "#16a34a",
+      folderId: destinationFolder.id,
+      position: 0
+    };
+    const bookmark = {
+      id: "bm-1",
+      title: "함께 이동할 북마크",
+      url: "https://example.com",
+      description: null,
+      isFavorite: false,
+      folderId: sourceFolder.id,
+      sectionId: section.id,
+      position: 0
+    } satisfies BookmarkItem;
     stubBookmarkCache(
-      [{ id: "bm-1", title: "북마크", url: "https://example.com", description: null, isFavorite: false, folderId: "work", sectionId: section.id, position: 0 }],
-      [section]
+      [bookmark],
+      [section],
+      [sourceFolder, destinationFolder]
     );
     const fetchMock = stubRemote(async (input, init) => {
       expect(String(input)).toBe(`/api/sections/${section.id}`);
       expect(init).toMatchObject({ method: "PATCH" });
-      expect(JSON.parse(String(init?.body))).toEqual({ name: updated.name, color: updated.color });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        name: updated.name,
+        color: updated.color,
+        folderId: destinationFolder.id
+      });
       return new Response(JSON.stringify(updated), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -1191,11 +1214,17 @@ describe("bookmark database saving feedback", () => {
     fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
     const dialog = screen.getByRole("dialog", { name: "섹션 편집" });
     fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: updated.name } });
+    const folderSelect = within(dialog).getByRole("combobox", { name: "폴더" });
+    fireEvent.keyDown(folderSelect, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: destinationFolder.name }));
     fireEvent.click(within(dialog).getByRole("button", { name: `색상 ${updated.color}` }));
     fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
 
     await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
-    expect(screen.getByRole("heading", { name: updated.name })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: updated.name })).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "북마크 폴더" })).getByText(destinationFolder.name));
+    expect(await screen.findByRole("heading", { name: updated.name })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /함께 이동할 북마크/ })).toBeInTheDocument();
     const sectionMarker = screen.getByRole("heading", { name: updated.name }).parentElement?.querySelector("[data-section-color]");
     if (!sectionMarker) throw new Error("수정된 섹션 색상 표시를 찾을 수 없습니다.");
     expect(sectionMarker).toHaveAttribute("data-section-color", updated.color);

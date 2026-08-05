@@ -106,7 +106,7 @@ describe("bookmarkStore GraphQL transport", () => {
       id: "section-basic",
       name: "수정된 기본",
       color: "#16a34a",
-      folderId: "folder-1",
+      folderId: "folder-2",
       position: 0
     };
     const fetchMock = vi.fn(async (
@@ -122,7 +122,8 @@ describe("bookmarkStore GraphQL transport", () => {
     await expect(
       bookmarkStore.updateSection("section-basic", {
         name: " 수정된 기본 ",
-        color: "#16a34a"
+        color: "#16a34a",
+        folderId: "folder-2"
       })
     ).resolves.toEqual(updated);
 
@@ -130,7 +131,7 @@ describe("bookmarkStore GraphQL transport", () => {
     expect(body.query).toContain("updateSection");
     expect(body.variables).toEqual({
       id: "section-basic",
-      input: { name: "수정된 기본", color: "#16a34a" }
+      input: { name: "수정된 기본", color: "#16a34a", folderId: "folder-2" }
     });
   });
 

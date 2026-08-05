@@ -52,6 +52,7 @@ export type FolderFormData = {
 export type SectionFormData = {
   name: string;
   color?: string | null;
+  folderId?: string;
 };
 
 export type PositionUpdate = {

@@ -319,7 +319,11 @@ export default function BookmarksPage() {
   const [folderDraft, setFolderDraft] = useState({ name: "", color: COLOR_OPTIONS[0], parentId: ROOT_FOLDER });
   const [folderError, setFolderError] = useState("");
   const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null);
-  const [sectionDraft, setSectionDraft] = useState<{ name: string; color: string | null }>({ name: "", color: null });
+  const [sectionDraft, setSectionDraft] = useState<{ name: string; color: string | null; folderId: string }>({
+    name: "",
+    color: null,
+    folderId: ""
+  });
   const [sectionColorDraft, setSectionColorDraft] = useState<string | null>(null);
   const [sectionError, setSectionError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -619,7 +623,7 @@ export default function BookmarksPage() {
     if (bootstrapping) return;
     setSectionError("");
     setSectionDialog({ sectionId: section.id });
-    setSectionDraft({ name: section.name, color: section.color ?? null });
+    setSectionDraft({ name: section.name, color: section.color ?? null, folderId: section.folderId });
   }
 
   async function createSectionFromBookmarkDialog() {
@@ -806,6 +810,18 @@ export default function BookmarksPage() {
       setSectionError("섹션 이름을 입력하세요.");
       return;
     }
+    if (!folders.some((folder) => folder.id === sectionDraft.folderId)) {
+      setSectionError("이동할 폴더를 선택하세요.");
+      return;
+    }
+
+    const existingSection = sections.find((section) => section.id === sectionDialog.sectionId);
+    const moved = existingSection?.folderId !== sectionDraft.folderId;
+    const payload = {
+      name,
+      color: sectionDraft.color,
+      ...(moved ? { folderId: sectionDraft.folderId } : {})
+    };
 
     setSectionError("");
     setSaving(true);
@@ -813,15 +829,34 @@ export default function BookmarksPage() {
       if (apiBacked) {
         const updated = await apiRequest<Section>(`/api/sections/${sectionDialog.sectionId}`, {
           method: "PATCH",
-          body: JSON.stringify({ name, color: sectionDraft.color })
+          body: JSON.stringify(payload)
         });
         setSections((current) => current.map((section) => (section.id === updated.id ? updated : section)));
+        if (moved) {
+          setBookmarks((current) =>
+            current.map((bookmark) =>
+              bookmark.sectionId === updated.id ? { ...bookmark, folderId: updated.folderId } : bookmark
+            )
+          );
+        }
       } else {
+        const nextPosition = moved
+          ? sections.filter((section) => section.id !== sectionDialog.sectionId && section.folderId === sectionDraft.folderId).length
+          : existingSection?.position ?? 0;
         setSections((current) =>
           current.map((section) =>
-            section.id === sectionDialog.sectionId ? { ...section, name, color: sectionDraft.color } : section
+            section.id === sectionDialog.sectionId
+              ? { ...section, name, color: sectionDraft.color, folderId: sectionDraft.folderId, position: nextPosition }
+              : section
           )
         );
+        if (moved) {
+          setBookmarks((current) =>
+            current.map((bookmark) =>
+              bookmark.sectionId === sectionDialog.sectionId ? { ...bookmark, folderId: sectionDraft.folderId } : bookmark
+            )
+          );
+        }
       }
       setSectionDialog(null);
     } catch (error) {
@@ -1620,6 +1655,23 @@ export default function BookmarksPage() {
           <form className="space-y-4" onSubmit={saveSection} aria-busy={saving}>
             <Field label="이름">
               <Input value={sectionDraft.name} onChange={(event) => setSectionDraft((draft) => ({ ...draft, name: event.target.value }))} placeholder="섹션 이름" />
+            </Field>
+            <Field label="폴더">
+              <Select value={sectionDraft.folderId} onValueChange={(folderId) => setSectionDraft((draft) => ({ ...draft, folderId }))}>
+                <SelectTrigger aria-label="폴더" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {orderedFolderNodes.map(({ folder, depth }) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      <span className="block min-w-0 truncate" style={{ paddingLeft: `${Math.max(depth - 1, 0) * 12}px` }}>
+                        {folder.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="block text-xs text-[var(--text-muted)]">폴더를 바꾸면 포함된 북마크도 함께 이동합니다.</span>
             </Field>
             <Field label="색상">
               <div className="flex flex-wrap gap-2">

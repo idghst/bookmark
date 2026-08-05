@@ -127,7 +127,7 @@ describe("bookmark API write boundary", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("forwards section PATCH color requests to GraphQL", async () => {
+  it("forwards section PATCH color and folder move requests to GraphQL", async () => {
     vi.stubEnv(
       "BOOKMARK_GRAPHQL_URL",
       "https://graphql.example.com/api/graphql"
@@ -141,7 +141,7 @@ describe("bookmark API write boundary", () => {
               id: "section-1",
               name: "수정된 섹션",
               color: "#16a34a",
-              folderId: "folder-1",
+              folderId: "folder-2",
               position: 0
             }
           }
@@ -153,14 +153,21 @@ describe("bookmark API write boundary", () => {
     const { PATCH } = await import("@/app/api/[resource]/[[...path]]/route");
 
     const response = await PATCH(
-      request("/api/sections/section-1", "PATCH", { name: "수정된 섹션", color: "#16a34a" }),
+      request("/api/sections/section-1", "PATCH", {
+        name: "수정된 섹션",
+        color: "#16a34a",
+        folderId: "folder-2"
+      }),
       context("sections", ["section-1"])
     );
 
     expect(response.status).toBe(200);
     expect(
       JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables
-    ).toEqual({ id: "section-1", input: { name: "수정된 섹션", color: "#16a34a" } });
+    ).toEqual({
+      id: "section-1",
+      input: { name: "수정된 섹션", color: "#16a34a", folderId: "folder-2" }
+    });
   });
 
   it("forwards a section color on creation", async () => {

@@ -18,7 +18,7 @@ const BOOKMARK_FIELDS = new Set([
   "sectionId"
 ]);
 const FOLDER_FIELDS = new Set(["name", "color", "parentId"]);
-const SECTION_FIELDS = new Set(["name", "color"]);
+const SECTION_FIELDS = new Set(["name", "color", "folderId"]);
 
 export class StoreError extends Error {
   constructor(message: string, public readonly status = 500) {
@@ -223,6 +223,9 @@ function validateSectionPatch(value: unknown): Partial<SectionFormData> {
       invalid("Section color must be a string or null.");
     }
     result.color = data.color as string | null;
+  }
+  if (Object.hasOwn(data, "folderId")) {
+    result.folderId = nonEmptyString(data.folderId, "Section folderId");
   }
   return result;
 }
