@@ -3,12 +3,19 @@
     "name": "Bookmark",
     "slug": "bookmark",
     "version": "0.1.0",
+    "scheme": "kr.co.idghst.idghst-bookmark",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "web": {
       "output": "static",
       "favicon": "./assets/images/icon.png"
+    },
+    "ios": {
+      "bundleIdentifier": "kr.co.idghst.idghst-bookmark"
+    },
+    "android": {
+      "package": "kr.co.idghst.idghst_bookmark"
     },
     "plugins": [
       "expo-router",

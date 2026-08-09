@@ -47,10 +47,16 @@ Finder에서는 루트의 `mobile-release.command`를 열면 작업을 선택할
 배포 APK, production Android는 Play 업로드용 AAB입니다. iOS preview 설치는 먼저
 `register-ios-device`로 기기를 등록한 뒤 Ad Hoc IPA를 새로 빌드해야 합니다.
 
-처음에는 `app.json`에서 `scheme`, `ios.bundleIdentifier`, `android.package`를 실제 소유자
-값으로 확정한 후에만 `pnpm mobile:release -- setup`을 실행하세요. `setup`만 EAS 로그인,
-프로젝트 연결, Build/Update 구성을 수행하며 실제 EAS project ID와 `updates.url`을 씁니다.
-이 작업은 원격 상태를 바꾸므로 초기화만으로 실행하지 않습니다.
+`app.json`의 앱 식별자는 다음과 같이 확정했습니다.
+
+- URL scheme: `kr.co.idghst.idghst-bookmark`
+- iOS bundle ID: `kr.co.idghst.idghst-bookmark`
+- Android package: `kr.co.idghst.idghst_bookmark`
+
+Android application ID는 하이픈을 지원하지 않아 Android package에만 `_`를 사용합니다. 실제
+배포 뒤에는 이 값을 바꾸지 마세요. `pnpm mobile:release -- setup`만 EAS 로그인, 프로젝트 연결,
+Build/Update 구성을 수행하며 실제 EAS project ID와 `updates.url`을 씁니다. 이 작업은 원격 상태를
+바꾸므로 초기화만으로 실행하지 않습니다.
 
 `update`는 Android와 iOS에 호환되는 JS·스타일·asset bundle을 함께 발행합니다. native
 dependency, plugin, app identity, runtime/native config 변경은 OTA가 아니라 새 build/install이
@@ -63,8 +69,7 @@ dependency, plugin, app identity, runtime/native config 변경은 OTA가 아니�
 공개 HTTPS origin과 인증 방식이 확정된 뒤 추가합니다. 가능한 경계는 Supabase Bearer 인증
 직접 API, 별도 인증 BFF, 또는 로그인 없는 경우 명시적인 VPN·IP allowlist·방화벽입니다.
 
-## 배포 전 결정할 값
+## 배포 전 남은 결정
 
-`ios.bundleIdentifier`, `android.package`, URL scheme, EAS project ID와 OTA 설정은 아직
-정하지 않았습니다. 실제 배포 소유자와 인증·배포 경로가 확정된 뒤 설정하고, 그때는 새 native
-build가 필요합니다.
+EAS project ID, OTA 설정, 실제 모바일 API 인증·배포 경로는 아직 정하지 않았습니다. 이 값이
+확정되거나 native config가 바뀌면 새 native build가 필요합니다.
