@@ -43,3 +43,7 @@ pnpm mobile:web
 `pnpm mobile:doctor`입니다. 현재 웹의 `BOOKMARK_GRAPHQL_URL`과
 `BOOKMARK_API_KEY`는 서버 전용이므로 모바일 앱에 복사하지 않습니다.
 모바일 API는 공개 HTTPS origin과 인증 경계가 확정된 뒤 연결합니다.
+
+릴리스 명령은 `pnpm mobile:release -- help`이며, Finder에서는
+`./mobile-release.command`를 사용할 수 있습니다. EAS login, 프로젝트 연결, 기기 등록,
+원격 build, OTA 발행은 자동 실행되지 않고 각각 명시적인 릴리스 명령에서만 수행됩니다.

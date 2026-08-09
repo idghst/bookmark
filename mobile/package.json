@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "expo-doctor": "1.20.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -38,7 +39,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "check": "expo install --check",
-    "doctor": "pnpm dlx expo-doctor"
+    "doctor": "expo-doctor",
+    "release": "./script/release.sh"
   },
   "private": true,
   "packageManager": "pnpm@11.1.0"

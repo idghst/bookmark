@@ -16,7 +16,8 @@
     "mobile:web": "pnpm --dir mobile run web",
     "mobile:typecheck": "pnpm --dir mobile run typecheck",
     "mobile:check": "pnpm --dir mobile run check",
-    "mobile:doctor": "pnpm --dir mobile run doctor"
+    "mobile:doctor": "pnpm --dir mobile run doctor",
+    "mobile:release": "./mobile/script/release.sh"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
