@@ -28,3 +28,18 @@ pnpm dev
 ```bash
 pnpm verify
 ```
+
+## 모바일 앱
+
+Expo Router 워크스페이스는 `mobile/`에 있습니다.
+
+```bash
+pnpm install
+pnpm mobile:start
+pnpm mobile:web
+```
+
+모바일 검증 명령은 `pnpm mobile:typecheck`, `pnpm mobile:check`,
+`pnpm mobile:doctor`입니다. 현재 웹의 `BOOKMARK_GRAPHQL_URL`과
+`BOOKMARK_API_KEY`는 서버 전용이므로 모바일 앱에 복사하지 않습니다.
+모바일 API는 공개 HTTPS origin과 인증 경계가 확정된 뒤 연결합니다.

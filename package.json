@@ -9,7 +9,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm typecheck && pnpm test && pnpm build",
+    "mobile:start": "pnpm --dir mobile run start",
+    "mobile:android": "pnpm --dir mobile run android",
+    "mobile:ios": "pnpm --dir mobile run ios",
+    "mobile:web": "pnpm --dir mobile run web",
+    "mobile:typecheck": "pnpm --dir mobile run typecheck",
+    "mobile:check": "pnpm --dir mobile run check",
+    "mobile:doctor": "pnpm --dir mobile run doctor"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
