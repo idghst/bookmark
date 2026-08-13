@@ -307,6 +307,33 @@ describe("bookmarkStore GraphQL transport", () => {
     });
   });
 
+  it("preserves GraphQL conflicts for optimistic mutation rollback", async () => {
+    configureGraphql();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: null,
+            errors: [
+              {
+                message: "Folder structure contains a cycle",
+                extensions: { code: "CONFLICT" }
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.reorderFolders([{ id: "folder-1", position: 0 }])).rejects.toMatchObject({
+      message: "Folder structure contains a cycle",
+      status: 409
+    });
+  });
+
   it("rejects malformed reorder data before forwarding", async () => {
     configureGraphql();
     const fetchMock = vi.fn();

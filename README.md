@@ -23,6 +23,13 @@ pnpm dev
 `.env.example`을 `.env.local`로 복사하고 GraphQL URL과 서버 간 공유 키를
 설정합니다. 브라우저에는 두 값이 노출되지 않습니다.
 
+## 운영 접근 제어
+
+개인 데이터가 제공되는 화면과 `/api/*`는 HTTP Basic 인증으로 보호됩니다.
+사용자 이름은 `bookmark`, 비밀번호는 배포 환경의 `BOOKMARK_API_KEY`입니다.
+이 값은 브라우저 번들에는 포함되지 않으며, Vercel 환경 변수의 실제 값은
+코드나 채팅에 복사하지 않습니다.
+
 ## 검증
 
 ```bash

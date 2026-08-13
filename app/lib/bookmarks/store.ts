@@ -291,7 +291,8 @@ const GRAPHQL_ERROR_STATUS: Record<string, number> = {
   BAD_USER_INPUT: 400,
   UNAUTHENTICATED: 401,
   FORBIDDEN: 403,
-  NOT_FOUND: 404
+  NOT_FOUND: 404,
+  CONFLICT: 409
 };
 
 type GraphqlPayload<T> = {

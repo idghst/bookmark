@@ -1,4 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  bookmarkAuthenticationHeaders,
+  bookmarkClientAccess
+} from "@/app/lib/bookmarks/client-auth";
 import { bookmarkStore, StoreError } from "@/app/lib/bookmarks/store";
 
 type RouteContext = {
@@ -20,6 +24,21 @@ function noRoute() {
   return NextResponse.json({ detail: "Not found." }, { status: 404 });
 }
 
+function requireBookmarkAccess(request: NextRequest) {
+  const access = bookmarkClientAccess(request);
+  if (access === "authorized") return null;
+  if (access === "configuration_missing") {
+    return NextResponse.json(
+      { detail: "Bookmark access is not configured." },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  return NextResponse.json(
+    { detail: "Authentication required." },
+    { status: 401, headers: bookmarkAuthenticationHeaders() }
+  );
+}
+
 async function routeParts(context: RouteContext) {
   const params = await context.params;
   return { resource: params.resource, path: params.path ?? [] };
@@ -33,7 +52,9 @@ async function readJson(request: NextRequest) {
   }
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
+  const denied = requireBookmarkAccess(request);
+  if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
     if (path.length > 0) return noRoute();
@@ -47,6 +68,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const denied = requireBookmarkAccess(request);
+  if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
 
@@ -102,6 +125,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const denied = requireBookmarkAccess(request);
+  if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
     const id = path[0];
@@ -118,6 +143,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const denied = requireBookmarkAccess(request);
+  if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
     const id = path[0];

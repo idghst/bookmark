@@ -1,23 +1,51 @@
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 function context(resource: string, path?: string[]) {
   return { params: Promise.resolve({ resource, path }) };
 }
 
-function request(path: string, method: string, body: unknown) {
+function clientAuthorization(password = "bookmark-api-secret") {
+  return `Basic ${Buffer.from(`bookmark:${password}`).toString("base64")}`;
+}
+
+function request(
+  path: string,
+  method: string,
+  body: unknown,
+  authorization = clientAuthorization()
+) {
   return new NextRequest(`http://localhost${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: authorization },
     body: JSON.stringify(body)
   });
 }
 
 describe("bookmark API write boundary", () => {
+  beforeEach(() => {
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.resetModules();
+  });
+
+  it("rejects unauthenticated browser requests before forwarding the server key", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { GET } = await import("@/app/api/[resource]/[[...path]]/route");
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/bookmarks"),
+      context("bookmarks")
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain("Basic");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -259,7 +287,7 @@ describe("bookmark API write boundary", () => {
     const deleteResponse = await DELETE(
       new NextRequest(
         "http://localhost/api/folders/child-folder?destination_folder_id=fallback-folder",
-        { method: "DELETE" }
+        { method: "DELETE", headers: { Authorization: clientAuthorization() } }
       ),
       context("folders", ["child-folder"])
     );
