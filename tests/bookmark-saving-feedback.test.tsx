@@ -1230,6 +1230,70 @@ describe("bookmark database saving feedback", () => {
     expect(sectionMarker).toHaveAttribute("data-section-color", updated.color);
   });
 
+  it("sends only a changed section name when its folder and color are unchanged", async () => {
+    const folder = { id: "work", name: "작업", color: "#4f46e5", position: 0 } satisfies Folder;
+    const section = {
+      id: "section-basic",
+      name: "기본",
+      color: null,
+      folderId: folder.id,
+      position: 0
+    } satisfies Section;
+    const updated = { ...section, name: "이름만 수정" } satisfies Section;
+    stubBookmarkCache([], [section], [folder]);
+    let requestBody: unknown;
+    const fetchMock = stubRemote(async (input, init) => {
+      expect(String(input)).toBe(`/api/sections/${section.id}`);
+      expect(init).toMatchObject({ method: "PATCH" });
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    render(<BookmarksPage />);
+
+    const menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    const dialog = screen.getByRole("dialog", { name: "섹션 편집" });
+    fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: updated.name } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(mutationCalls(fetchMock)).toHaveLength(1));
+    expect(requestBody).toEqual({ name: updated.name });
+    expect(await screen.findByRole("heading", { name: updated.name })).toBeInTheDocument();
+  });
+
+  it("shows a Korean retry message instead of a raw database failure", async () => {
+    const folder = { id: "work", name: "작업", color: "#4f46e5", position: 0 } satisfies Folder;
+    const section = {
+      id: "section-basic",
+      name: "기본",
+      color: null,
+      folderId: folder.id,
+      position: 0
+    } satisfies Section;
+    stubBookmarkCache([], [section], [folder]);
+    stubRemote(async () =>
+      new Response(JSON.stringify({ detail: "Database request failed" }), {
+        status: 502,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    render(<BookmarksPage />);
+
+    const menu = await openSectionMenu(section.name);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    const dialog = screen.getByRole("dialog", { name: "섹션 편집" });
+    fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: "이름만 수정" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    expect(
+      await screen.findByText("데이터베이스 요청에 실패했습니다. 잠시 후 다시 시도하세요.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Database request failed")).not.toBeInTheDocument();
+  });
+
   it("offers deletion for an empty section in its folder", async () => {
     const section = { id: "section-empty", name: "빈 섹션", folderId: "work", position: 0 } satisfies Section;
     stubBookmarkCache([], [section]);

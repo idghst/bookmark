@@ -245,6 +245,9 @@ async function apiRequest<T>(path: string, options: RequestInit = {}) {
 async function readApiError(response: Response) {
   try {
     const payload = (await response.json()) as { detail?: unknown };
+    if (payload.detail === "Database request failed") {
+      return "데이터베이스 요청에 실패했습니다. 잠시 후 다시 시도하세요.";
+    }
     if (typeof payload.detail === "string") return payload.detail;
   } catch {
     // Fall back to status text below.
@@ -817,11 +820,17 @@ export default function BookmarksPage() {
 
     const existingSection = sections.find((section) => section.id === sectionDialog.sectionId);
     const moved = existingSection?.folderId !== sectionDraft.folderId;
-    const payload = {
-      name,
-      color: sectionDraft.color,
-      ...(moved ? { folderId: sectionDraft.folderId } : {})
-    };
+    const payload: { name?: string; color?: string | null; folderId?: string } = {};
+    if (existingSection?.name !== name) payload.name = name;
+    if ((existingSection?.color ?? null) !== sectionDraft.color) {
+      payload.color = sectionDraft.color;
+    }
+    if (moved) payload.folderId = sectionDraft.folderId;
+
+    if (apiBacked && Object.keys(payload).length === 0) {
+      setSectionDialog(null);
+      return;
+    }
 
     setSectionError("");
     setSaving(true);
