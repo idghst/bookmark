@@ -12,7 +12,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+        <Stack.Screen name="add" options={{ presentation: "modal" }} />
+      </Stack>
     </SafeAreaProvider>
   );
 }

@@ -1,25 +1,316 @@
-import { StyleSheet, Text, useColorScheme, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ApiError, listBookmarks, listFolders, updateBookmark } from "@/lib/api";
+import { loadConfig, type ApiConfig } from "@/lib/config";
+import type { BookmarkItem, Folder } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
+
+type Status = "loading" | "ready" | "error" | "unconfigured";
+type Filter = "all" | "favorites" | string;
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+function errorMessageOf(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return "데이터를 불러오지 못했습니다.";
+}
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = APP_THEME[colorScheme === "dark" ? "dark" : "light"];
+  const router = useRouter();
+
+  const [status, setStatus] = useState<Status>("loading");
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const configRef = useRef<ApiConfig | null>(null);
+  const hasDataRef = useRef(false);
+
+  const load = useCallback(async () => {
+    const config = await loadConfig();
+    configRef.current = config;
+    if (!config) {
+      hasDataRef.current = false;
+      setStatus("unconfigured");
+      return;
+    }
+    if (!hasDataRef.current) setStatus("loading");
+    try {
+      const [nextBookmarks, nextFolders] = await Promise.all([
+        listBookmarks(config),
+        listFolders(config),
+      ]);
+      setBookmarks(nextBookmarks);
+      setFolders(nextFolders);
+      hasDataRef.current = true;
+      setStatus("ready");
+    } catch (error) {
+      if (!hasDataRef.current) {
+        setErrorMessage(errorMessageOf(error));
+        setStatus("error");
+      }
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  const folderById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
+
+  const visibleBookmarks = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return bookmarks.filter((bookmark) => {
+      if (filter === "favorites" && !bookmark.isFavorite) return false;
+      if (filter !== "all" && filter !== "favorites" && bookmark.folderId !== filter) return false;
+      if (!query) return true;
+      return (
+        bookmark.title.toLowerCase().includes(query) ||
+        bookmark.url.toLowerCase().includes(query) ||
+        (bookmark.description ?? "").toLowerCase().includes(query)
+      );
+    });
+  }, [bookmarks, filter, search]);
+
+  const openBookmark = useCallback(async (bookmark: BookmarkItem) => {
+    try {
+      await WebBrowser.openBrowserAsync(bookmark.url);
+    } catch {
+      Alert.alert("링크 열기 실패", bookmark.url);
+    }
+  }, []);
+
+  const toggleFavorite = useCallback((bookmark: BookmarkItem) => {
+    const config = configRef.current;
+    if (!config) return;
+    const nextValue = !bookmark.isFavorite;
+    setBookmarks((prev) =>
+      prev.map((item) => (item.id === bookmark.id ? { ...item, isFavorite: nextValue } : item)),
+    );
+    updateBookmark(config, bookmark.id, { isFavorite: nextValue }).catch((error: unknown) => {
+      setBookmarks((prev) =>
+        prev.map((item) =>
+          item.id === bookmark.id ? { ...item, isFavorite: bookmark.isFavorite } : item,
+        ),
+      );
+      Alert.alert("즐겨찾기 변경 실패", errorMessageOf(error));
+    });
+  }, []);
+
+  const renderBookmark = useCallback(
+    ({ item }: { item: BookmarkItem }) => {
+      const folder = item.folderId ? folderById.get(item.folderId) : undefined;
+      const accent = folder?.color ?? colors.primary;
+      const subtitle = [hostOf(item.url), item.description ?? ""].filter(Boolean).join(" · ");
+      return (
+        <Pressable
+          onPress={() => void openBookmark(item)}
+          style={({ pressed }) => [
+            styles.row,
+            { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <View style={[styles.rowMark, { backgroundColor: accent }]}>
+            <Text style={styles.rowMarkText}>{item.title.trim().charAt(0).toUpperCase() || "B"}</Text>
+          </View>
+          <View style={styles.rowBody}>
+            <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.text }]}>
+              {item.title}
+            </Text>
+            <Text numberOfLines={1} style={[styles.rowSubtitle, { color: colors.muted }]}>
+              {subtitle}
+            </Text>
+            {folder ? (
+              <Text numberOfLines={1} style={[styles.rowFolder, { color: colors.muted }]}>
+                {folder.name}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable
+            hitSlop={12}
+            onPress={() => toggleFavorite(item)}
+            style={styles.starButton}
+            accessibilityLabel={item.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+          >
+            <Text style={[styles.star, { color: item.isFavorite ? "#f59e0b" : colors.border }]}>
+              {item.isFavorite ? "★" : "☆"}
+            </Text>
+          </Pressable>
+        </Pressable>
+      );
+    },
+    [colors, folderById, openBookmark, toggleFavorite],
+  );
+
+  const chips: Array<{ id: Filter; label: string; color?: string | null }> = useMemo(
+    () => [
+      { id: "all", label: "전체" },
+      { id: "favorites", label: "★ 즐겨찾기" },
+      ...folders.map((folder) => ({ id: folder.id, label: folder.name, color: folder.color })),
+    ],
+    [folders],
+  );
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <View style={styles.content}>
-        <View style={[styles.mark, { backgroundColor: colors.primary }]}>
-          <Text style={styles.markText}>B</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
+      <View style={styles.header}>
+        <View style={styles.headerTitleGroup}>
+          <Text style={[styles.title, { color: colors.text }]}>Bookmark</Text>
+          {status === "ready" ? (
+            <Text style={[styles.count, { color: colors.muted }]}>{visibleBookmarks.length}개</Text>
+          ) : null}
         </View>
-        <Text style={[styles.title, { color: colors.text }]}>Bookmark</Text>
-        <Text style={[styles.description, { color: colors.muted }]}>모바일 앱 기반이 준비되었습니다.</Text>
-        <View style={[styles.status, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.statusTitle, { color: colors.text }]}>Expo Router</Text>
-          <Text style={[styles.statusText, { color: colors.muted }]}>다음 단계에서 인증된 API 경계와 북마크 기능을 연결합니다.</Text>
-        </View>
+        <Pressable
+          onPress={() => router.push("/settings")}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.settingsButton,
+            { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+          ]}
+        >
+          <Text style={[styles.settingsButtonText, { color: colors.muted }]}>설정</Text>
+        </Pressable>
       </View>
+
+      {status === "loading" ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : null}
+
+      {status === "unconfigured" ? (
+        <View style={styles.centered}>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>연결 설정이 필요합니다</Text>
+          <Text style={[styles.emptyText, { color: colors.muted }]}>
+            API 주소와 개인 키를 입력하면 북마크를 불러옵니다.
+          </Text>
+          <Pressable
+            onPress={() => router.push("/settings")}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.primaryButtonText}>연결 설정</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {status === "error" ? (
+        <View style={styles.centered}>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>불러오지 못했습니다</Text>
+          <Text style={[styles.emptyText, { color: colors.muted }]}>{errorMessage}</Text>
+          <Pressable onPress={() => void load()} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
+            <Text style={styles.primaryButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {status === "ready" ? (
+        <>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="제목, 주소, 설명 검색"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              styles.search,
+              { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+            ]}
+          />
+          <View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chips}
+            >
+              {chips.map((chip) => {
+                const active = filter === chip.id;
+                return (
+                  <Pressable
+                    key={chip.id}
+                    onPress={() => setFilter(chip.id)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: active ? colors.primary : colors.surface,
+                        borderColor: active ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    {chip.color ? (
+                      <View style={[styles.chipDot, { backgroundColor: chip.color }]} />
+                    ) : null}
+                    <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>
+                      {chip.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+          <FlatList
+            data={visibleBookmarks}
+            keyExtractor={(item) => item.id}
+            renderItem={renderBookmark}
+            contentContainerStyle={styles.list}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.muted} />
+            }
+            ListEmptyComponent={
+              <View style={styles.listEmpty}>
+                <Text style={[styles.emptyText, { color: colors.muted }]}>
+                  {search.trim() || filter !== "all" ? "조건에 맞는 북마크가 없습니다." : "북마크가 없습니다."}
+                </Text>
+              </View>
+            }
+          />
+          <Pressable
+            onPress={() => router.push("/add")}
+            accessibilityLabel="북마크 추가"
+            style={({ pressed }) => [
+              styles.fab,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Text style={styles.fabText}>＋</Text>
+          </Pressable>
+        </>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -28,47 +319,160 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 16,
-  },
-  mark: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+  header: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  markText: {
-    color: "#ffffff",
+  headerTitleGroup: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+  },
+  title: {
     fontSize: 28,
     fontWeight: "800",
   },
-  title: {
-    fontSize: 32,
+  count: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  settingsButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  settingsButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  search: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  chips: {
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  chipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  list: {
+    paddingHorizontal: 20,
+    paddingBottom: 96,
+    gap: 8,
+  },
+  listEmpty: {
+    paddingTop: 48,
+    alignItems: "center",
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 12,
+  },
+  rowMark: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowMarkText: {
+    color: "#ffffff",
+    fontSize: 17,
     fontWeight: "800",
   },
-  description: {
-    fontSize: 16,
+  rowBody: {
+    flex: 1,
+    gap: 2,
   },
-  status: {
-    width: "100%",
-    maxWidth: 420,
-    marginTop: 16,
-    gap: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    padding: 20,
-  },
-  statusTitle: {
-    fontSize: 16,
+  rowTitle: {
+    fontSize: 15,
     fontWeight: "700",
   },
-  statusText: {
+  rowSubtitle: {
+    fontSize: 13,
+  },
+  rowFolder: {
+    fontSize: 12,
+  },
+  starButton: {
+    paddingHorizontal: 4,
+  },
+  star: {
+    fontSize: 22,
+  },
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  emptyText: {
     fontSize: 14,
+    textAlign: "center",
     lineHeight: 20,
+  },
+  primaryButton: {
+    marginTop: 4,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 28,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 4,
+  },
+  fabText: {
+    color: "#ffffff",
+    fontSize: 26,
+    fontWeight: "700",
+    lineHeight: 30,
   },
 });
