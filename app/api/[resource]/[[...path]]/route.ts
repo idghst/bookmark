@@ -1,8 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  bookmarkAuthenticationHeaders,
-  bookmarkClientAccess
-} from "@/app/lib/bookmarks/client-auth";
+import { bookmarkClientAccess } from "@/app/lib/bookmarks/client-auth";
 import { bookmarkStore, StoreError } from "@/app/lib/bookmarks/store";
 
 type RouteContext = {
@@ -24,18 +21,11 @@ function noRoute() {
   return NextResponse.json({ detail: "Not found." }, { status: 404 });
 }
 
-function requireBookmarkAccess(request: NextRequest) {
-  const access = bookmarkClientAccess(request);
-  if (access === "authorized") return null;
-  if (access === "configuration_missing") {
-    return NextResponse.json(
-      { detail: "Bookmark access is not configured." },
-      { status: 503, headers: { "Cache-Control": "no-store" } }
-    );
-  }
+function requireBookmarkAccess() {
+  if (bookmarkClientAccess() === "authorized") return null;
   return NextResponse.json(
-    { detail: "Authentication required." },
-    { status: 401, headers: bookmarkAuthenticationHeaders() }
+    { detail: "Bookmark access is not configured." },
+    { status: 503, headers: { "Cache-Control": "no-store" } }
   );
 }
 
@@ -53,7 +43,7 @@ async function readJson(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  const denied = requireBookmarkAccess(request);
+  const denied = requireBookmarkAccess();
   if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
@@ -68,7 +58,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const denied = requireBookmarkAccess(request);
+  const denied = requireBookmarkAccess();
   if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
@@ -125,7 +115,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const denied = requireBookmarkAccess(request);
+  const denied = requireBookmarkAccess();
   if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);
@@ -143,7 +133,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  const denied = requireBookmarkAccess(request);
+  const denied = requireBookmarkAccess();
   if (denied) return denied;
   try {
     const { resource, path } = await routeParts(context);

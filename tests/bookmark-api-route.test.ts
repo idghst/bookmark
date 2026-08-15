@@ -33,8 +33,11 @@ describe("bookmark API write boundary", () => {
     vi.resetModules();
   });
 
-  it("rejects unauthenticated browser requests before forwarding the server key", async () => {
-    const fetchMock = vi.fn();
+  it("allows unauthenticated browser requests when access is configured", async () => {
+    vi.stubEnv("BOOKMARK_GRAPHQL_URL", "https://graphql.example.com/api/graphql");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { bookmarks: [] } }), { status: 200 })
+    );
     vi.stubGlobal("fetch", fetchMock);
     const { GET } = await import("@/app/api/[resource]/[[...path]]/route");
 
@@ -43,9 +46,8 @@ describe("bookmark API write boundary", () => {
       context("bookmarks")
     );
 
-    expect(response.status).toBe(401);
-    expect(response.headers.get("WWW-Authenticate")).toContain("Basic");
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it.each([
