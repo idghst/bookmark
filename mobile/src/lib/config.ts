@@ -10,6 +10,29 @@ export type ApiConfig = {
   key: string;
 };
 
+async function storageGet(key: string): Promise<string | null> {
+  if (await SecureStore.isAvailableAsync()) {
+    return SecureStore.getItemAsync(key);
+  }
+  return globalThis.localStorage?.getItem(key) ?? null;
+}
+
+async function storageSet(key: string, value: string): Promise<void> {
+  if (await SecureStore.isAvailableAsync()) {
+    await SecureStore.setItemAsync(key, value);
+    return;
+  }
+  globalThis.localStorage?.setItem(key, value);
+}
+
+async function storageDelete(key: string): Promise<void> {
+  if (await SecureStore.isAvailableAsync()) {
+    await SecureStore.deleteItemAsync(key);
+    return;
+  }
+  globalThis.localStorage?.removeItem(key);
+}
+
 /** http(s) origin만 허용하고 뒤쪽 슬래시를 제거합니다. 잘못된 입력이면 null. */
 export function normalizeApiUrl(input: string): string | null {
   const raw = input.trim();
@@ -27,20 +50,24 @@ export function normalizeApiUrl(input: string): string | null {
 }
 
 export async function loadConfig(): Promise<ApiConfig | null> {
-  const [url, key] = await Promise.all([
-    SecureStore.getItemAsync(URL_STORE_KEY),
-    SecureStore.getItemAsync(KEY_STORE_KEY),
-  ]);
-  if (!url || !key) return null;
-  return { url, key };
+  try {
+    const [url, key] = await Promise.all([
+      storageGet(URL_STORE_KEY),
+      storageGet(KEY_STORE_KEY),
+    ]);
+    if (!url || !key) return null;
+    return { url, key };
+  } catch {
+    return null;
+  }
 }
 
 export async function saveConfig(config: ApiConfig): Promise<void> {
-  await SecureStore.setItemAsync(URL_STORE_KEY, config.url);
-  await SecureStore.setItemAsync(KEY_STORE_KEY, config.key);
+  await storageSet(URL_STORE_KEY, config.url);
+  await storageSet(KEY_STORE_KEY, config.key);
 }
 
 export async function clearConfig(): Promise<void> {
-  await SecureStore.deleteItemAsync(URL_STORE_KEY);
-  await SecureStore.deleteItemAsync(KEY_STORE_KEY);
+  await storageDelete(URL_STORE_KEY);
+  await storageDelete(KEY_STORE_KEY);
 }

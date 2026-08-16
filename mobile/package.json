@@ -36,10 +36,10 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "start": "NODE_OPTIONS=--dns-result-order=ipv4first expo start --host lan",
+    "android": "adb reverse tcp:8081 tcp:8081 >/dev/null 2>&1 || true; NODE_OPTIONS=--dns-result-order=ipv4first expo start --android --host lan",
+    "ios": "NODE_OPTIONS=--dns-result-order=ipv4first expo start --ios --host lan",
+    "web": "NODE_OPTIONS=--dns-result-order=ipv4first expo start --web --host lan",
     "typecheck": "tsc --noEmit",
     "check": "expo install --check",
     "doctor": "expo-doctor",
