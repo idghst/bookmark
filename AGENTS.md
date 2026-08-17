@@ -14,13 +14,13 @@
 
 | 레인 | 허용 경로 | 같이 돌리면 안 되는 레인 |
 | --- | --- | --- |
-| `web-ui` | `app/(dashboard)/`의 화면·셸 컴포넌트. 기본은 `ConsoleSidebar.tsx`, `DashboardShell.tsx`, `layout.tsx`와 앞으로 분리되는 presentational 파일 | `page.tsx`를 수정하면 `web-state`와 동시에 돌리지 않는다. |
+| `web-ui` | `app/(dashboard)/bookmarks-ui/`, `ConsoleSidebar.tsx`, `DashboardShell.tsx`, `layout.tsx` | `page.tsx`를 수정하면 `web-state`와 동시에 돌리지 않는다. |
 | `web-state` | `app/(dashboard)/page.tsx` | `web-ui`, `web-lib`의 타입/헬퍼를 이 파일이 import하면 헬퍼 시그니처를 바꾸지 않는다. |
-| `web-lib` | `app/lib/bookmarks/counts.ts`, `folder-tree.ts`, `sections.ts`, `app/lib/config/`, `lib/utils.ts` | `web-bff`와 동시에 `types.ts`를 수정하지 않는다. |
-| `web-bff` | `app/lib/bookmarks/store.ts`, `app/lib/bookmarks/types.ts`, `app/lib/bookmarks/client-auth.ts`, `app/api/`, `proxy.ts`, `tests/bookmark-store.test.ts`, `tests/bookmark-api-route.test.ts`, `tests/bookmark-proxy.test.ts`, `tests/favicon-route.test.ts` | `web-lib`(타입), `mobile` |
+| `web-lib` | `app/lib/bookmarks/{cache,client-api,constants,counts,folder-tree,groups,positions,sample-data,sections,url}.ts`, `app/lib/config/`, `lib/utils.ts`, `tests/bookmark-positions.test.ts`, `tests/bookmark-url.test.ts`, `tests/bookmark-groups.test.ts` | `web-bff`와 동시에 `types.ts`를 수정하지 않는다. |
+| `web-bff` | `app/lib/bookmarks/{store,types,client-auth,graphql,validation}.ts`, `app/api/`, `proxy.ts`, `tests/bookmark-store.test.ts`, `tests/bookmark-api-route.test.ts`, `tests/bookmark-proxy.test.ts`, `tests/favicon-route.test.ts` | `web-lib`(타입), `mobile` |
 | `web-chrome` | `app/layout.tsx`, `app/globals.css`, `app/manifest.ts`, `app/not-found.tsx`, `app/components/`, `components/ui/`, `public/`, `tests/pwa.test.ts`, `tests/not-found.test.tsx`, `tests/app-entry.test.tsx` | `app-entry` 테스트는 `page.tsx`에 `export default function BookmarksPage` 문자열이 있어야 한다. |
 | `mobile` | `mobile/`, `mobile-release.command` | `web-bff`. REST 필드·경로를 여기서 임의로 바꾸지 않는다. |
-| `tooling` | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `next.config.ts`, `vitest.config.ts`, `tailwind.config.ts`, `postcss.config.js`, `components.json`, `README.md` | lockfile을 바꾸는 작업은 단독으로 한다. |
+| `tooling` | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.json`, `next.config.ts`, `vitest.config.ts`, `tailwind.config.ts`, `postcss.config.js`, `components.json`, `README.md`, `docs/graphify/`, `graphify-out/`, `.cursor/rules/graphify.mdc` | lockfile을 바꾸는 작업은 단독으로 한다. |
 
 - 이 파일(`AGENTS.md`)은 지침 변경 요청이 있을 때만 수정한다.
 - `tests/bookmark-saving-feedback.test.tsx`는 `BookmarksPage` 통합 테스트다. `web-state` 또는 `web-ui` 중 한 에이전트만 맞춘다.
@@ -70,3 +70,9 @@
 - 커밋·푸시는 이 저장소에서, 이 세션이 수정한 파일만 한다. `api-bookmark` 변경을 여기 커밋에 섞지 않는다.
 - 웹 레인 에이전트는 `mobile/`을, 모바일 레인 에이전트는 웹 앱 파일을 커밋에 넣지 않는다.
 - 시크릿, `.env.local`, 토큰, `.next`, `node_modules`를 커밋하지 않는다.
+
+[graphify]
+- 코드 탐색 전에 `graphify query "<질문>"`, `graphify path "<A>" "<B>"`, `graphify explain "<심볼>"`을 먼저 실행한다. 서브에이전트 프롬프트에도 이 규칙을 넣는다.
+- 커뮤니티 의미와 런타임 경로는 `docs/graphify/README.md`를 본다. `GRAPH_REPORT.md`의 Community N 라벨은 코드 전용 추출이라 이름이 없다.
+- 웹 페이지는 `bookmarkStore`를 직접 부르지 않는다. BFF `app/api/[resource]/[[...path]]/route.ts`만 스토어를 쓴다. directed path가 없으면 `--undirected`와 문서를 따른다.
+- 코드 구조가 바뀌면 `graphify update .`로 AST 그래프를 갱신한다. `graphify-out/cache/`는 커밋하지 않는다.

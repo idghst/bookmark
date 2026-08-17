@@ -1,26 +1,29 @@
 "use client";
 
-import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { DropdownMenu } from "radix-ui";
-import {
-  ExternalLink,
-  Globe,
-  LoaderCircle,
-  Menu,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Search,
-  Star,
-  Trash2,
-  X
-} from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { LoaderCircle, Menu, Plus, Search, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BookmarkCard } from "@/app/(dashboard)/bookmarks-ui/BookmarkCard";
+import { BookmarksLoading } from "@/app/(dashboard)/bookmarks-ui/BookmarksLoading";
+import { DatabaseProgressStatus } from "@/app/(dashboard)/bookmarks-ui/DatabaseProgressStatus";
+import { Field } from "@/app/(dashboard)/bookmarks-ui/Field";
+import { Modal } from "@/app/(dashboard)/bookmarks-ui/Modal";
+import { SectionActionsMenu } from "@/app/(dashboard)/bookmarks-ui/SectionActionsMenu";
+import { readBookmarkCache, writeBookmarkCache } from "@/app/lib/bookmarks/cache";
+import { apiRequest } from "@/app/lib/bookmarks/client-api";
+import {
+  BOOKMARK_APP_HEADER_CLASS,
+  BOOKMARK_SECTION_HEADER_CLASS,
+  BOOKMARK_TOUCH_TARGET_CLASS,
+  COLOR_FALLBACK,
+  COLOR_OPTIONS,
+  NO_SECTION,
+  ROOT_FOLDER,
+  STORAGE_KEY
+} from "@/app/lib/bookmarks/constants";
 import { countBookmarks, matchesBookmarkFilters } from "@/app/lib/bookmarks/counts";
 import { ConsoleSidebar } from "@/app/(dashboard)/ConsoleSidebar";
 import {
@@ -30,8 +33,19 @@ import {
   folderParentId,
   normalizeFolderPositions
 } from "@/app/lib/bookmarks/folder-tree";
+import { buildBookmarkGroups, visibleFoldersInSubtree } from "@/app/lib/bookmarks/groups";
+import {
+  applyPositions,
+  createId,
+  getPositionChanges,
+  moveById,
+  normalizePositions,
+  updateMatchingPositions
+} from "@/app/lib/bookmarks/positions";
+import { INITIAL_BOOKMARKS, INITIAL_FOLDERS, INITIAL_SECTIONS } from "@/app/lib/bookmarks/sample-data";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
 import type { BookmarkItem, Folder, FolderTreeItem, Section } from "@/app/lib/bookmarks/types";
+import { safeUrl } from "@/app/lib/bookmarks/url";
 import { cn } from "@/lib/utils";
 
 type BookmarkDraft = {
@@ -60,223 +74,6 @@ type DeleteTarget =
   | { type: "section"; id: string }
   | { type: "folder"; id: string };
 
-type BookmarkGroup = {
-  key: string;
-  label: string;
-  folder: Folder;
-  section: Section | null;
-  items: BookmarkItem[];
-};
-
-type BookmarkCache = {
-  version: 2;
-  apiBacked: boolean;
-  savedAt: number;
-  folders: Folder[];
-  sections: Section[];
-  bookmarks: BookmarkItem[];
-  selectedFolderId?: string;
-};
-
-const STORAGE_KEY = "bookmark-cache";
-const NO_SECTION = "__none__";
-const ROOT_FOLDER = "__root__";
-const COLOR_OPTIONS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#797979"];
-const COLOR_FALLBACK = "#797979";
-const BOOKMARK_APP_HEADER_CLASS = "min-h-[var(--dashboard-header-height)] lg:h-[var(--dashboard-header-height)]";
-const BOOKMARK_TOUCH_TARGET_CLASS = "h-10 w-10";
-const BOOKMARK_SECTION_HEADER_CLASS =
-  "flex h-12 items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-white px-3 transition";
-
-const INITIAL_FOLDERS: Folder[] = [
-  { id: "work", name: "작업", color: "#4f46e5", parentId: null, position: 0 },
-  { id: "docs", name: "문서", color: "#2166d7", parentId: null, position: 1 },
-  { id: "tools", name: "도구", color: "#16a34a", parentId: null, position: 2 },
-  { id: "reference", name: "참고", color: "#797979", parentId: "docs", position: 0 }
-];
-
-const INITIAL_SECTIONS: Section[] = [
-  { id: "daily", name: "매일 확인", folderId: "work", position: 0 },
-  { id: "deploy", name: "배포/운영", folderId: "work", position: 1 },
-  { id: "frontend", name: "Frontend", folderId: "docs", position: 0 },
-  { id: "backend", name: "Backend", folderId: "docs", position: 1 },
-  { id: "infra", name: "Infrastructure", folderId: "tools", position: 0 }
-];
-
-const INITIAL_BOOKMARKS: BookmarkItem[] = [
-  {
-    id: "bm-001",
-    title: "IDGHST Admin",
-    url: "https://github.com/idghst/idghst-admin",
-    description: "관리자 화면 저장소",
-    isFavorite: true,
-    folderId: "work",
-    sectionId: "daily",
-    position: 0
-  },
-  {
-    id: "bm-002",
-    title: "Vercel Dashboard",
-    url: "https://vercel.com/dashboard",
-    description: "배포와 로그 확인",
-    isFavorite: true,
-    folderId: "work",
-    sectionId: "deploy",
-    position: 1
-  },
-  {
-    id: "bm-003",
-    title: "Supabase Dashboard",
-    url: "https://supabase.com/dashboard",
-    description: "DB, Auth, Storage 관리",
-    isFavorite: false,
-    folderId: "tools",
-    sectionId: "infra",
-    position: 2
-  },
-  {
-    id: "bm-004",
-    title: "Next.js Docs",
-    url: "https://nextjs.org/docs",
-    description: "App Router 문서",
-    isFavorite: false,
-    folderId: "docs",
-    sectionId: "frontend",
-    position: 3
-  },
-  {
-    id: "bm-005",
-    title: "Tailwind CSS",
-    url: "https://tailwindcss.com/docs",
-    description: "유틸리티 클래스 참조",
-    isFavorite: false,
-    folderId: "docs",
-    sectionId: "frontend",
-    position: 4
-  },
-  {
-    id: "bm-006",
-    title: "Lucide Icons",
-    url: "https://lucide.dev/icons",
-    description: "아이콘 검색",
-    isFavorite: false,
-    folderId: "reference",
-    sectionId: null,
-    position: 5
-  },
-  {
-    id: "bm-007",
-    title: "Supabase Data REST API",
-    url: "https://supabase.com/docs/guides/api",
-    description: "PostgREST 기반 Data API 문서",
-    isFavorite: true,
-    folderId: "docs",
-    sectionId: "backend",
-    position: 6
-  }
-];
-
-function createId(prefix: string) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function normalizePositions<T extends { position: number }>(items: T[]) {
-  return items.map((item, position) => ({ ...item, position }));
-}
-
-function moveById<T extends { id: string; position: number }>(items: T[], activeId: string, targetId: string) {
-  const from = items.findIndex((item) => item.id === activeId);
-  const to = items.findIndex((item) => item.id === targetId);
-  if (from < 0 || to < 0 || from === to) return items;
-  const next = [...items];
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return normalizePositions(next);
-}
-
-type PositionChange = {
-  id: string;
-  previousPosition: number;
-  optimisticPosition: number;
-};
-
-function getPositionChanges<T extends { id: string; position: number }>(previous: T[], optimistic: T[]) {
-  const previousPositions = new Map(previous.map(({ id, position }) => [id, position]));
-  return optimistic.flatMap(({ id, position }) => {
-    const previousPosition = previousPositions.get(id);
-    return previousPosition === undefined || previousPosition === position
-      ? []
-      : [{ id, previousPosition, optimisticPosition: position }];
-  });
-}
-
-function updateMatchingPositions<T extends { id: string; position: number }>(
-  items: T[],
-  changes: PositionChange[],
-  direction: "apply" | "rollback"
-) {
-  const byId = new Map(changes.map((change) => [change.id, change]));
-  return items.map((item) => {
-    const change = byId.get(item.id);
-    const expectedPosition = direction === "apply" ? change?.previousPosition : change?.optimisticPosition;
-    const nextPosition = direction === "apply" ? change?.optimisticPosition : change?.previousPosition;
-    return change && item.position === expectedPosition ? { ...item, position: nextPosition } : item;
-  });
-}
-
-function applyPositions<T extends { id: string; position: number }>(
-  items: T[],
-  positions: Array<{ id: string; position: number }>
-) {
-  const byId = new Map(positions.map(({ id, position }) => [id, position]));
-  return items.map((item) => (byId.has(item.id) ? { ...item, position: byId.get(item.id)! } : item));
-}
-
-async function apiRequest<T>(path: string, options: RequestInit = {}) {
-  const headers = new Headers(options.headers);
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-
-  const response = await fetch(path, { ...options, headers });
-  if (!response.ok) throw new Error(await readApiError(response));
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
-}
-
-async function readApiError(response: Response) {
-  try {
-    const payload = (await response.json()) as { detail?: unknown };
-    if (payload.detail === "Database request failed") {
-      return "데이터베이스 요청에 실패했습니다. 잠시 후 다시 시도하세요.";
-    }
-    if (typeof payload.detail === "string") return payload.detail;
-  } catch {
-    // Fall back to status text below.
-  }
-  return response.statusText || "API 요청에 실패했습니다.";
-}
-
-function normalizeUrl(value: string) {
-  const trimmed = value.trim();
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
-
-function safeUrl(value: string) {
-  try {
-    const url = new URL(normalizeUrl(value));
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function bookmarkHost(value: string) {
-  try {
-    return new URL(normalizeUrl(value)).hostname.replace(/^www\./i, "");
-  } catch {
-    return value;
-  }
-}
-
 function emptyBookmarkDraft(folderId: string): BookmarkDraft {
   return {
     title: "",
@@ -286,15 +83,6 @@ function emptyBookmarkDraft(folderId: string): BookmarkDraft {
     sectionId: NO_SECTION,
     isFavorite: false
   };
-}
-
-function readBookmarkCache() {
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (!saved) return null;
-
-  const parsed = JSON.parse(saved) as Partial<BookmarkCache>;
-  if (!parsed.folders?.length || !Array.isArray(parsed.sections) || !Array.isArray(parsed.bookmarks)) return null;
-  return parsed;
 }
 
 export default function BookmarksPage() {
@@ -389,18 +177,15 @@ export default function BookmarksPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 2,
-        apiBacked,
-        savedAt: Date.now(),
-        folders,
-        sections,
-        bookmarks,
-        selectedFolderId
-      } satisfies BookmarkCache)
-    );
+    writeBookmarkCache({
+      version: 2,
+      apiBacked,
+      savedAt: Date.now(),
+      folders,
+      sections,
+      bookmarks,
+      selectedFolderId
+    });
   }, [apiBacked, bookmarks, folders, hydrated, sections, selectedFolderId]);
 
   async function refreshBookmarks({
@@ -457,27 +242,7 @@ export default function BookmarksPage() {
   );
   const visibleFolders = useMemo(() => {
     if (!selectedFolder) return [];
-
-    const childrenByParent = new Map<string, Folder[]>();
-    folders.forEach((folder) => {
-      const parentId = folderParentId(folder);
-      if (!parentId || !visibleFolderIds.has(folder.id) || !visibleFolderIds.has(parentId)) return;
-      childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), folder]);
-    });
-    childrenByParent.forEach((children) => {
-      children.sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ko"));
-    });
-
-    const ordered: Folder[] = [];
-    const seen = new Set<string>();
-    const visit = (folder: Folder) => {
-      if (seen.has(folder.id)) return;
-      seen.add(folder.id);
-      ordered.push(folder);
-      (childrenByParent.get(folder.id) ?? []).forEach(visit);
-    };
-    visit(selectedFolder);
-    return ordered;
+    return visibleFoldersInSubtree(folders, selectedFolder, visibleFolderIds);
   }, [folders, selectedFolder, visibleFolderIds]);
 
   useEffect(() => {
@@ -497,53 +262,10 @@ export default function BookmarksPage() {
 
   const hasActiveFilter = favoriteOnly || query.trim().length > 0;
 
-  const groups = useMemo<BookmarkGroup[]>(() => {
-    const itemsByScope = new Map<string, BookmarkItem[]>();
-    const scopeKey = (folderId: string, sectionId: string | null) => `${folderId}:${sectionId ?? NO_SECTION}`;
-    filtered.forEach((bookmark) => {
-      if (!bookmark.folderId) return;
-      const key = scopeKey(bookmark.folderId, bookmark.sectionId);
-      itemsByScope.set(key, [...(itemsByScope.get(key) ?? []), bookmark]);
-    });
-
-    const showFolderName = visibleFolders.length > 1;
-    return visibleFolders.flatMap((folder) => {
-      const folderSections = sections
-        .filter((section) => section.folderId === folder.id)
-        .sort((a, b) => a.position - b.position);
-      const sectionIds = new Set(folderSections.map((section) => section.id));
-      const sectionGroups = folderSections.flatMap((section) => {
-        const items = itemsByScope.get(scopeKey(folder.id, section.id)) ?? [];
-        return items.length || !hasActiveFilter
-          ? [
-              {
-                key: scopeKey(folder.id, section.id),
-                label: showFolderName ? `${folder.name} · ${section.name}` : section.name,
-                folder,
-                section,
-                items
-              }
-            ]
-          : [];
-      });
-      const unassigned = filtered.filter(
-        (bookmark) =>
-          bookmark.folderId === folder.id && (bookmark.sectionId === null || !sectionIds.has(bookmark.sectionId))
-      );
-      return unassigned.length
-        ? [
-            ...sectionGroups,
-            {
-              key: scopeKey(folder.id, null),
-              label: showFolderName ? `${folder.name} · 섹션 없음` : "섹션 없음",
-              folder,
-              section: null,
-              items: unassigned
-            }
-          ]
-        : sectionGroups;
-    });
-  }, [filtered, hasActiveFilter, sections, visibleFolders]);
+  const groups = useMemo(
+    () => buildBookmarkGroups(filtered, visibleFolders, sections, hasActiveFilter),
+    [filtered, hasActiveFilter, sections, visibleFolders]
+  );
 
   const currentFolderBookmarks = bookmarks.filter((bookmark) => visibleFolderIds.has(bookmark.folderId ?? ""));
   const currentFavoriteCount = countBookmarks(currentFolderBookmarks, { favoriteOnly: true });
@@ -1760,397 +1482,3 @@ export default function BookmarksPage() {
   );
 }
 
-function BookmarksLoading() {
-  return (
-    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white">
-      <aside className="hidden w-[20rem] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F8FAFC] xl:w-[22rem] lg:flex">
-        <div className={cn("flex shrink-0 flex-col justify-center border-b border-[var(--border-subtle)] px-4 py-3", BOOKMARK_APP_HEADER_CLASS)}>
-          <div className="h-5 w-24 rounded bg-slate-200" />
-          <div className="mt-2 h-4 w-32 rounded bg-slate-100" />
-        </div>
-        <div className="space-y-2 p-3">
-          {Array.from({ length: 10 }).map((_, index) => (
-            <div key={index} className="h-10 rounded border border-[var(--border-subtle)] bg-white" />
-          ))}
-        </div>
-        <div className="mt-auto border-t border-[var(--border-subtle)] p-4">
-          <div className="h-12 rounded bg-slate-100" />
-        </div>
-      </aside>
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header
-          className={cn(
-            "grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-white px-4 md:px-5",
-            BOOKMARK_APP_HEADER_CLASS
-          )}
-        >
-          <div className="hidden h-5 w-28 rounded bg-slate-200 md:block" />
-          <div className="h-9 min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[#F8FAFC]" />
-          <div className="h-7 w-24 rounded bg-slate-100" />
-        </header>
-        <main className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
-          <div className="mx-auto w-full max-w-[1480px] space-y-5 p-4 md:p-6 lg:p-8">
-            <div className={BOOKMARK_SECTION_HEADER_CLASS}>
-              <span className="h-7 w-1 bg-[var(--color-brand)]" />
-              <div className="h-7 w-32 rounded bg-slate-200" />
-              <div className="ml-auto h-7 w-8 rounded border border-[var(--border-subtle)] bg-[#F8FAFC]" />
-            </div>
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="h-[104px] rounded-lg border border-[var(--border-subtle)] bg-white" />
-            ))}
-          </div>
-        </main>
-      </section>
-    </div>
-  );
-}
-
-function BookmarkCard({
-  bookmark,
-  dragging,
-  dragOver,
-  mutationsDisabled,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop,
-  onEdit,
-  onDelete,
-  onToggleFavorite
-}: {
-  bookmark: BookmarkItem;
-  dragging: boolean;
-  dragOver: boolean;
-  mutationsDisabled: boolean;
-  onDragStart: (bookmarkId: string) => void;
-  onDragEnd: () => void;
-  onDragOver: (bookmarkId: string) => void;
-  onDrop: (bookmarkId: string) => void;
-  onEdit: (bookmark: BookmarkItem) => void;
-  onDelete: (bookmark: BookmarkItem) => void;
-  onToggleFavorite: (id: string) => void;
-}) {
-  const openBookmark = () => window.open(bookmark.url, "_blank", "noopener,noreferrer");
-
-  return (
-    <Card
-      className={cn(
-        "group relative min-h-[120px] rounded-lg border border-[var(--border-subtle)] bg-white py-3 shadow-none transition",
-        dragging ? "cursor-grabbing opacity-60" : "cursor-grab hover:border-[var(--color-brand)] hover:bg-white",
-        dragOver && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25"
-      )}
-      draggable={!mutationsDisabled}
-      role="link"
-      tabIndex={0}
-      onClick={openBookmark}
-      onDragStart={(event) => {
-        event.stopPropagation();
-        onDragStart(bookmark.id);
-      }}
-      onDragEnd={onDragEnd}
-      onDragOver={(event) => {
-        event.preventDefault();
-        onDragOver(bookmark.id);
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onDrop(bookmark.id);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") openBookmark();
-      }}
-    >
-      <CardHeader className="px-4 pb-0">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--border-subtle)] bg-[#F8FAFC]">
-            <Favicon url={bookmark.url} />
-          </div>
-          <div className="min-w-0 w-0 flex-1 space-y-1">
-            <span className="block truncate text-base font-bold text-[var(--text-heading)]">{bookmark.title}</span>
-            <p aria-label={bookmark.url} className="line-clamp-1 break-all text-xs leading-5 text-[var(--text-muted)]">
-              <span aria-hidden="true">{bookmarkHost(bookmark.url)}</span>
-            </p>
-          </div>
-          <BookmarkActionsMenu
-            bookmark={bookmark}
-            mutationsDisabled={mutationsDisabled}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col space-y-2 px-4 pt-1">
-        {bookmark.description ? <p className="line-clamp-1 text-xs leading-5 text-[var(--text-muted)]">{bookmark.description}</p> : null}
-        <div className="mt-auto flex justify-end">
-          <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              disabled={mutationsDisabled}
-              className="h-10 w-10 border border-[var(--border-subtle)] bg-[#F8FAFC]"
-              onClick={() => onToggleFavorite(bookmark.id)}
-            >
-              <Star className={cn("h-4 w-4", bookmark.isFavorite ? "fill-[var(--color-brand)] text-[var(--color-brand)]" : "text-[var(--text-muted)]")} />
-              <span className="sr-only">{bookmark.title} 즐겨찾기</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="h-10 w-10 border border-[var(--border-subtle)] bg-[#F8FAFC]"
-              onClick={openBookmark}
-            >
-              <ExternalLink className="h-4 w-4" />
-              <span className="sr-only">{bookmark.title} 열기</span>
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SectionActionsMenu({
-  section,
-  folder,
-  label,
-  mutationsDisabled,
-  onAddBookmark,
-  onEdit,
-  onDelete
-}: {
-  section: Section;
-  folder: Folder;
-  label: string;
-  mutationsDisabled: boolean;
-  onAddBookmark: (section: Section, folder: Folder) => void;
-  onEdit: (section: Section) => void;
-  onDelete: (section: Section) => void;
-}) {
-  return (
-    <div
-      className="-mr-1 shrink-0"
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
-      onDragStart={(event) => event.stopPropagation()}
-    >
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            disabled={mutationsDisabled}
-            aria-label={`${label} 섹션 메뉴`}
-            className="flex h-8 w-8 items-center justify-center rounded text-[var(--text-muted)] transition hover:bg-[#F8FAFC] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            aria-label={`${label} 섹션 메뉴`}
-            side="bottom"
-            align="end"
-            sideOffset={6}
-            className="z-[80] min-w-36 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg outline-none"
-          >
-            <DropdownMenu.Item
-              onSelect={() => onAddBookmark(section, folder)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
-            >
-              <Plus className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-              북마크 추가
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={() => onEdit(section)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
-            >
-              <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-              편집
-            </DropdownMenu.Item>
-            <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-            <DropdownMenu.Item
-              onSelect={() => onDelete(section)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-destructive outline-none hover:bg-red-50 focus:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              삭제
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
-  );
-}
-
-function BookmarkActionsMenu({
-  bookmark,
-  mutationsDisabled,
-  onEdit,
-  onDelete
-}: {
-  bookmark: BookmarkItem;
-  mutationsDisabled: boolean;
-  onEdit: (bookmark: BookmarkItem) => void;
-  onDelete: (bookmark: BookmarkItem) => void;
-}) {
-  return (
-    <div
-      className="-mr-1 -mt-1 shrink-0"
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
-    >
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            disabled={mutationsDisabled}
-            aria-label={`${bookmark.title} 메뉴`}
-            className="flex h-8 w-8 items-center justify-center rounded text-[var(--text-muted)] transition hover:bg-[#F8FAFC] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            aria-label={`${bookmark.title} 메뉴`}
-            side="bottom"
-            align="end"
-            sideOffset={6}
-            className="z-[80] min-w-32 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg outline-none"
-          >
-            <DropdownMenu.Item
-              onSelect={() => onEdit(bookmark)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
-            >
-              <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-              편집
-            </DropdownMenu.Item>
-            <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-            <DropdownMenu.Item
-              onSelect={() => onDelete(bookmark)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-destructive outline-none hover:bg-red-50 focus:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              삭제
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
-  );
-}
-
-function Favicon({ url }: { url: string }) {
-  const [failed, setFailed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-    setLoaded(false);
-  }, [url]);
-
-  if (!safeUrl(url) || failed) {
-    return <Globe className="h-4 w-4 text-[var(--text-muted)]" />;
-  }
-
-  return (
-    <span className="relative flex h-[18px] w-[18px] items-center justify-center">
-      {!loaded ? <Globe className="h-4 w-4 text-[var(--text-muted)]" /> : null}
-      <img
-        src={`/api/favicon?url=${encodeURIComponent(url)}&size=32`}
-        alt=""
-        width={18}
-        height={18}
-        draggable={false}
-        className={cn("absolute inset-0 h-[18px] w-[18px] rounded-sm", loaded ? "opacity-100" : "opacity-0")}
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
-      />
-    </span>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-  onConfirm,
-  closeDisabled = false
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-  onConfirm?: () => void;
-  closeDisabled?: boolean;
-}) {
-  const titleId = useId();
-  const modalId = useId();
-
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      const modals = document.querySelectorAll<HTMLElement>("[data-bookmark-modal]");
-      const topmostModal = modals.item(modals.length - 1);
-      if (event.defaultPrevented || topmostModal?.dataset.bookmarkModal !== modalId) return;
-
-      if (event.key === "Escape" && !closeDisabled) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        onClose();
-        return;
-      }
-      if (event.key === "Enter" && onConfirm && !closeDisabled) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        onConfirm();
-      }
-    }
-
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [closeDisabled, modalId, onClose, onConfirm]);
-
-  return createPortal(
-    <div
-      data-bookmark-modal={modalId}
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/35 sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-    >
-      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg sm:p-5">
-        <div className="mb-4 flex items-center gap-3">
-          <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--text-heading)]">
-            {title}
-          </h2>
-          <button type="button" disabled={closeDisabled} className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-40" onClick={onClose}>
-            <X className="h-5 w-5" />
-            <span className="sr-only">닫기</span>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-function DatabaseProgressStatus({ title }: { title: string }) {
-  return (
-    <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-[var(--color-brand)]/30 bg-indigo-50 px-4 py-3">
-      <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-[var(--color-brand)]" />
-      <div className="min-w-0">
-        <p className="truncate text-sm font-bold text-[var(--text-heading)]">{title}</p>
-        <p className="mt-0.5 text-xs text-[var(--text-muted)]">완료될 때까지 잠시 기다려 주세요.</p>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-2">
-      <span className="text-sm font-bold text-[var(--text-heading)]">{label}</span>
-      {children}
-    </label>
-  );
-}
