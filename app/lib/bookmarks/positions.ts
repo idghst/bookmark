@@ -1,0 +1,55 @@
+export function createId(prefix: string) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function normalizePositions<T extends { position: number }>(items: T[]) {
+  return items.map((item, position) => ({ ...item, position }));
+}
+
+export function moveById<T extends { id: string; position: number }>(items: T[], activeId: string, targetId: string) {
+  const from = items.findIndex((item) => item.id === activeId);
+  const to = items.findIndex((item) => item.id === targetId);
+  if (from < 0 || to < 0 || from === to) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return normalizePositions(next);
+}
+
+export type PositionChange = {
+  id: string;
+  previousPosition: number;
+  optimisticPosition: number;
+};
+
+export function getPositionChanges<T extends { id: string; position: number }>(previous: T[], optimistic: T[]) {
+  const previousPositions = new Map(previous.map(({ id, position }) => [id, position]));
+  return optimistic.flatMap(({ id, position }) => {
+    const previousPosition = previousPositions.get(id);
+    return previousPosition === undefined || previousPosition === position
+      ? []
+      : [{ id, previousPosition, optimisticPosition: position }];
+  });
+}
+
+export function updateMatchingPositions<T extends { id: string; position: number }>(
+  items: T[],
+  changes: PositionChange[],
+  direction: "apply" | "rollback"
+) {
+  const byId = new Map(changes.map((change) => [change.id, change]));
+  return items.map((item) => {
+    const change = byId.get(item.id);
+    const expectedPosition = direction === "apply" ? change?.previousPosition : change?.optimisticPosition;
+    const nextPosition = direction === "apply" ? change?.optimisticPosition : change?.previousPosition;
+    return change && item.position === expectedPosition ? { ...item, position: nextPosition } : item;
+  });
+}
+
+export function applyPositions<T extends { id: string; position: number }>(
+  items: T[],
+  positions: Array<{ id: string; position: number }>
+) {
+  const byId = new Map(positions.map(({ id, position }) => [id, position]));
+  return items.map((item) => (byId.has(item.id) ? { ...item, position: byId.get(item.id)! } : item));
+}
