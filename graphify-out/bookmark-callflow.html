@@ -1,0 +1,2658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bookmark — Complete Call Flow &amp; Architecture Documentation</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #0f172a; --surface: #1e293b; --border: #334155;
+  --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+  --warn: #fbbf24; --err: #f87171; --ok: #34d399;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+.container { max-width: 1200px; margin: 0 auto; padding: 40px 24px; }
+h1 { font-size: 2.4rem; margin-bottom: 8px; background: linear-gradient(135deg, var(--accent), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+h2 { font-size: 1.7rem; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+h3 { font-size: 1.25rem; margin: 32px 0 12px; color: var(--accent); }
+h4 { font-size: 1.05rem; margin: 20px 0 8px; color: var(--warn); }
+p { margin: 8px 0; color: var(--muted); }
+.subtitle { color: var(--muted); font-size: 1.1rem; margin-bottom: 32px; }
+.mermaid { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin: 20px 0; overflow-x: auto; position: relative; }
+.mermaid.is-enhanced { padding: 0; overflow: hidden; min-height: 260px; }
+.mermaid-viewport { padding: 54px 24px 24px; overflow: hidden; cursor: grab; touch-action: none; min-height: 260px; }
+.mermaid-viewport.is-dragging { cursor: grabbing; }
+.mermaid-viewport svg { max-width: none !important; height: auto; transform-origin: 0 0; transition: transform 120ms ease; }
+.mermaid-toolbar { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; align-items: center; gap: 6px; padding: 6px; background: rgba(15,23,42,0.92); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.28); }
+.mermaid-toolbar button, .mermaid-toolbar .zoom-level { height: 28px; min-width: 32px; border: 1px solid var(--border); border-radius: 6px; background: #1e293b; color: var(--text); font: 600 0.78rem system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; }
+.mermaid-toolbar button { cursor: pointer; }
+.mermaid-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+.mermaid-toolbar .zoom-level { min-width: 52px; color: var(--muted); background: transparent; }
+.call-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92rem; }
+.call-table th { background: #1a2744; color: var(--accent); text-align: left; padding: 10px 14px; border: 1px solid var(--border); }
+.call-table td { padding: 8px 14px; border: 1px solid var(--border); vertical-align: top; }
+.call-table tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+.tag-async { background: #7c3aed33; color: #a78bfa; }
+.tag-class { background: #05966933; color: var(--ok); }
+.tag-func { background: #2563eb33; color: var(--accent); }
+.tag-cmd { background: #d9770633; color: var(--warn); }
+.tag-endpoint { background: #dc262633; color: var(--err); }
+.tag-hook { background: #db277733; color: #f472b6; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin: 16px 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin: 16px 0; }
+.arrow-chain { font-family: 'Fira Code', monospace; font-size: 0.85rem; color: var(--accent); padding: 10px; background: rgba(56,189,248,0.06); border-radius: 6px; }
+code { font-family: 'Fira Code', 'Cascadia Code', monospace; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 3px; font-size: 0.88em; }
+ul, ol { margin: 8px 0 8px 24px; color: var(--muted); }
+li { margin: 4px 0; }
+a { color: var(--accent); }
+hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+.nav { position: sticky; top: 0; background: var(--bg); z-index: 10; padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.9rem; }
+.nav a { text-decoration: none; }
+.nav a:hover { text-decoration: underline; }
+@media (max-width: 768px) { .container { padding: 16px; } h1 { font-size: 1.8rem; } }
+
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>bookmark — Complete Call Flow &amp; Architecture Documentation</h1>
+<p class="subtitle">Generated from graphify knowledge graph: 566 nodes, 1028 edges, 46 communities. Commit: f92305d</p>
+
+<div class="nav">
+    <a href="#overview">Architecture Overview</a>
+    <a href="#extract-pipeline">Extraction Pipeline</a>
+    <a href="#build-graph">Graph Build</a>
+    <a href="#ingest-cache-update">Ingestion &amp; Updates</a>
+    <a href="#serve-api">Serving API</a>
+    <a href="#security-global">Security &amp; Global Graph</a>
+    <a href="#tests-fixtures">Tests &amp; Fixtures</a>
+    <a href="#dashboard-app-dashboardshelltsx">Dashboard App Dashboardshelltsx</a>
+    <a href="#nextconfigts-nextconfig">Nextconfigts Nextconfig</a>
+    <a href="#next-envdts-note">Next Envdts Note</a>
+    <a href="#swjs-public-precache">Swjs Public Precache</a>
+    <a href="#tailwindconfigts-config">Tailwindconfigts Config</a>
+    <a href="#postcssconfigjs">Postcssconfigjs</a>
+    <a href="#vitestconfigts">Vitestconfigts</a>
+</div>
+
+<!-- ====== Architecture Overview ====== -->
+<h2 id="overview">1. Architecture Overview</h2>
+
+<div class="mermaid">
+
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    EXTRACT_PIPELINE_5F350230("Extraction Pipeline<br/><small>42 nodes</small>")
+    class EXTRACT_PIPELINE_5F350230 module;
+    BUILD_GRAPH_321CBB04("Graph Build<br/><small>226 nodes</small>")
+    class BUILD_GRAPH_321CBB04 module;
+    INGEST_CACHE_UPDATE_FF457338("Ingestion &amp; Updates<br/><small>102 nodes</small>")
+    class INGEST_CACHE_UPDATE_FF457338 module;
+    SERVE_API_35EC8E86("Serving API<br/><small>72 nodes</small>")
+    class SERVE_API_35EC8E86 module;
+    SECURITY_GLOBAL_5B9C6A04("Security &amp; Global Graph<br/><small>2 nodes</small>")
+    class SECURITY_GLOBAL_5B9C6A04 module;
+    TESTS_FIXTURES_B84B1DCC("Tests &amp; Fixtures<br/><small>108 nodes</small>")
+    class TESTS_FIXTURES_B84B1DCC module;
+    DASHBOARD_APP_DASHBOARDSHELLTSX_7C69D1A4("Dashboard App Dashboardshelltsx<br/><small>4 nodes</small>")
+    class DASHBOARD_APP_DASHBOARDSHELLTSX_7C69D1A4 module;
+    NEXTCONFIGTS_NEXTCONFIG_7AF76EF6("Nextconfigts Nextconfig<br/><small>2 nodes</small>")
+    class NEXTCONFIGTS_NEXTCONFIG_7AF76EF6 module;
+    NEXT_ENVDTS_NOTE_30B870CE("Next Envdts Note<br/><small>2 nodes</small>")
+    class NEXT_ENVDTS_NOTE_30B870CE module;
+    SWJS_PUBLIC_PRECACHE_A2604342("Swjs Public Precache<br/><small>2 nodes</small>")
+    class SWJS_PUBLIC_PRECACHE_A2604342 module;
+    TAILWINDCONFIGTS_CONFIG_ABF8DEB1("Tailwindconfigts Config<br/><small>2 nodes</small>")
+    class TAILWINDCONFIGTS_CONFIG_ABF8DEB1 module;
+    POSTCSSCONFIGJS_C9184DB0("Postcssconfigjs<br/><small>1 nodes</small>")
+    class POSTCSSCONFIGJS_C9184DB0 module;
+    VITESTCONFIGTS_BBDC24AE("Vitestconfigts<br/><small>1 nodes</small>")
+    class VITESTCONFIGTS_BBDC24AE module;
+    TESTS_FIXTURES_B84B1DCC -->|imports x25| INGEST_CACHE_UPDATE_FF457338
+    TESTS_FIXTURES_B84B1DCC -->|imports x24| EXTRACT_PIPELINE_5F350230
+    EXTRACT_PIPELINE_5F350230 -->|calls x11| TESTS_FIXTURES_B84B1DCC
+    INGEST_CACHE_UPDATE_FF457338 -->|imports x11| TESTS_FIXTURES_B84B1DCC
+    INGEST_CACHE_UPDATE_FF457338 -->|imports x3| EXTRACT_PIPELINE_5F350230
+    EXTRACT_PIPELINE_5F350230 -->|calls x2| INGEST_CACHE_UPDATE_FF457338
+    SERVE_API_35EC8E86 -->|imports x2| TESTS_FIXTURES_B84B1DCC
+    BUILD_GRAPH_321CBB04 -->|contains x2| SERVE_API_35EC8E86
+    BUILD_GRAPH_321CBB04 -->|contains| SECURITY_GLOBAL_5B9C6A04
+    SERVE_API_35EC8E86 -->|imports| BUILD_GRAPH_321CBB04
+    TESTS_FIXTURES_B84B1DCC -->|contains| SERVE_API_35EC8E86
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h4>Architecture Layers</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>Layer</th><th>Nodes</th><th>Communities</th></tr>
+      <tr><td>Extraction Pipeline</td><td>42</td><td><code>1</code></td></tr><tr><td>Graph Build</td><td>226</td><td><code>2, 5, 7, 9, 12, 13, 14, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36</code></td></tr><tr><td>Ingestion &amp; Updates</td><td>102</td><td><code>4, 6, 10</code></td></tr><tr><td>Serving API</td><td>72</td><td><code>3, 11, 15</code></td></tr><tr><td>Security &amp; Global Graph</td><td>2</td><td><code>33</code></td></tr><tr><td>Tests &amp; Fixtures</td><td>108</td><td><code>0, 8, 18, 42, 43, 44</code></td></tr><tr><td>Dashboard App Dashboardshelltsx</td><td>4</td><td><code>17</code></td></tr><tr><td>Nextconfigts Nextconfig</td><td>2</td><td><code>37</code></td></tr><tr><td>Next Envdts Note</td><td>2</td><td><code>38</code></td></tr><tr><td>Swjs Public Precache</td><td>2</td><td><code>39</code></td></tr><tr><td>Tailwindconfigts Config</td><td>2</td><td><code>40</code></td></tr><tr><td>Postcssconfigjs</td><td>1</td><td><code>41</code></td></tr><tr><td>Vitestconfigts</td><td>1</td><td><code>45</code></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Core Flow</h4>
+    <div class="arrow-chain">Dashboard App Dashboardshelltsx -&gt; Extraction Pipeline -&gt; Tests &amp; Fixtures -&gt; Ingestion &amp; Updates -&gt; Graph Build -&gt; Serving API -&gt; Security &amp; Global Graph</div>
+  </div>
+</div>
+<div class="grid">
+  <div class="card">
+    <h4>Graph Report Highlights</h4>
+    <ul>
+      <li>566 nodes · 1028 edges · 46 communities (22 shown, 24 thin omitted)</li>
+      <li>Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)</li>
+      <li>Token cost: 0 input · 0 output</li>
+      <li>1. `cn()` - 37 edges</li>
+      <li>2. `BookmarksPage()` - 30 edges</li>
+      <li>3. `expo` - 17 edges</li>
+    </ul>
+  </div>
+</div>
+<hr>
+<!-- ====== 2. Extraction Pipeline ====== -->
+<h2 id="extract-pipeline">2. Extraction Pipeline</h2>
+<p>Extraction Pipeline groups implementation around app, dashboard, pagetsx, bookmarks, mostly in app/(dashboard)/page.tsx, lib/bookmarks/positions.ts, lib/bookmarks/folder-tree.ts. This section covers 42 nodes and 90 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Extraction Pipeline (42 nodes, 90 edges)
+    subgraph extract_pipeline_app_dashboard_page_tsx_f9d83f35["app/(dashboard)/page.tsx"]
+        app_dashboard_page_bookmarkspage_dropfolder_3a6ae3af("dropFolder()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_dropbookmark_7f8aae04("dropBookmark()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_dropsection_98572a3e("dropSection()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_confirmdelete_63409eca("confirmDelete()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_savefolder_83df79f8("saveFolder()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_640289b9("BookmarksPage()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_emptybookmarkdraft_1f8cfadf("emptyBookmarkDraft()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_refreshbookmark_468f9fca("refreshBookmarks()<br/><small>app/(dashboard)/page.tsx</small>")
+        app_dashboard_page_bookmarkspage_createsectionfr_1e279d7f("createSectionFromBookmarkDialog()<br/><small>app/(dashboard)/page.tsx</small>")
+    end
+    subgraph extract_pipeline_app_dashboard_ConsoleSidebar_ts_e562f96d["app/(dashboard)/ConsoleSidebar.tsx"]
+        app_dashboard_consolesidebar_foldertree_db64e4ea("FolderTree()<br/><small>app/(dashboard)/ConsoleSidebar.tsx</small>")
+        app_dashboard_consolesidebar_foldertree_handletr_881ef925("handleTreeKeyDown()<br/><small>app/(dashboard)/ConsoleSidebar.tsx</small>")
+        app_dashboard_consolesidebar_foldertree_togglefo_fa01171d("toggleFolder()<br/><small>app/(dashboard)/ConsoleSidebar.tsx</small>")
+    end
+    subgraph extract_pipeline_lib_bookmarks_folder_tree_ts_747c4f64["lib/bookmarks/folder-tree.ts"]
+        app_lib_bookmarks_folder_tree_buildfoldertree_fdced7bd("buildFolderTree()<br/><small>lib/bookmarks/folder-tree.ts</small>")
+        app_lib_bookmarks_folder_tree_folderparentid_8329cd68("folderParentId()<br/><small>lib/bookmarks/folder-tree.ts</small>")
+        app_lib_bookmarks_folder_tree_normalizefolderpos_223034a6("normalizeFolderPositions()<br/><small>lib/bookmarks/folder-tree.ts</small>")
+    end
+    subgraph extract_pipeline_lib_bookmarks_positions_ts_93f19c41["lib/bookmarks/positions.ts"]
+        app_lib_bookmarks_positions_normalizepositions_26cc926c("normalizePositions()<br/><small>lib/bookmarks/positions.ts</small>")
+        app_lib_bookmarks_positions_createid_6df851bd("createId()<br/><small>lib/bookmarks/positions.ts</small>")
+    end
+    tests_bookmark_positions_test_bcfd4e26("bookmark-positions.test.ts")
+    app_dashboard_consolesidebar_foldertree_db64e4ea -->|calls| app_lib_bookmarks_folder_tree_buildfoldertree_fdced7bd
+    app_dashboard_consolesidebar_foldertree_db64e4ea -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    app_dashboard_consolesidebar_foldertree_handletr_881ef925 -->|calls| app_dashboard_consolesidebar_foldertree_togglefo_fa01171d
+    app_dashboard_consolesidebar_foldertree_handletr_881ef925 -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    app_dashboard_page_bookmarkspage_640289b9 -->|calls| app_dashboard_page_emptybookmarkdraft_1f8cfadf
+    app_dashboard_page_bookmarkspage_confirmdelete_63409eca -->|calls| app_lib_bookmarks_positions_normalizepositions_26cc926c
+    app_dashboard_page_bookmarkspage_confirmdelete_63409eca -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    app_dashboard_page_bookmarkspage_confirmdelete_63409eca -->|calls| app_lib_bookmarks_folder_tree_normalizefolderpos_223034a6
+    app_dashboard_page_bookmarkspage_confirmdelete_63409eca -->|calls| app_dashboard_page_bookmarkspage_refreshbookmark_468f9fca
+    app_dashboard_page_bookmarkspage_createsectionfr_1e279d7f -->|calls| app_lib_bookmarks_positions_createid_6df851bd
+    app_dashboard_page_bookmarkspage_dropfolder_3a6ae3af -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    app_dashboard_page_bookmarkspage_savefolder_83df79f8 -->|calls| app_lib_bookmarks_folder_tree_normalizefolderpos_223034a6
+    app_dashboard_page_bookmarkspage_savefolder_83df79f8 -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    app_dashboard_page_bookmarkspage_savefolder_83df79f8 -->|calls| app_lib_bookmarks_positions_createid_6df851bd
+    app_lib_bookmarks_folder_tree_buildfoldertree_fdced7bd -->|calls| app_lib_bookmarks_folder_tree_normalizefolderpos_223034a6
+    app_lib_bookmarks_folder_tree_buildfoldertree_fdced7bd -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    app_lib_bookmarks_folder_tree_normalizefolderpos_223034a6 -->|calls| app_lib_bookmarks_folder_tree_folderparentid_8329cd68
+    tests_bookmark_positions_test_bcfd4e26 -->|imports| app_lib_bookmarks_positions_normalizepositions_26cc926c
+    %% Omitted for readability: 24 nodes, 0 edges
+    class app_dashboard_page_bookmarkspage_dropfolder_3a6ae3af ui;
+    class app_dashboard_page_bookmarkspage_dropbookmark_7f8aae04 ui;
+    class app_dashboard_page_bookmarkspage_dropsection_98572a3e ui;
+    class app_dashboard_page_bookmarkspage_confirmdelete_63409eca ui;
+    class app_dashboard_page_bookmarkspage_savefolder_83df79f8 ui;
+    class app_dashboard_page_bookmarkspage_640289b9 ui;
+    class app_dashboard_page_emptybookmarkdraft_1f8cfadf ui;
+    class app_dashboard_page_bookmarkspage_refreshbookmark_468f9fca ui;
+    class app_dashboard_page_bookmarkspage_createsectionfr_1e279d7f ui;
+    class app_dashboard_consolesidebar_foldertree_db64e4ea ui;
+    class app_dashboard_consolesidebar_foldertree_handletr_881ef925 ui;
+    class app_dashboard_consolesidebar_foldertree_togglefo_fa01171d ui;
+    class app_lib_bookmarks_folder_tree_buildfoldertree_fdced7bd function;
+    class app_lib_bookmarks_folder_tree_folderparentid_8329cd68 function;
+    class app_lib_bookmarks_folder_tree_normalizefolderpos_223034a6 function;
+    class app_lib_bookmarks_positions_normalizepositions_26cc926c function;
+    class app_lib_bookmarks_positions_createid_6df851bd function;
+    class tests_bookmark_positions_test_bcfd4e26 test;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>PositionChange</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>PositionChange node in lib/bookmarks/positions.ts.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>FolderTree()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>buildFolderTree()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>FolderTree() node in app/(dashboard)/ConsoleSidebar.tsx.</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><code>expandFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>expandFolder() node in app/(dashboard)/ConsoleSidebar.tsx.</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><code>handleTreeKeyDown()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>toggleFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td>handleTreeKeyDown() node in app/(dashboard)/ConsoleSidebar.tsx.</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><code>toggleFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>handleTreeKeyDown()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>toggleFolder() node in app/(dashboard)/ConsoleSidebar.tsx.</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>bookmark-saving-feedback.test.tsx</code><br><small style="color:var(--muted)">tests/bookmark-saving-feedback.test.tsx</small></td>
+  <td><code>buildBookmarkGroups()</code><br><small style="color:var(--muted)">lib/bookmarks/groups.ts</small><br><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small><br><code>countBookmarks()</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small><br>+6 more</td>
+  <td>Organizes documentation pages, navigation, or content lookup.</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><code>confirmDelete()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>normalizeFolderPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>normalizePositions()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br>+1 more</td>
+  <td>confirmDelete() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td><code>createSectionFromBookmarkDialog()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>createId()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>findSectionByName()</code><br><small style="color:var(--muted)">lib/bookmarks/sections.ts</small></td>
+  <td>createSectionFromBookmarkDialog() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td><code>dragOverBookmark()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Supports retrieval-augmented Q&amp;A or streaming chat.</td>
+</tr>
+<tr>
+  <td>10</td>
+  <td><code>dropBookmark()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small><br><code>applyPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>getPositionChanges()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br>+3 more</td>
+  <td>dropBookmark() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td><code>dropFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small><br><code>applyPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br>+4 more</td>
+  <td>dropFolder() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td><code>dropSection()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small><br><code>applyPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>getPositionChanges()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br>+3 more</td>
+  <td>dropSection() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td><code>hydrateFromFallback()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>loadBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>normalizeFolderPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>normalizePositions()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>readBookmarkCache()</code><br><small style="color:var(--muted)">lib/bookmarks/cache.ts</small></td>
+  <td>hydrateFromFallback() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>14</td>
+  <td><code>loadBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>hydrateFromFallback()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>refreshBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>loadBookmarks() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td><code>openBookmarkDialog()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>emptyBookmarkDraft()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>openBookmarkDialog() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><code>openFolderDialog()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>openFolderDialog() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td><code>openSectionDialog()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>openSectionDialog() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>18</td>
+  <td><code>persistOptimisticMutation()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>dropBookmark()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>dropFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>dropSection()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br>+1 more</td>
+  <td><code>refreshBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>persistOptimisticMutation() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td><code>refreshBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>confirmDelete()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>loadBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>persistOptimisticMutation()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small><br><code>flattenFolderResponse()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>refreshBookmarks() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td><code>requestFolderDelete()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>requestFolderDelete() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>21</td>
+  <td><code>saveBookmark()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>createId()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>safeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td>saveBookmark() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td><code>saveFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>createId()</code><br><small style="color:var(--muted)">lib/bookmarks/positions.ts</small><br><code>folderDescendantIds()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br>+1 more</td>
+  <td>saveFolder() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td><code>saveSection()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>saveSection() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td><code>selectFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>selectFolder() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td><code>toggleFavorite()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small><br><code>persistOptimisticMutation()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>toggleFavorite() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>26</td>
+  <td><code>emptyBookmarkDraft()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>openBookmarkDialog()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>emptyBookmarkDraft() node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>27</td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td><code>dropBookmark()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>dropFolder()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>dropSection()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br>+3 more</td>
+  <td><code>readApiError()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small></td>
+  <td>apiRequest() node in lib/bookmarks/client-api.ts.</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td><code>readApiError()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td><code>apiRequest()</code><br><small style="color:var(--muted)">lib/bookmarks/client-api.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>readApiError() node in lib/bookmarks/client-api.ts.</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td><code>buildFolderTree()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>ConsoleSidebar.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small><br><code>flattenFolderTree()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>folder-tree.test.ts</code><br><small style="color:var(--muted)">tests/folder-tree.test.ts</small><br>+1 more</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>folderSort()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>normalizeFolderPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>buildFolderTree() node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td><code>makeNode()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>makeNode() node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>app/(dashboard)/page.tsx</code></td><td>21 nodes</td></tr>
+<tr><td><code>lib/bookmarks/positions.ts</code></td><td>8 nodes</td></tr>
+<tr><td><code>lib/bookmarks/folder-tree.ts</code></td><td>5 nodes</td></tr>
+<tr><td><code>app/(dashboard)/ConsoleSidebar.tsx</code></td><td>4 nodes</td></tr>
+<tr><td><code>lib/bookmarks/client-api.ts</code></td><td>3 nodes</td></tr>
+<tr><td><code>tests/bookmark-positions.test.ts</code></td><td>1 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: calls x50, contains x32, imports x5, imports x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 3. Graph Build ====== -->
+<h2 id="build-graph">3. Graph Build</h2>
+<p>Graph Build groups implementation around packagejson, mobile, tsconfigjson, expo, mostly in mobile/package.json, package.json, tsconfig.json. This section covers 226 nodes and 225 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Graph Build (226 nodes, 225 edges)
+    mobile_package_dependencies_expo_08c6337f("expo<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_constants_d1b46162("expo-constants<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_device_b3747f97("expo-device<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_font_9aa06cb4("expo-font<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_glass_effect_de96f41b("expo-glass-effect<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_image_07fbd44e("expo-image<br/><small>mobile/package.json</small>")
+    expo_41f8b48e("expo<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_metro_runtime_7ebfb31c("@expo/metro-runtime<br/><small>mobile/package.json</small>")
+    expo_metro_runtime_bd48254d("@expo/metro-runtime<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_symbols_cab90b0b("expo-symbols<br/><small>mobile/package.json</small>")
+    expo_symbols_b1a459cf("expo-symbols<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_react_native_722be5c4("react-native<br/><small>mobile/package.json</small>")
+    react_native_fa64ca1a("react-native<br/><small>mobile/package.json</small>")
+    expo_image_76c981b1("expo-image<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_secure_store_ab6ed7e8("expo-secure-store<br/><small>mobile/package.json</small>")
+    expo_secure_store_12ada34f("expo-secure-store<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_react_native_reanima_3a538833("react-native-reanimated<br/><small>mobile/package.json</small>")
+    react_native_reanimated_e264572f("react-native-reanimated<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_expo_08c6337f -->|imports| expo_41f8b48e
+    mobile_package_dependencies_expo_metro_runtime_7ebfb31c -->|imports| expo_metro_runtime_bd48254d
+    mobile_package_dependencies_expo_symbols_cab90b0b -->|imports| expo_symbols_b1a459cf
+    mobile_package_dependencies_react_native_722be5c4 -->|imports| react_native_fa64ca1a
+    mobile_package_dependencies_expo_image_07fbd44e -->|imports| expo_image_76c981b1
+    mobile_package_dependencies_expo_secure_store_ab6ed7e8 -->|imports| expo_secure_store_12ada34f
+    mobile_package_dependencies_react_native_reanima_3a538833 -->|imports| react_native_reanimated_e264572f
+    %% Omitted for readability: 208 nodes, 0 edges
+    class mobile_package_dependencies_expo_08c6337f function;
+    class mobile_package_dependencies_expo_constants_d1b46162 function;
+    class mobile_package_dependencies_expo_device_b3747f97 function;
+    class mobile_package_dependencies_expo_font_9aa06cb4 function;
+    class mobile_package_dependencies_expo_glass_effect_de96f41b function;
+    class mobile_package_dependencies_expo_image_07fbd44e function;
+    class expo_41f8b48e function;
+    class mobile_package_dependencies_expo_metro_runtime_7ebfb31c function;
+    class expo_metro_runtime_bd48254d function;
+    class mobile_package_dependencies_expo_symbols_cab90b0b function;
+    class expo_symbols_b1a459cf function;
+    class mobile_package_dependencies_react_native_722be5c4 function;
+    class react_native_fa64ca1a function;
+    class expo_image_76c981b1 function;
+    class mobile_package_dependencies_expo_secure_store_ab6ed7e8 ui;
+    class expo_secure_store_12ada34f ui;
+    class mobile_package_dependencies_react_native_reanima_3a538833 function;
+    class react_native_reanimated_e264572f function;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>mobile/package.json</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>mobile/package.json node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>devDependencies</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>devDependencies node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><code>expo-doctor</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>expo-doctor</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td>expo-doctor node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><code>@types/react</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>@types/react</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>@types/react node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><code>typescript</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>typescript</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>typescript node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><code>main</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>main node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><code>name</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>name node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td><code>packageManager</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>packageManager node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td><code>private</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>private node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>10</td>
+  <td><code>scripts</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>scripts node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td><code>android</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>android node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td><code>check</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>check node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td><code>doctor</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>doctor node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>14</td>
+  <td><code>ios</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>ios node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td><code>release</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>release node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><code>start</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>start node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td><code>typecheck</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>typecheck node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>18</td>
+  <td><code>web</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>web node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td><code>version</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>version node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td><code>devDependencies</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>devDependencies node in package.json.</td>
+</tr>
+<tr>
+  <td>21</td>
+  <td><code>autoprefixer</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>autoprefixer</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>autoprefixer node in package.json.</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td><code>jsdom</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>jsdom</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>jsdom node in package.json.</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td><code>postcss</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>postcss</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>postcss node in package.json.</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td><code>tailwindcss</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>tailwindcss</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>tailwindcss node in package.json.</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td><code>@testing-library/jest-dom</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>@testing-library/jest-dom</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>Verifies imports, entry points, or version behavior.</td>
+</tr>
+<tr>
+  <td>26</td>
+  <td><code>@testing-library/react</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>@testing-library/react</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>Verifies imports, entry points, or version behavior.</td>
+</tr>
+<tr>
+  <td>27</td>
+  <td><code>@types/node</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>@types/node</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>@types/node node in package.json.</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td><code>@types/react</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>@types/react</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>@types/react node in package.json.</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td><code>@types/react-dom</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>@types/react-dom</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>@types/react-dom node in package.json.</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td><code>typescript</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>typescript</code><br><small style="color:var(--muted)">package.json</small></td>
+  <td>typescript node in package.json.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>mobile/package.json</code></td><td>68 nodes</td></tr>
+<tr><td><code>package.json</code></td><td>63 nodes</td></tr>
+<tr><td><code>tsconfig.json</code></td><td>31 nodes</td></tr>
+<tr><td><code>mobile/app.json</code></td><td>29 nodes</td></tr>
+<tr><td><code>components.json</code></td><td>22 nodes</td></tr>
+<tr><td><code>mobile/tsconfig.json</code></td><td>13 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: contains x158, imports x47, extends x20. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 4. Ingestion & Updates ====== -->
+<h2 id="ingest-cache-update">4. Ingestion &amp; Updates</h2>
+<p>Ingestion &amp; Updates groups implementation around components, app, releasesh, mobile, mostly in mobile/script/release.sh, app/components/toast.tsx, components/ui/select.tsx. This section covers 102 nodes and 219 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Ingestion &amp; Updates (102 nodes, 219 edges)
+    subgraph ingest_cache_update_lib_bookmarks_url_ts_5b6059a5["lib/bookmarks/url.ts"]
+        app_lib_bookmarks_url_bookmarkhost_60698dfb("bookmarkHost()<br/><small>lib/bookmarks/url.ts</small>")
+        app_lib_bookmarks_url_safeurl_9e8ba35a("safeUrl()<br/><small>lib/bookmarks/url.ts</small>")
+        app_lib_bookmarks_url_normalizeurl_f982fc80("normalizeUrl()<br/><small>lib/bookmarks/url.ts</small>")
+    end
+    subgraph ingest_cache_update_dashboard_bookmarks_ui_Bookm_3adc48ab["(dashboard)/bookmarks-ui/BookmarkCard.tsx"]
+        app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494("BookmarkCard.tsx")
+        app_dashboard_bookmarks_ui_bookmarkcard_bookmark_be256716("BookmarkCard()<br/><small>(dashboard)/bookmarks-ui/BookmarkCard.tsx</small>")
+    end
+    subgraph ingest_cache_update_components_ui_badge_tsx_094c7b09["components/ui/badge.tsx"]
+        components_ui_badge_badge_591a1642("Badge()<br/><small>components/ui/badge.tsx</small>")
+        components_ui_badge_badgevariants_b133664d("badgeVariants<br/><small>components/ui/badge.tsx</small>")
+    end
+    subgraph ingest_cache_update_components_ui_button_tsx_92fb55de["components/ui/button.tsx"]
+        components_ui_button_button_808a3383("Button()<br/><small>components/ui/button.tsx</small>")
+        components_ui_button_buttonvariants_796d6050("buttonVariants<br/><small>components/ui/button.tsx</small>")
+    end
+    subgraph ingest_cache_update_components_ui_card_tsx_a2ee3f47["components/ui/card.tsx"]
+        components_ui_card_card_2dfb7e87("Card()<br/><small>components/ui/card.tsx</small>")
+        components_ui_card_cardaction_8274f525("CardAction()<br/><small>components/ui/card.tsx</small>")
+    end
+    subgraph ingest_cache_update_mobile_script_release_sh_c7f8b6fd["mobile/script/release.sh"]
+        mobile_script_release_sh_entry_5e5c5d74("release.sh script<br/><small>mobile/script/release.sh</small>")
+        mobile_script_release_build_b53d2cb6("build()<br/><small>mobile/script/release.sh</small>")
+    end
+    app_dashboard_bookmarks_ui_favicon_favicon_85f3d3c7("Favicon()<br/><small>(dashboard)/bookmarks-ui/Favicon.tsx</small>")
+    app_dashboard_consolesidebar_1a2210f4("ConsoleSidebar.tsx")
+    app_components_toast_pushtoast_26f2c0aa("pushToast()<br/><small>app/components/toast.tsx</small>")
+    app_layout_ed349684("layout.tsx")
+    lib_utils_cn_b8743bb6("cn()<br/><small>lib/utils.ts</small>")
+    app_dashboard_bookmarks_ui_bookmarkcard_bookmark_be256716 -->|calls| lib_utils_cn_b8743bb6
+    app_dashboard_bookmarks_ui_bookmarkcard_bookmark_be256716 -->|calls| app_lib_bookmarks_url_bookmarkhost_60698dfb
+    app_dashboard_bookmarks_ui_favicon_favicon_85f3d3c7 -->|calls| app_lib_bookmarks_url_safeurl_9e8ba35a
+    app_dashboard_bookmarks_ui_favicon_favicon_85f3d3c7 -->|calls| lib_utils_cn_b8743bb6
+    app_lib_bookmarks_url_bookmarkhost_60698dfb -->|calls| app_lib_bookmarks_url_normalizeurl_f982fc80
+    app_lib_bookmarks_url_safeurl_9e8ba35a -->|calls| app_lib_bookmarks_url_normalizeurl_f982fc80
+    components_ui_badge_badge_591a1642 -->|calls| components_ui_badge_badgevariants_b133664d
+    components_ui_badge_badge_591a1642 -->|calls| lib_utils_cn_b8743bb6
+    components_ui_button_button_808a3383 -->|calls| components_ui_button_buttonvariants_796d6050
+    components_ui_button_button_808a3383 -->|calls| lib_utils_cn_b8743bb6
+    components_ui_card_card_2dfb7e87 -->|calls| lib_utils_cn_b8743bb6
+    components_ui_card_cardaction_8274f525 -->|calls| lib_utils_cn_b8743bb6
+    mobile_script_release_sh_entry_5e5c5d74 -->|calls| mobile_script_release_build_b53d2cb6
+    app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494 -->|imports| components_ui_button_button_808a3383
+    app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494 -->|imports| components_ui_card_card_2dfb7e87
+    app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494 -->|imports| app_dashboard_bookmarks_ui_favicon_favicon_85f3d3c7
+    app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494 -->|imports| app_lib_bookmarks_url_bookmarkhost_60698dfb
+    app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494 -->|imports| lib_utils_cn_b8743bb6
+    app_dashboard_consolesidebar_1a2210f4 -->|imports| lib_utils_cn_b8743bb6
+    %% Omitted for readability: 84 nodes, 0 edges
+    class app_lib_bookmarks_url_bookmarkhost_60698dfb function;
+    class app_lib_bookmarks_url_safeurl_9e8ba35a function;
+    class app_lib_bookmarks_url_normalizeurl_f982fc80 function;
+    class app_dashboard_bookmarks_ui_bookmarkcard_4f7ef494 ui;
+    class app_dashboard_bookmarks_ui_bookmarkcard_bookmark_be256716 ui;
+    class components_ui_badge_badge_591a1642 ui;
+    class components_ui_badge_badgevariants_b133664d ui;
+    class components_ui_button_button_808a3383 ui;
+    class components_ui_button_buttonvariants_796d6050 ui;
+    class components_ui_card_card_2dfb7e87 ui;
+    class components_ui_card_cardaction_8274f525 ui;
+    class mobile_script_release_sh_entry_5e5c5d74 function;
+    class mobile_script_release_build_b53d2cb6 function;
+    class app_dashboard_bookmarks_ui_favicon_favicon_85f3d3c7 ui;
+    class app_dashboard_consolesidebar_1a2210f4 ui;
+    class app_components_toast_pushtoast_26f2c0aa ui;
+    class app_layout_ed349684 ui;
+    class lib_utils_cn_b8743bb6 function;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>BookmarkActionsMenu()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkActionsMenu.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkActionsMenu() node in (dashboard)/bookmarks-ui/BookmarkActionsMenu.tsx.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>BookmarkCard()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>bookmarkHost()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small><br><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>BookmarkCard() node in (dashboard)/bookmarks-ui/BookmarkCard.tsx.</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><code>Favicon()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Favicon.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small><br><code>safeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td>Favicon() node in (dashboard)/bookmarks-ui/Favicon.tsx.</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><code>bookmarkHost()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-url.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-url.test.ts</small><br><code>BookmarkCard()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small><br><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><code>normalizeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td>bookmarkHost() node in lib/bookmarks/url.ts.</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><code>normalizeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-url.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-url.test.ts</small><br><code>bookmarkHost()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small><br><code>safeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>normalizeUrl() node in lib/bookmarks/url.ts.</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><code>safeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-url.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-url.test.ts</small><br><code>Favicon()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Favicon.tsx</small><br><code>Favicon.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Favicon.tsx</small><br>+2 more</td>
+  <td><code>normalizeUrl()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small></td>
+  <td>safeUrl() node in lib/bookmarks/url.ts.</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><code>Badge()</code><br><small style="color:var(--muted)">components/ui/badge.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>badgeVariants</code><br><small style="color:var(--muted)">components/ui/badge.tsx</small><br><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>Badge() node in components/ui/badge.tsx.</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td><code>Button()</code><br><small style="color:var(--muted)">components/ui/button.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>buttonVariants</code><br><small style="color:var(--muted)">components/ui/button.tsx</small><br><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>Button() node in components/ui/button.tsx.</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td><code>Card()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>Card() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>10</td>
+  <td><code>CardAction()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>CardAction() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td><code>CardContent()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>CardContent() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td><code>CardDescription()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>CardDescription() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td><code>CardFooter()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>CardFooter() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>14</td>
+  <td><code>CardHeader()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>CardHeader() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td><code>CardTitle()</code><br><small style="color:var(--muted)">components/ui/card.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>CardTitle() node in components/ui/card.tsx.</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><code>Input()</code><br><small style="color:var(--muted)">components/ui/input.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>Input() node in components/ui/input.tsx.</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td><code>Select()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Select() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>18</td>
+  <td><code>SelectContent()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectContent() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td><code>SelectGroup()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectGroup() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td><code>SelectItem()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectItem() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>21</td>
+  <td><code>SelectLabel()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectLabel() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td><code>SelectScrollDownButton()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectScrollDownButton() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td><code>SelectScrollUpButton()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectScrollUpButton() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td><code>SelectSeparator()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectSeparator() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td><code>SelectTrigger()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>SelectTrigger() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>26</td>
+  <td><code>SelectValue()</code><br><small style="color:var(--muted)">components/ui/select.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>SelectValue() node in components/ui/select.tsx.</td>
+</tr>
+<tr>
+  <td>27</td>
+  <td><code>Textarea()</code><br><small style="color:var(--muted)">components/ui/textarea.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>Textarea() node in components/ui/textarea.tsx.</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>Badge()</code><br><small style="color:var(--muted)">components/ui/badge.tsx</small><br><code>badge.tsx</code><br><small style="color:var(--muted)">components/ui/badge.tsx</small><br><code>BookmarkCard()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small><br>+33 more</td>
+  <td>No direct outbound edge</td>
+  <td>cn() node in lib/utils.ts.</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td><code>BookmarkActionsMenu.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkActionsMenu.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><code>BookmarkItem</code><br><small style="color:var(--muted)">lib/bookmarks/types.ts</small><br><code>types.ts</code><br><small style="color:var(--muted)">lib/bookmarks/types.ts</small></td>
+  <td>Module file in (dashboard)/bookmarks-ui/BookmarkActionsMenu.tsx.</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td><code>BookmarkCard.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkCard.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>BookmarkActionsMenu()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkActionsMenu.tsx</small><br><code>BookmarkActionsMenu.tsx</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarkActionsMenu.tsx</small><br><code>bookmarkHost()</code><br><small style="color:var(--muted)">lib/bookmarks/url.ts</small><br>+13 more</td>
+  <td>Module file in (dashboard)/bookmarks-ui/BookmarkCard.tsx.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>mobile/script/release.sh</code></td><td>24 nodes</td></tr>
+<tr><td><code>app/components/toast.tsx</code></td><td>20 nodes</td></tr>
+<tr><td><code>components/ui/select.tsx</code></td><td>11 nodes</td></tr>
+<tr><td><code>components/ui/card.tsx</code></td><td>8 nodes</td></tr>
+<tr><td><code>app/(dashboard)/ConsoleSidebar.tsx</code></td><td>4 nodes</td></tr>
+<tr><td><code>app/layout.tsx</code></td><td>4 nodes</td></tr>
+<tr><td><code>lib/bookmarks/url.ts</code></td><td>4 nodes</td></tr>
+<tr><td><code>components/ui/badge.tsx</code></td><td>3 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: calls x87, contains x58, imports x28, imports x23. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 5. Serving API ====== -->
+<h2 id="serve-api">5. Serving API</h2>
+<p>Serving API groups implementation around mobile, app, api, routets, mostly in [resource]/[[...path]]/route.ts, src/lib/config.ts, src/lib/api.ts. This section covers 72 nodes and 157 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Serving API (72 nodes, 157 edges)
+    subgraph serve_api_resource_path_route_ts_d84d5b2a["[resource]/[[...path]]/route.ts"]
+        app_api_resource_path_route_patch_5d4916b3("PATCH()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_post_2d9c974e("POST()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_delete_7776c249("DELETE()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_requirebookmarkacces_68a865fe("requireBookmarkAccess()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_routeparts_26513b5a("routeParts()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_noroute_3e60cbdc("noRoute()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_jsonerror_30f201d2("jsonError()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_get_e8a6fff9("GET()<br/><small>[resource]/[[...path]]/route.ts</small>")
+        app_api_resource_path_route_readjson_b05d9bdd("readJson()<br/><small>[resource]/[[...path]]/route.ts</small>")
+    end
+    subgraph serve_api_src_app_index_tsx_500d7f77["src/app/index.tsx"]
+        mobile_src_app_index_a0817812("index.tsx")
+        mobile_src_app_index_homescreen_60f72219("HomeScreen()<br/><small>src/app/index.tsx</small>")
+    end
+    subgraph serve_api_src_lib_api_ts_4018941b["src/lib/api.ts"]
+        mobile_src_lib_api_apierror_5ad517d1("ApiError<br/><small>src/lib/api.ts</small>")
+        mobile_src_lib_api_apierror_constructor_9c3af719("constructor()<br/><small>src/lib/api.ts</small>")
+    end
+    app_api_favicon_route_get_073a9fce("GET()<br/><small>api/favicon/route.ts</small>")
+    app_lib_bookmarks_client_auth_bookmarkclientacce_99444757("BookmarkClientAccess<br/><small>lib/bookmarks/client-auth.ts</small>")
+    proxy_proxy_eb598c8a("proxy()<br/><small>proxy.ts</small>")
+    mobile_src_app_add_d5def798("add.tsx")
+    mobile_src_app_settings_9bd5f7b6("settings.tsx")
+    mobile_src_lib_api_apierror_5ad517d1 -->|method| mobile_src_lib_api_apierror_constructor_9c3af719
+    app_api_resource_path_route_delete_7776c249 -->|calls| app_api_resource_path_route_requirebookmarkacces_68a865fe
+    app_api_resource_path_route_delete_7776c249 -->|calls| app_api_resource_path_route_routeparts_26513b5a
+    app_api_resource_path_route_delete_7776c249 -->|calls| app_api_resource_path_route_noroute_3e60cbdc
+    app_api_resource_path_route_delete_7776c249 -->|calls| app_api_resource_path_route_jsonerror_30f201d2
+    app_api_resource_path_route_get_e8a6fff9 -->|calls| app_api_resource_path_route_requirebookmarkacces_68a865fe
+    app_api_resource_path_route_get_e8a6fff9 -->|calls| app_api_resource_path_route_routeparts_26513b5a
+    app_api_resource_path_route_get_e8a6fff9 -->|calls| app_api_resource_path_route_noroute_3e60cbdc
+    app_api_resource_path_route_get_e8a6fff9 -->|calls| app_api_resource_path_route_jsonerror_30f201d2
+    app_api_resource_path_route_patch_5d4916b3 -->|calls| app_api_resource_path_route_requirebookmarkacces_68a865fe
+    app_api_resource_path_route_patch_5d4916b3 -->|calls| app_api_resource_path_route_routeparts_26513b5a
+    app_api_resource_path_route_patch_5d4916b3 -->|calls| app_api_resource_path_route_noroute_3e60cbdc
+    app_api_resource_path_route_patch_5d4916b3 -->|calls| app_api_resource_path_route_readjson_b05d9bdd
+    app_api_resource_path_route_patch_5d4916b3 -->|calls| app_api_resource_path_route_jsonerror_30f201d2
+    app_api_resource_path_route_post_2d9c974e -->|calls| app_api_resource_path_route_noroute_3e60cbdc
+    app_api_resource_path_route_post_2d9c974e -->|calls| app_api_resource_path_route_jsonerror_30f201d2
+    app_api_resource_path_route_post_2d9c974e -->|calls| app_api_resource_path_route_requirebookmarkacces_68a865fe
+    app_api_resource_path_route_post_2d9c974e -->|calls| app_api_resource_path_route_routeparts_26513b5a
+    app_api_resource_path_route_post_2d9c974e -->|calls| app_api_resource_path_route_readjson_b05d9bdd
+    app_api_resource_path_route_requirebookmarkacces_68a865fe -->|calls| app_lib_bookmarks_client_auth_bookmarkclientacce_99444757
+    proxy_proxy_eb598c8a -->|calls| app_lib_bookmarks_client_auth_bookmarkclientacce_99444757
+    mobile_src_app_add_d5def798 -->|imports| mobile_src_lib_api_apierror_5ad517d1
+    mobile_src_app_index_a0817812 -->|imports| mobile_src_lib_api_apierror_5ad517d1
+    mobile_src_app_settings_9bd5f7b6 -->|imports| mobile_src_lib_api_apierror_5ad517d1
+    %% Omitted for readability: 54 nodes, 0 edges
+    class app_api_resource_path_route_patch_5d4916b3 function;
+    class app_api_resource_path_route_post_2d9c974e function;
+    class app_api_resource_path_route_delete_7776c249 function;
+    class app_api_resource_path_route_requirebookmarkacces_68a865fe function;
+    class app_api_resource_path_route_routeparts_26513b5a api;
+    class app_api_resource_path_route_noroute_3e60cbdc api;
+    class app_api_resource_path_route_jsonerror_30f201d2 function;
+    class app_api_resource_path_route_get_e8a6fff9 function;
+    class app_api_resource_path_route_readjson_b05d9bdd function;
+    class mobile_src_app_index_a0817812 ui;
+    class mobile_src_app_index_homescreen_60f72219 ui;
+    class mobile_src_lib_api_apierror_5ad517d1 api;
+    class mobile_src_lib_api_apierror_constructor_9c3af719 function;
+    class app_api_favicon_route_get_073a9fce function;
+    class app_lib_bookmarks_client_auth_bookmarkclientacce_99444757 entry;
+    class proxy_proxy_eb598c8a function;
+    class mobile_src_app_add_d5def798 ui;
+    class mobile_src_app_settings_9bd5f7b6 ui;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>Filter</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Filter node in src/app/index.tsx.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>Status</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Status node in src/app/index.tsx.</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><code>ApiError</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td><code>add.tsx</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>index.tsx</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br><code>settings.tsx</code><br><small style="color:var(--muted)">src/app/settings.tsx</small></td>
+  <td><code>constructor()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>ApiError node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><code>ApiConfig</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td><code>add.tsx</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>api.ts</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>index.tsx</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><code>BookmarkCreateInput</code><br><small style="color:var(--muted)">src/lib/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>api.ts</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkCreateInput node in src/lib/types.ts.</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><code>BookmarkItem</code><br><small style="color:var(--muted)">src/lib/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>api.ts</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>index.tsx</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkItem node in src/lib/types.ts.</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><code>BookmarkPatch</code><br><small style="color:var(--muted)">src/lib/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>api.ts</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkPatch node in src/lib/types.ts.</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td><code>Folder</code><br><small style="color:var(--muted)">src/lib/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>add.tsx</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>api.ts</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>index.tsx</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Folder node in src/lib/types.ts.</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td><code>AddBookmarkScreen()</code><br><small style="color:var(--muted)">src/app/add.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>createBookmark()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>listFolders()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>loadConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small><br>+1 more</td>
+  <td>AddBookmarkScreen() node in src/app/add.tsx.</td>
+</tr>
+<tr>
+  <td>10</td>
+  <td><code>normalizeBookmarkUrl()</code><br><small style="color:var(--muted)">src/app/add.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>AddBookmarkScreen()</code><br><small style="color:var(--muted)">src/app/add.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>normalizeBookmarkUrl() node in src/app/add.tsx.</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td><code>errorMessageOf()</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>errorMessageOf() node in src/app/index.tsx.</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>errorMessageOf()</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br><code>hostOf()</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br><code>listBookmarks()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br>+3 more</td>
+  <td>HomeScreen() node in src/app/index.tsx.</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td><code>hostOf()</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>hostOf() node in src/app/index.tsx.</td>
+</tr>
+<tr>
+  <td>14</td>
+  <td><code>RootLayout()</code><br><small style="color:var(--muted)">src/app/_layout.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>RootLayout() node in src/app/_layout.tsx.</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td><code>SettingsScreen()</code><br><small style="color:var(--muted)">src/app/settings.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>clearConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small><br><code>listBookmarks()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>loadConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small><br>+2 more</td>
+  <td>SettingsScreen() node in src/app/settings.tsx.</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><code>.constructor()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>ApiError</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>.constructor() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td><code>createBookmark()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>add.tsx</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>AddBookmarkScreen()</code><br><small style="color:var(--muted)">src/app/add.tsx</small></td>
+  <td><code>request()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>createBookmark() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>18</td>
+  <td><code>listBookmarks()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br><code>index.tsx</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br><code>settings.tsx</code><br><small style="color:var(--muted)">src/app/settings.tsx</small><br>+1 more</td>
+  <td><code>request()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>listBookmarks() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td><code>listFolders()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>add.tsx</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>AddBookmarkScreen()</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br>+1 more</td>
+  <td><code>request()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>listFolders() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td><code>messageForStatus()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>request()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>messageForStatus() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>21</td>
+  <td><code>request()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>createBookmark()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>listBookmarks()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br><code>listFolders()</code><br><small style="color:var(--muted)">src/lib/api.ts</small><br>+1 more</td>
+  <td><code>messageForStatus()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>request() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td><code>updateBookmark()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br><code>index.tsx</code><br><small style="color:var(--muted)">src/app/index.tsx</small></td>
+  <td><code>request()</code><br><small style="color:var(--muted)">src/lib/api.ts</small></td>
+  <td>updateBookmark() node in src/lib/api.ts.</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td><code>clearConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>settings.tsx</code><br><small style="color:var(--muted)">src/app/settings.tsx</small><br><code>SettingsScreen()</code><br><small style="color:var(--muted)">src/app/settings.tsx</small></td>
+  <td><code>storageDelete()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td><code>loadConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>add.tsx</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>AddBookmarkScreen()</code><br><small style="color:var(--muted)">src/app/add.tsx</small><br><code>HomeScreen()</code><br><small style="color:var(--muted)">src/app/index.tsx</small><br>+3 more</td>
+  <td><code>storageGet()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td><code>normalizeApiUrl()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td><code>settings.tsx</code><br><small style="color:var(--muted)">src/app/settings.tsx</small><br><code>SettingsScreen()</code><br><small style="color:var(--muted)">src/app/settings.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>normalizeApiUrl() node in src/lib/config.ts.</td>
+</tr>
+<tr>
+  <td>26</td>
+  <td><code>saveConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>settings.tsx</code><br><small style="color:var(--muted)">src/app/settings.tsx</small><br><code>SettingsScreen()</code><br><small style="color:var(--muted)">src/app/settings.tsx</small></td>
+  <td><code>storageSet()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+<tr>
+  <td>27</td>
+  <td><code>storageDelete()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>clearConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>Supports retrieval-augmented Q&amp;A or streaming chat.</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td><code>storageGet()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>loadConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>Supports retrieval-augmented Q&amp;A or streaming chat.</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td><code>storageSet()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>saveConfig()</code><br><small style="color:var(--muted)">src/lib/config.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>Supports retrieval-augmented Q&amp;A or streaming chat.</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td><code>expo-router</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>expo-router</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td>expo-router node in mobile/package.json.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>[resource]/[[...path]]/route.ts</code></td><td>11 nodes</td></tr>
+<tr><td><code>src/lib/config.ts</code></td><td>10 nodes</td></tr>
+<tr><td><code>src/lib/api.ts</code></td><td>9 nodes</td></tr>
+<tr><td><code>src/app/index.tsx</code></td><td>7 nodes</td></tr>
+<tr><td><code>api/favicon/route.ts</code></td><td>5 nodes</td></tr>
+<tr><td><code>src/lib/types.ts</code></td><td>5 nodes</td></tr>
+<tr><td><code>src/app/add.tsx</code></td><td>4 nodes</td></tr>
+<tr><td><code>tests/bookmark-api-route.test.ts</code></td><td>4 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: contains x53, calls x45, imports x35, imports x21. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 6. Security & Global Graph ====== -->
+<h2 id="security-global">6. Security &amp; Global Graph</h2>
+<p>Security &amp; Global Graph groups implementation around react, native, safe, area, mostly in mobile/package.json. This section covers 2 nodes and 1 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Security &amp; Global Graph (2 nodes, 1 edges)
+    mobile_package_dependencies_react_native_safe_ar_29e00217("react-native-safe-area-context<br/><small>mobile/package.json</small>")
+    react_native_safe_area_context_8aea4b8c("react-native-safe-area-context<br/><small>mobile/package.json</small>")
+    mobile_package_dependencies_react_native_safe_ar_29e00217 -->|imports| react_native_safe_area_context_8aea4b8c
+    class mobile_package_dependencies_react_native_safe_ar_29e00217 function;
+    class react_native_safe_area_context_8aea4b8c function;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>react-native-safe-area-context</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>react-native-safe-area-context</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td>react-native-safe-area-context node in mobile/package.json.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>react-native-safe-area-context</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>react-native-safe-area-context</code><br><small style="color:var(--muted)">mobile/package.json</small></td>
+  <td>No direct outbound edge</td>
+  <td>react-native-safe-area-context node in mobile/package.json.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>mobile/package.json</code></td><td>2 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: imports x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 7. Tests & Fixtures ====== -->
+<h2 id="tests-fixtures">7. Tests &amp; Fixtures</h2>
+<p>Tests &amp; Fixtures groups implementation around app, bookmarks, bookmark, tests, mostly in lib/bookmarks/validation.ts, lib/bookmarks/types.ts, lib/bookmarks/constants.ts. This section covers 108 nodes and 245 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Tests &amp; Fixtures (108 nodes, 245 edges)
+    subgraph tests_fixtures_lib_bookmarks_folder_tree_ts_f51acd0d["lib/bookmarks/folder-tree.ts"]
+        app_lib_bookmarks_folder_tree_flattenfoldertree_a163e747("flattenFolderTree()<br/><small>lib/bookmarks/folder-tree.ts</small>")
+        app_lib_bookmarks_folder_tree_flattenfolderrespo_217e7e39("visit()<br/><small>lib/bookmarks/folder-tree.ts</small>")
+        app_lib_bookmarks_folder_tree_folderdescendantid_055b9363("folderDescendantIds()<br/><small>lib/bookmarks/folder-tree.ts</small>")
+    end
+    subgraph tests_fixtures_lib_bookmarks_validation_ts_b64a36e9["lib/bookmarks/validation.ts"]
+        app_lib_bookmarks_validation_storeerror_7a9acb5c("StoreError<br/><small>lib/bookmarks/validation.ts</small>")
+        app_lib_bookmarks_validation_storeerror_construc_8ff2116b("constructor()<br/><small>lib/bookmarks/validation.ts</small>")
+        app_lib_bookmarks_validation_assertallowedfields_aa17c0f0("assertAllowedFields()<br/><small>lib/bookmarks/validation.ts</small>")
+    end
+    subgraph tests_fixtures_lib_bookmarks_counts_ts_6905ec3b["lib/bookmarks/counts.ts"]
+        app_lib_bookmarks_counts_countbookmarks_d8e605c3("countBookmarks()<br/><small>lib/bookmarks/counts.ts</small>")
+        app_lib_bookmarks_counts_matchesbookmarkfilters_bd25dc9c("matchesBookmarkFilters()<br/><small>lib/bookmarks/counts.ts</small>")
+    end
+    subgraph tests_fixtures_lib_bookmarks_graphql_ts_62f0c5d1["lib/bookmarks/graphql.ts"]
+        app_lib_bookmarks_graphql_graphqlrequest_d29d0a31("graphqlRequest()<br/><small>lib/bookmarks/graphql.ts</small>")
+        app_lib_bookmarks_graphql_getgraphqlconfig_bbc5199b("getGraphqlConfig()<br/><small>lib/bookmarks/graphql.ts</small>")
+    end
+    subgraph tests_fixtures_lib_bookmarks_groups_ts_e703eb5a["lib/bookmarks/groups.ts"]
+        app_lib_bookmarks_groups_e978862e("groups.ts")
+        app_lib_bookmarks_groups_visiblefoldersinsubtree_2822d478("visibleFoldersInSubtree()<br/><small>lib/bookmarks/groups.ts</small>")
+    end
+    app_dashboard_consolesidebar_foldertreerow_fc1a91f2("FolderTreeRow()<br/><small>app/(dashboard)/ConsoleSidebar.tsx</small>")
+    app_dashboard_page_07ec2a4c("page.tsx")
+    app_lib_bookmarks_store_ccc1ec3e("store.ts")
+    tests_bookmark_counts_test_070d692d("bookmark-counts.test.ts")
+    tests_bookmark_groups_test_8cac9ee7("bookmark-groups.test.ts")
+    tests_folder_tree_test_cf5f06f0("folder-tree.test.ts")
+    app_lib_bookmarks_validation_storeerror_7a9acb5c -->|method| app_lib_bookmarks_validation_storeerror_construc_8ff2116b
+    app_dashboard_consolesidebar_foldertreerow_fc1a91f2 -->|calls| app_lib_bookmarks_counts_countbookmarks_d8e605c3
+    app_lib_bookmarks_counts_countbookmarks_d8e605c3 -->|calls| app_lib_bookmarks_counts_matchesbookmarkfilters_bd25dc9c
+    app_lib_bookmarks_folder_tree_flattenfoldertree_a163e747 -->|calls| app_lib_bookmarks_folder_tree_flattenfolderrespo_217e7e39
+    app_lib_bookmarks_folder_tree_folderdescendantid_055b9363 -->|calls| app_lib_bookmarks_folder_tree_flattenfolderrespo_217e7e39
+    app_lib_bookmarks_groups_visiblefoldersinsubtree_2822d478 -->|calls| app_lib_bookmarks_folder_tree_flattenfolderrespo_217e7e39
+    app_lib_bookmarks_graphql_graphqlrequest_d29d0a31 -->|calls| app_lib_bookmarks_graphql_getgraphqlconfig_bbc5199b
+    app_dashboard_page_07ec2a4c -->|imports| app_lib_bookmarks_counts_countbookmarks_d8e605c3
+    app_dashboard_page_07ec2a4c -->|imports| app_lib_bookmarks_counts_matchesbookmarkfilters_bd25dc9c
+    app_dashboard_page_07ec2a4c -->|imports| app_lib_bookmarks_folder_tree_flattenfoldertree_a163e747
+    app_dashboard_page_07ec2a4c -->|imports| app_lib_bookmarks_folder_tree_folderdescendantid_055b9363
+    app_dashboard_page_07ec2a4c -->|imports| app_lib_bookmarks_groups_visiblefoldersinsubtree_2822d478
+    app_dashboard_page_07ec2a4c -->|imports| app_lib_bookmarks_groups_e978862e
+    tests_bookmark_counts_test_070d692d -->|imports| app_lib_bookmarks_counts_countbookmarks_d8e605c3
+    tests_bookmark_counts_test_070d692d -->|imports| app_lib_bookmarks_counts_matchesbookmarkfilters_bd25dc9c
+    tests_bookmark_groups_test_8cac9ee7 -->|imports| app_lib_bookmarks_groups_visiblefoldersinsubtree_2822d478
+    tests_bookmark_groups_test_8cac9ee7 -->|imports| app_lib_bookmarks_groups_e978862e
+    tests_folder_tree_test_cf5f06f0 -->|imports| app_lib_bookmarks_folder_tree_flattenfoldertree_a163e747
+    tests_folder_tree_test_cf5f06f0 -->|imports| app_lib_bookmarks_folder_tree_folderdescendantid_055b9363
+    app_lib_bookmarks_store_ccc1ec3e -->|imports| app_lib_bookmarks_graphql_graphqlrequest_d29d0a31
+    app_lib_bookmarks_store_ccc1ec3e -->|imports| app_lib_bookmarks_validation_storeerror_7a9acb5c
+    %% Omitted for readability: 90 nodes, 0 edges
+    class app_lib_bookmarks_folder_tree_flattenfoldertree_a163e747 function;
+    class app_lib_bookmarks_folder_tree_flattenfolderrespo_217e7e39 function;
+    class app_lib_bookmarks_folder_tree_folderdescendantid_055b9363 function;
+    class app_lib_bookmarks_validation_storeerror_7a9acb5c ui;
+    class app_lib_bookmarks_validation_storeerror_construc_8ff2116b function;
+    class app_lib_bookmarks_validation_assertallowedfields_aa17c0f0 async;
+    class app_lib_bookmarks_counts_countbookmarks_d8e605c3 function;
+    class app_lib_bookmarks_counts_matchesbookmarkfilters_bd25dc9c function;
+    class app_lib_bookmarks_graphql_graphqlrequest_d29d0a31 function;
+    class app_lib_bookmarks_graphql_getgraphqlconfig_bbc5199b function;
+    class app_lib_bookmarks_groups_e978862e module;
+    class app_lib_bookmarks_groups_visiblefoldersinsubtree_2822d478 function;
+    class app_dashboard_consolesidebar_foldertreerow_fc1a91f2 ui;
+    class app_dashboard_page_07ec2a4c ui;
+    class app_lib_bookmarks_store_ccc1ec3e ui;
+    class tests_bookmark_counts_test_070d692d test;
+    class tests_bookmark_groups_test_8cac9ee7 test;
+    class tests_folder_tree_test_cf5f06f0 test;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>BookmarkDialog</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkDialog node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>BookmarkDraft</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkDraft node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><code>DeleteTarget</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>DeleteTarget node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><code>FolderDialog</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>FolderDialog node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><code>SectionDialog</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>SectionDialog node in app/(dashboard)/page.tsx.</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><code>BookmarkCache</code><br><small style="color:var(--muted)">lib/bookmarks/cache.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Caches analysis results or computes cache keys.</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><code>BookmarkCountFilters</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkCountFilters node in lib/bookmarks/counts.ts.</td>
+</tr>
+<tr>
+  <td>8</td>
+  <td><code>FolderApiItem</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-endpoint">API</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>FolderApiItem node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+<tr>
+  <td>9</td>
+  <td><code>BookmarkGroup</code><br><small style="color:var(--muted)">lib/bookmarks/groups.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkGroup node in lib/bookmarks/groups.ts.</td>
+</tr>
+<tr>
+  <td>10</td>
+  <td><code>BookmarkItem</code><br><small style="color:var(--muted)">lib/bookmarks/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>bookmark-counts.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-counts.test.ts</small><br><code>bookmark-groups.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-groups.test.ts</small><br><code>bookmark-saving-feedback.test.tsx</code><br><small style="color:var(--muted)">tests/bookmark-saving-feedback.test.tsx</small><br>+9 more</td>
+  <td>No direct outbound edge</td>
+  <td>BookmarkItem node in lib/bookmarks/types.ts.</td>
+</tr>
+<tr>
+  <td>11</td>
+  <td><code>Folder</code><br><small style="color:var(--muted)">lib/bookmarks/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>bookmark-groups.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-groups.test.ts</small><br><code>bookmark-saving-feedback.test.tsx</code><br><small style="color:var(--muted)">tests/bookmark-saving-feedback.test.tsx</small><br><code>cache.ts</code><br><small style="color:var(--muted)">lib/bookmarks/cache.ts</small><br>+8 more</td>
+  <td>No direct outbound edge</td>
+  <td>Folder node in lib/bookmarks/types.ts.</td>
+</tr>
+<tr>
+  <td>12</td>
+  <td><code>FolderTreeItem</code><br><small style="color:var(--muted)">lib/bookmarks/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>folder-tree.ts</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>FolderTreeItem node in lib/bookmarks/types.ts.</td>
+</tr>
+<tr>
+  <td>13</td>
+  <td><code>Section</code><br><small style="color:var(--muted)">lib/bookmarks/types.ts</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td><code>bookmark-groups.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-groups.test.ts</small><br><code>bookmark-saving-feedback.test.tsx</code><br><small style="color:var(--muted)">tests/bookmark-saving-feedback.test.tsx</small><br><code>cache.ts</code><br><small style="color:var(--muted)">lib/bookmarks/cache.ts</small><br>+6 more</td>
+  <td>No direct outbound edge</td>
+  <td>Section node in lib/bookmarks/types.ts.</td>
+</tr>
+<tr>
+  <td>14</td>
+  <td><code>BookmarksLoading()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/BookmarksLoading.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small></td>
+  <td>BookmarksLoading() node in (dashboard)/bookmarks-ui/BookmarksLoading.tsx.</td>
+</tr>
+<tr>
+  <td>15</td>
+  <td><code>DatabaseProgressStatus()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/DatabaseProgressStatus.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>DatabaseProgressStatus() node in (dashboard)/bookmarks-ui/DatabaseProgressStatus.tsx.</td>
+</tr>
+<tr>
+  <td>16</td>
+  <td><code>Field()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Field.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Field() node in (dashboard)/bookmarks-ui/Field.tsx.</td>
+</tr>
+<tr>
+  <td>17</td>
+  <td><code>Modal()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Modal.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>handleShortcut()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Modal.tsx</small></td>
+  <td>Modal() node in (dashboard)/bookmarks-ui/Modal.tsx.</td>
+</tr>
+<tr>
+  <td>18</td>
+  <td><code>handleShortcut()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Modal.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>Modal()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/Modal.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>handleShortcut() node in (dashboard)/bookmarks-ui/Modal.tsx.</td>
+</tr>
+<tr>
+  <td>19</td>
+  <td><code>SectionActionsMenu()</code><br><small style="color:var(--muted)">(dashboard)/bookmarks-ui/SectionActionsMenu.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>SectionActionsMenu() node in (dashboard)/bookmarks-ui/SectionActionsMenu.tsx.</td>
+</tr>
+<tr>
+  <td>20</td>
+  <td><code>FolderTreeRow()</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>cn()</code><br><small style="color:var(--muted)">lib/utils.ts</small><br><code>countBookmarks()</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small></td>
+  <td>FolderTreeRow() node in app/(dashboard)/ConsoleSidebar.tsx.</td>
+</tr>
+<tr>
+  <td>21</td>
+  <td><code>readBookmarkCache()</code><br><small style="color:var(--muted)">lib/bookmarks/cache.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>hydrateFromFallback()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Caches analysis results or computes cache keys.</td>
+</tr>
+<tr>
+  <td>22</td>
+  <td><code>writeBookmarkCache()</code><br><small style="color:var(--muted)">lib/bookmarks/cache.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Caches analysis results or computes cache keys.</td>
+</tr>
+<tr>
+  <td>23</td>
+  <td><code>countBookmarks()</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-counts.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-counts.test.ts</small><br><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>ConsoleSidebar.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/ConsoleSidebar.tsx</small><br>+2 more</td>
+  <td><code>matchesBookmarkFilters()</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small></td>
+  <td>countBookmarks() node in lib/bookmarks/counts.ts.</td>
+</tr>
+<tr>
+  <td>24</td>
+  <td><code>matchesBookmarkFilters()</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-counts.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-counts.test.ts</small><br><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>countBookmarks()</code><br><small style="color:var(--muted)">lib/bookmarks/counts.ts</small><br>+1 more</td>
+  <td>No direct outbound edge</td>
+  <td>matchesBookmarkFilters() node in lib/bookmarks/counts.ts.</td>
+</tr>
+<tr>
+  <td>25</td>
+  <td><code>flattenFolderResponse()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>folder-tree.test.ts</code><br><small style="color:var(--muted)">tests/folder-tree.test.ts</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>refreshBookmarks()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>normalizeFolderPositions()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>flattenFolderResponse() node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+<tr>
+  <td>26</td>
+  <td><code>visit()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>flattenFolderTree()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>folderDescendantIds()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>visibleFoldersInSubtree()</code><br><small style="color:var(--muted)">lib/bookmarks/groups.ts</small></td>
+  <td>No direct outbound edge</td>
+  <td>visit() node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+<tr>
+  <td>27</td>
+  <td><code>flattenFolderTree()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>folder-tree.test.ts</code><br><small style="color:var(--muted)">tests/folder-tree.test.ts</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>buildFolderTree()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>visit()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>flattenFolderTree() node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+<tr>
+  <td>28</td>
+  <td><code>folderDescendantIds()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>folder-tree.test.ts</code><br><small style="color:var(--muted)">tests/folder-tree.test.ts</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br>+1 more</td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>visit()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>folderDescendantIds() node in lib/bookmarks/folder-tree.ts.</td>
+</tr>
+<tr>
+  <td>29</td>
+  <td><code>buildBookmarkGroups()</code><br><small style="color:var(--muted)">lib/bookmarks/groups.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-groups.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-groups.test.ts</small><br><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>buildBookmarkGroups() node in lib/bookmarks/groups.ts.</td>
+</tr>
+<tr>
+  <td>30</td>
+  <td><code>visibleFoldersInSubtree()</code><br><small style="color:var(--muted)">lib/bookmarks/groups.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td><code>bookmark-groups.test.ts</code><br><small style="color:var(--muted)">tests/bookmark-groups.test.ts</small><br><code>BookmarksPage()</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small><br><code>page.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/page.tsx</small></td>
+  <td><code>folderParentId()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small><br><code>visit()</code><br><small style="color:var(--muted)">lib/bookmarks/folder-tree.ts</small></td>
+  <td>visibleFoldersInSubtree() node in lib/bookmarks/groups.ts.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>lib/bookmarks/validation.ts</code></td><td>17 nodes</td></tr>
+<tr><td><code>lib/bookmarks/constants.ts</code></td><td>9 nodes</td></tr>
+<tr><td><code>lib/bookmarks/graphql.ts</code></td><td>9 nodes</td></tr>
+<tr><td><code>lib/bookmarks/types.ts</code></td><td>9 nodes</td></tr>
+<tr><td><code>app/(dashboard)/page.tsx</code></td><td>6 nodes</td></tr>
+<tr><td><code>lib/bookmarks/folder-tree.ts</code></td><td>6 nodes</td></tr>
+<tr><td><code>tests/bookmark-saving-feedback.test.tsx</code></td><td>5 nodes</td></tr>
+<tr><td><code>lib/bookmarks/cache.ts</code></td><td>4 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: imports x88, contains x78, imports x39, calls x36. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 8. Dashboard App Dashboardshelltsx ====== -->
+<h2 id="dashboard-app-dashboardshelltsx">8. Dashboard App Dashboardshelltsx</h2>
+<p>Dashboard App Dashboardshelltsx groups implementation around dashboard, app, dashboardshelltsx, layouttsx, mostly in app/(dashboard)/DashboardShell.tsx, app/(dashboard)/layout.tsx. This section covers 4 nodes and 4 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Dashboard App Dashboardshelltsx (4 nodes, 4 edges)
+    subgraph dashboard_app_dashboardshelltsx_app_dashboard_Da_13a32f15["app/(dashboard)/DashboardShell.tsx"]
+        app_dashboard_dashboardshell_dashboardshell_b3275821("DashboardShell()<br/><small>app/(dashboard)/DashboardShell.tsx</small>")
+        app_dashboard_dashboardshell_120c7ec6("DashboardShell.tsx")
+    end
+    subgraph dashboard_app_dashboardshelltsx_app_dashboard_la_a748b202["app/(dashboard)/layout.tsx"]
+        app_dashboard_layout_260c171f("layout.tsx")
+        app_dashboard_layout_dashboardlayout_b2ea0ea1("DashboardLayout()<br/><small>app/(dashboard)/layout.tsx</small>")
+    end
+    app_dashboard_layout_260c171f -->|imports| app_dashboard_dashboardshell_dashboardshell_b3275821
+    app_dashboard_layout_260c171f -->|imports| app_dashboard_dashboardshell_120c7ec6
+    class app_dashboard_dashboardshell_dashboardshell_b3275821 ui;
+    class app_dashboard_dashboardshell_120c7ec6 ui;
+    class app_dashboard_layout_260c171f ui;
+    class app_dashboard_layout_dashboardlayout_b2ea0ea1 ui;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>DashboardShell()</code><br><small style="color:var(--muted)">app/(dashboard)/DashboardShell.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>layout.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/layout.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>DashboardShell() node in app/(dashboard)/DashboardShell.tsx.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>DashboardLayout()</code><br><small style="color:var(--muted)">app/(dashboard)/layout.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>DashboardLayout() node in app/(dashboard)/layout.tsx.</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><code>DashboardShell.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/DashboardShell.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td><code>layout.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/layout.tsx</small></td>
+  <td>No direct outbound edge</td>
+  <td>Module file in app/(dashboard)/DashboardShell.tsx.</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><code>(dashboard)/layout.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/layout.tsx</small></td>
+  <td><span class="tag tag-hook">UI</span></td>
+  <td>External entry / no inbound edge</td>
+  <td><code>DashboardShell()</code><br><small style="color:var(--muted)">app/(dashboard)/DashboardShell.tsx</small><br><code>DashboardShell.tsx</code><br><small style="color:var(--muted)">app/(dashboard)/DashboardShell.tsx</small></td>
+  <td>Module file in app/(dashboard)/layout.tsx.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>app/(dashboard)/DashboardShell.tsx</code></td><td>2 nodes</td></tr>
+<tr><td><code>app/(dashboard)/layout.tsx</code></td><td>2 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: contains x2, imports x1, imports x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 9. Nextconfigts Nextconfig ====== -->
+<h2 id="nextconfigts-nextconfig">9. Nextconfigts Nextconfig</h2>
+<p>Nextconfigts Nextconfig groups implementation around nextconfigts, nextconfig, mostly in next.config.ts. This section covers 2 nodes and 1 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Nextconfigts Nextconfig (2 nodes, 1 edges)
+    next_config_531ff3ba("next.config.ts")
+    next_config_nextconfig_cf9503a0("nextConfig<br/><small>next.config.ts</small>")
+    next_config_531ff3ba -->|contains| next_config_nextconfig_cf9503a0
+    class next_config_531ff3ba module;
+    class next_config_nextconfig_cf9503a0 function;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>next.config.ts</code><br><small style="color:var(--muted)">next.config.ts</small></td>
+  <td><span class="tag tag-class">Module</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Module file in next.config.ts.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>nextConfig</code><br><small style="color:var(--muted)">next.config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>next.config.ts</code></td><td>2 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: contains x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 10. Next Envdts Note ====== -->
+<h2 id="next-envdts-note">10. Next Envdts Note</h2>
+<p>Next Envdts Note groups implementation around next, envdts, note, should, mostly in next-env.d.ts. This section covers 2 nodes and 1 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Next Envdts Note (2 nodes, 1 edges)
+    next_env_d_rationale_5_19faa4e8("NOTE: This file should not be edited<br/><small>next-env.d.ts</small>")
+    next_env_d_1e14f66a("next-env.d.ts")
+    next_env_d_rationale_5_19faa4e8 -->|explains| next_env_d_1e14f66a
+    class next_env_d_rationale_5_19faa4e8 concept;
+    class next_env_d_1e14f66a module;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>next-env.d.ts</code><br><small style="color:var(--muted)">next-env.d.ts</small></td>
+  <td><span class="tag tag-class">Module</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Module file in next-env.d.ts.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>NOTE: This file should not be edited</code><br><small style="color:var(--muted)">next-env.d.ts</small></td>
+  <td><span class="tag tag-func">Concept</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Design note for NOTE: This file should not be edited.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>next-env.d.ts</code></td><td>2 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: explains x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 11. Swjs Public Precache ====== -->
+<h2 id="swjs-public-precache">11. Swjs Public Precache</h2>
+<p>Swjs Public Precache groups implementation around swjs, public, precache, urls, mostly in public/sw.js. This section covers 2 nodes and 1 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Swjs Public Precache (2 nodes, 1 edges)
+    public_sw_be7f98ee("sw.js")
+    public_sw_precache_urls_ff1e65fe("PRECACHE_URLS<br/><small>public/sw.js</small>")
+    public_sw_be7f98ee -->|contains| public_sw_precache_urls_ff1e65fe
+    class public_sw_be7f98ee module;
+    class public_sw_precache_urls_ff1e65fe klass;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>sw.js</code><br><small style="color:var(--muted)">public/sw.js</small></td>
+  <td><span class="tag tag-class">Module</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>sw.js node in public/sw.js.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>PRECACHE_URLS</code><br><small style="color:var(--muted)">public/sw.js</small></td>
+  <td><span class="tag tag-class">Class</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Caches analysis results or computes cache keys.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>public/sw.js</code></td><td>2 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: contains x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 12. Tailwindconfigts Config ====== -->
+<h2 id="tailwindconfigts-config">12. Tailwindconfigts Config</h2>
+<p>Tailwindconfigts Config groups implementation around tailwindconfigts, config, mostly in tailwind.config.ts. This section covers 2 nodes and 1 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Tailwindconfigts Config (2 nodes, 1 edges)
+    tailwind_config_2024816e("tailwind.config.ts")
+    tailwind_config_config_3c3bbe06("config<br/><small>tailwind.config.ts</small>")
+    tailwind_config_2024816e -->|contains| tailwind_config_config_3c3bbe06
+    class tailwind_config_2024816e module;
+    class tailwind_config_config_3c3bbe06 function;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>tailwind.config.ts</code><br><small style="color:var(--muted)">tailwind.config.ts</small></td>
+  <td><span class="tag tag-class">Module</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Module file in tailwind.config.ts.</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><code>config</code><br><small style="color:var(--muted)">tailwind.config.ts</small></td>
+  <td><span class="tag tag-func">Function</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>tailwind.config.ts</code></td><td>2 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: contains x1. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 13. Postcssconfigjs ====== -->
+<h2 id="postcssconfigjs">13. Postcssconfigjs</h2>
+<p>Postcssconfigjs groups implementation around postcssconfigjs, mostly in postcss.config.js. This section covers 1 nodes and 0 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Postcssconfigjs (1 nodes, 0 edges)
+    postcss_config_bfe60bb8("postcss.config.js")
+    class postcss_config_bfe60bb8 module;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>postcss.config.js</code><br><small style="color:var(--muted)">postcss.config.js</small></td>
+  <td><span class="tag tag-class">Module</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Reads, resolves, or persists project configuration.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>postcss.config.js</code></td><td>1 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: No high-confidence call edges detected. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<!-- ====== 14. Vitestconfigts ====== -->
+<h2 id="vitestconfigts">14. Vitestconfigts</h2>
+<p>Vitestconfigts groups implementation around vitestconfigts, mostly in vitest.config.ts. This section covers 1 nodes and 0 internal edges; the diagram shows only representative relationships to stay readable.</p>
+
+<div class="mermaid">
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15.0px", "fontFamily": "Segoe UI, system-ui, sans-serif", "primaryColor": "#1e293b", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#38bdf8", "secondaryColor": "#0f172a", "tertiaryColor": "#334155", "lineColor": "#64748b", "textColor": "#e2e8f0"}, "flowchart": {"htmlLabels": true, "curve": "basis", "nodeSpacing": 48, "rankSpacing": 64, "padding": 14, "diagramPadding": 10, "useMaxWidth": true}}}%%
+flowchart LR
+    %% Section: Vitestconfigts (1 nodes, 0 edges)
+    vitest_config_27695d99("vitest.config.ts")
+    class vitest_config_27695d99 test;
+    classDef entry fill:#422006,stroke:#fbbf24,color:#fde68a,stroke-width:1px;
+    classDef api fill:#450a0a,stroke:#f87171,color:#fee2e2,stroke-width:1px;
+    classDef async fill:#2e1065,stroke:#a78bfa,color:#ede9fe,stroke-width:1px;
+    classDef klass fill:#064e3b,stroke:#34d399,color:#d1fae5,stroke-width:1px;
+    classDef ui fill:#831843,stroke:#f472b6,color:#fce7f3,stroke-width:1px;
+    classDef module fill:#172554,stroke:#60a5fa,color:#dbeafe,stroke-width:1px;
+    classDef test fill:#3f3f46,stroke:#a1a1aa,color:#f4f4f5,stroke-width:1px;
+    classDef concept fill:#292524,stroke:#a8a29e,color:#fafaf9,stroke-dasharray:4 3;
+    classDef function fill:#0f172a,stroke:#38bdf8,color:#e0f2fe,stroke-width:1px;
+</div>
+
+<h3>Call Details</h3>
+<table class="call-table">
+<tr>
+  <th style="width:5%">#</th>
+  <th style="width:28%">Node</th>
+  <th style="width:10%">Type</th>
+  <th style="width:17%">Caller</th>
+  <th style="width:20%">Callees</th>
+  <th style="width:20%">Description</th>
+</tr>
+<tr>
+  <td>1</td>
+  <td><code>vitest.config.ts</code><br><small style="color:var(--muted)">vitest.config.ts</small></td>
+  <td><span class="tag tag-func">Test</span></td>
+  <td>External entry / no inbound edge</td>
+  <td>No direct outbound edge</td>
+  <td>Module file in vitest.config.ts.</td>
+</tr>
+</table>
+
+<div class="grid">
+  <div class="card">
+    <h4>Key Files</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><th>File</th><th>Coverage</th></tr>
+      <tr><td><code>vitest.config.ts</code></td><td>1 nodes</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Design Notes</h4>
+    <p>This section comes from graphify community clustering. Relationship summary: No high-confidence call edges detected. The diagram prioritizes high-confidence calls or usage relationships; the table keeps the broader node inventory.</p>
+  </div>
+</div>
+<hr>
+
+<h2 id="stats">Project Statistics</h2>
+
+<div class="grid">
+  <div class="card">
+    <h4>Graph</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><td>Nodes</td><td>566</td></tr>
+      <tr><td>Edges</td><td>1028</td></tr>
+      <tr><td>Hyperedges</td><td>0</td></tr>
+      <tr><td>Communities</td><td>46</td></tr>
+      <tr><td>Documented Sections</td><td>13</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h4>Edge Confidence</h4>
+    <table style="width:100%;font-size:0.85rem;">
+      <tr><td>EXTRACTED</td><td>1024</td></tr>
+      <tr><td>INFERRED</td><td>4</td></tr>
+      <tr><td>AMBIGUOUS</td><td>0</td></tr>
+    </table>
+  </div>
+</div>
+
+<div style="text-align:center; padding:40px 0; color: var(--muted); font-size:0.9rem;">
+  <p>bookmark — Architecture Documentation</p>
+  <p>Generated: 2026-08-17 00:44 UTC · graphify callflow-html</p>
+</div>
+
+</div><!-- .container -->
+
+<script>
+(function () {
+  const mermaidConfig = {
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'loose',
+    flowchart: { htmlLabels: true, useMaxWidth: true },
+    themeVariables: {
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#38bdf8',
+      secondaryColor: '#0f172a',
+      tertiaryColor: '#334155',
+      lineColor: '#64748b',
+      textColor: '#e2e8f0',
+    }
+  };
+
+  mermaid.initialize(mermaidConfig);
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function enhanceMermaidDiagrams() {
+    document.querySelectorAll('.mermaid').forEach((container) => {
+      if (container.dataset.zoomReady === 'true') return;
+      const svg = container.querySelector('svg');
+      if (!svg) return;
+
+      container.dataset.zoomReady = 'true';
+      container.classList.add('is-enhanced');
+
+      const viewport = document.createElement('div');
+      viewport.className = 'mermaid-viewport';
+      svg.parentNode.insertBefore(viewport, svg);
+      viewport.appendChild(svg);
+
+      const toolbar = document.createElement('div');
+      toolbar.className = 'mermaid-toolbar';
+      toolbar.innerHTML = [
+        '<button type="button" data-action="zoom-out" title="Zoom out">-</button>',
+        '<span class="zoom-level" data-role="level">100%</span>',
+        '<button type="button" data-action="zoom-in" title="Zoom in">+</button>',
+        '<button type="button" data-action="fit" title="Fit width">Fit</button>',
+        '<button type="button" data-action="reset" title="Reset view">Reset</button>'
+      ].join('');
+      container.insertBefore(toolbar, viewport);
+
+      const state = { scale: 1, x: 0, y: 0, dragging: false, startX: 0, startY: 0, originX: 0, originY: 0 };
+      const level = toolbar.querySelector('[data-role="level"]');
+
+      function applyTransform() {
+        svg.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+        level.textContent = `${Math.round(state.scale * 100)}%`;
+      }
+
+      function zoomBy(delta) {
+        state.scale = clamp(state.scale + delta, 0.25, 3);
+        applyTransform();
+      }
+
+      function reset() {
+        state.scale = 1;
+        state.x = 0;
+        state.y = 0;
+        applyTransform();
+      }
+
+      function fitWidth() {
+        const rawWidth = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width
+          ? svg.viewBox.baseVal.width
+          : svg.getBoundingClientRect().width / state.scale;
+        if (!rawWidth) {
+          reset();
+          return;
+        }
+        state.scale = clamp((viewport.clientWidth - 48) / rawWidth, 0.25, 1.4);
+        state.x = 0;
+        state.y = 0;
+        applyTransform();
+      }
+
+      toolbar.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-action]');
+        if (!button) return;
+        const action = button.dataset.action;
+        if (action === 'zoom-in') zoomBy(0.15);
+        if (action === 'zoom-out') zoomBy(-0.15);
+        if (action === 'fit') fitWidth();
+        if (action === 'reset') reset();
+      });
+
+      viewport.addEventListener('wheel', (event) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        zoomBy(event.deltaY < 0 ? 0.1 : -0.1);
+      }, { passive: false });
+
+      viewport.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        state.dragging = true;
+        state.startX = event.clientX;
+        state.startY = event.clientY;
+        state.originX = state.x;
+        state.originY = state.y;
+        viewport.classList.add('is-dragging');
+        viewport.setPointerCapture(event.pointerId);
+      });
+
+      viewport.addEventListener('pointermove', (event) => {
+        if (!state.dragging) return;
+        state.x = state.originX + event.clientX - state.startX;
+        state.y = state.originY + event.clientY - state.startY;
+        applyTransform();
+      });
+
+      function endDrag(event) {
+        if (!state.dragging) return;
+        state.dragging = false;
+        viewport.classList.remove('is-dragging');
+        if (viewport.hasPointerCapture(event.pointerId)) {
+          viewport.releasePointerCapture(event.pointerId);
+        }
+      }
+
+      viewport.addEventListener('pointerup', endDrag);
+      viewport.addEventListener('pointercancel', endDrag);
+      applyTransform();
+    });
+  }
+
+  function renderMermaid() {
+    const result = mermaid.run
+      ? mermaid.run({ querySelector: '.mermaid' })
+      : Promise.resolve();
+    Promise.resolve(result)
+      .then(enhanceMermaidDiagrams)
+      .catch((error) => {
+        console.error('Mermaid render failed:', error);
+        enhanceMermaidDiagrams();
+      });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderMermaid);
+  } else {
+    renderMermaid();
+  }
+})();
+</script>
+
+</body>
+</html>
