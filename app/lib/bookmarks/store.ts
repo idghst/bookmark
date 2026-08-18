@@ -1,4 +1,4 @@
-import { graphqlRequest, BOOKMARK_SELECTION, FOLDER_SELECTION, SECTION_SELECTION } from "@/app/lib/bookmarks/graphql";
+import { restRequest } from "@/app/lib/bookmarks/rest";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
 import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 import {
@@ -17,109 +17,75 @@ export { StoreError };
 
 export const bookmarkStore = {
   async listBookmarks() {
-    const data = await graphqlRequest<{ bookmarks: BookmarkItem[] }>(`
-      query ListBookmarks {
-        bookmarks { ${BOOKMARK_SELECTION} }
-      }
-    `);
-    return data.bookmarks;
+    return restRequest<BookmarkItem[]>("bookmarks");
   },
 
   async createBookmark(value: unknown) {
-    const data = await graphqlRequest<{ createBookmark: BookmarkItem }>(
-      `mutation CreateBookmark($input: BookmarkCreateInput!) {
-        createBookmark(input: $input) { ${BOOKMARK_SELECTION} }
-      }`,
-      { input: validateBookmarkCreate(value) }
-    );
-    return data.createBookmark;
+    return restRequest<BookmarkItem>("bookmarks", {
+      method: "POST",
+      body: validateBookmarkCreate(value)
+    });
   },
 
   async updateBookmark(id: string, value: unknown) {
-    const data = await graphqlRequest<{ updateBookmark: BookmarkItem }>(
-      `mutation UpdateBookmark($id: ID!, $input: BookmarkUpdateInput!) {
-        updateBookmark(id: $id, input: $input) { ${BOOKMARK_SELECTION} }
-      }`,
-      { id, input: validateBookmarkPatch(value) }
-    );
-    return data.updateBookmark;
+    return restRequest<BookmarkItem>(`bookmarks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: validateBookmarkPatch(value)
+    });
   },
 
   async deleteBookmark(id: string) {
-    await graphqlRequest<{ deleteBookmark: boolean }>(
-      `mutation DeleteBookmark($id: ID!) {
-        deleteBookmark(id: $id)
-      }`,
-      { id }
-    );
+    await restRequest<void>(`bookmarks/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
   },
 
   async reorderBookmarks(value: unknown) {
-    await graphqlRequest<{ reorderBookmarks: boolean }>(
-      `mutation ReorderBookmarks($input: [PositionInput!]!) {
-        reorderBookmarks(input: $input)
-      }`,
-      { input: validatePositionUpdates(value) }
-    );
+    await restRequest<void>("bookmarks/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
   },
 
   async listFolders() {
-    const data = await graphqlRequest<{ folders: Folder[] }>(`
-      query ListFolders {
-        folders { ${FOLDER_SELECTION} }
-      }
-    `);
-    return data.folders;
+    return restRequest<Folder[]>("folders");
   },
 
   async createFolder(value: unknown) {
-    const data = await graphqlRequest<{ createFolder: Folder }>(
-      `mutation CreateFolder($input: FolderCreateInput!) {
-        createFolder(input: $input) { ${FOLDER_SELECTION} }
-      }`,
-      { input: validateFolderCreate(value) }
-    );
-    return data.createFolder;
+    return restRequest<Folder>("folders", {
+      method: "POST",
+      body: validateFolderCreate(value)
+    });
   },
 
   async updateFolder(id: string, value: unknown) {
-    const data = await graphqlRequest<{ updateFolder: Folder }>(
-      `mutation UpdateFolder($id: ID!, $input: FolderUpdateInput!) {
-        updateFolder(id: $id, input: $input) { ${FOLDER_SELECTION} }
-      }`,
-      { id, input: validateFolderPatch(value) }
-    );
-    return data.updateFolder;
+    return restRequest<Folder>(`folders/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: validateFolderPatch(value)
+    });
   },
 
   async deleteFolder(id: string, destinationFolderId?: string) {
     const destination = destinationFolderId === undefined
       ? null
       : nonEmptyString(destinationFolderId, "Destination folder id");
-    await graphqlRequest<{ deleteFolder: boolean }>(
-      `mutation DeleteFolder($id: ID!, $destinationFolderId: ID) {
-        deleteFolder(id: $id, destinationFolderId: $destinationFolderId)
-      }`,
-      { id, destinationFolderId: destination }
-    );
+    const query = destination === null
+      ? ""
+      : `?destination_folder_id=${encodeURIComponent(destination)}`;
+    await restRequest<void>(`folders/${encodeURIComponent(id)}${query}`, {
+      method: "DELETE"
+    });
   },
 
   async reorderFolders(value: unknown) {
-    await graphqlRequest<{ reorderFolders: boolean }>(
-      `mutation ReorderFolders($input: [PositionInput!]!) {
-        reorderFolders(input: $input)
-      }`,
-      { input: validatePositionUpdates(value) }
-    );
+    await restRequest<void>("folders/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
   },
 
   async listSections() {
-    const data = await graphqlRequest<{ sections: Section[] }>(`
-      query ListSections {
-        sections { ${SECTION_SELECTION} }
-      }
-    `);
-    return data.sections;
+    return restRequest<Section[]>("sections");
   },
 
   async createSection(folderIdValue: unknown, nameValue: unknown, colorValue?: unknown) {
@@ -135,40 +101,29 @@ export const bookmarkStore = {
       name
     );
     if (existing) return existing;
-    const data = await graphqlRequest<{ createSection: Section }>(
-      `mutation CreateSection($input: SectionCreateInput!) {
-        createSection(input: $input) { ${SECTION_SELECTION} }
-      }`,
-      { input: { folderId, name, color } }
-    );
-    return data.createSection;
+    return restRequest<Section>("sections", {
+      method: "POST",
+      body: { folderId, name, color }
+    });
   },
 
   async updateSection(id: string, value: unknown) {
-    const data = await graphqlRequest<{ updateSection: Section }>(
-      `mutation UpdateSection($id: ID!, $input: SectionUpdateInput!) {
-        updateSection(id: $id, input: $input) { ${SECTION_SELECTION} }
-      }`,
-      { id, input: validateSectionPatch(value) }
-    );
-    return data.updateSection;
+    return restRequest<Section>(`sections/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: validateSectionPatch(value)
+    });
   },
 
   async deleteSection(id: string) {
-    await graphqlRequest<{ deleteSection: boolean }>(
-      `mutation DeleteSection($id: ID!) {
-        deleteSection(id: $id)
-      }`,
-      { id }
-    );
+    await restRequest<void>(`sections/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
   },
 
   async reorderSections(value: unknown) {
-    await graphqlRequest<{ reorderSections: boolean }>(
-      `mutation ReorderSections($input: [PositionInput!]!) {
-        reorderSections(input: $input)
-      }`,
-      { input: validatePositionUpdates(value) }
-    );
+    await restRequest<void>("sections/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
   }
 };

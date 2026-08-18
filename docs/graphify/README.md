@@ -36,8 +36,8 @@ flowchart LR
   Page["BookmarksPage"] --> ClientAPI["apiRequest /api/*"]
   ClientAPI --> BFF["app/api/[resource]/route.ts"]
   BFF --> Store["bookmarkStore"]
-  Store --> GQLReq["graphqlRequest"]
-  GQLReq -->|"X-Bookmark-Key"| RemoteGQL["api-bookmark /graphql"]
+  Store --> RESTReq["restRequest"]
+  RESTReq -->|"X-Bookmark-Key"| RemoteREST["api-bookmark /api"]
   Expo["mobile/src/app"] -->|"REST + 사용자 키"| RemoteREST["api-bookmark /api"]
 ```
 
@@ -56,7 +56,7 @@ flowchart TB
     Routes["app/api/[resource]/[[...path]]/route.ts"]
     Store["store.ts facade"]
     Val[validation.ts]
-    GQL[graphql.ts]
+    REST[rest.ts]
   end
   subgraph api [원격 API]
     Remote["api-bookmark"]
@@ -69,8 +69,8 @@ flowchart TB
   Page -->|"apiRequest"| Routes
   Routes --> Store
   Store --> Val
-  Store --> GQL
-  GQL --> Remote
+  Store --> REST
+  REST --> Remote
   Expo --> Remote
 ```
 
@@ -81,7 +81,7 @@ flowchart TB
 | C1 | 대시보드 페이지 상태 | `BookmarksPage()`, `dropBookmark()`, `saveFolder()` in `app/(dashboard)/page.tsx` |
 | C0 | 추출 UI + 초안 타입 | `bookmarks-ui/*`, `FolderTreeRow`, `BookmarkDialog` |
 | C4 | 카드·URL·shadcn | `BookmarkCard`, `Favicon`, `safeUrl()`, `badgeVariants` |
-| C8 | BFF GraphQL 전송 | `graphqlRequest()`, `BOOKMARK_SELECTION`, `store.ts` |
+| C8 | BFF REST 전송 | `restRequest()`, `store.ts` |
 | C11 | BFF HTTP 라우트 | `GET`/`POST`/`PATCH`/`DELETE` in `app/api/[resource]/[[...path]]/route.ts` |
 | C15 | 파비콘 프록시 | `app/api/favicon/route.ts` |
 | C3 | Expo 화면 | `mobile/src/app/{index,add,settings}.tsx` |
@@ -102,21 +102,21 @@ flowchart TB
 | 질의 | 결과 | 해석 |
 | --- | --- | --- |
 | `path BookmarksPage bookmarkStore` | directed 없음 | 런타임은 `page → apiRequest → /api/* → bookmarkStore` |
-| `path BookmarksPage graphqlRequest --undirected` | 4 hops | `page → sections.ts ← store.ts → graphqlRequest`. 공유 헬퍼일 뿐 BFF 경로가 아님 |
-| `path GET graphqlRequest` | directed 없음 | `route.ts`는 `bookmarkStore`를 호출하고, 스토어가 `graphqlRequest`를 호출한다. 그래프가 store 메서드 내부 호출을 약하게 잡음 |
-| `explain graphqlRequest` | `store.ts`가 import | 전송 계층 입구 |
-| `query "how does the BFF route call GraphQL"` | C11 + C8 | 라우트 가드(`requireBookmarkAccess`)와 `graphqlRequest`가 같은 질문에 붙는다 |
+| `path BookmarksPage restRequest --undirected` | 간접 경로 | `page → apiRequest → /api/* → bookmarkStore → restRequest` 런타임 경로를 문서와 함께 해석한다 |
+| `path GET restRequest` | directed 없음일 수 있음 | `route.ts`는 `bookmarkStore`를 호출하고, 스토어가 `restRequest`를 호출한다 |
+| `explain restRequest` | `store.ts`가 import | REST 전송 계층 입구 |
+| `query "how does the BFF route call REST"` | C11 + C8 | 라우트 가드와 `restRequest`가 같은 질문에 붙는다 |
 
 183개 isolated 노드(`BookmarkDialog` 등)는 타입·초안 객체가 호출 엣지 없이 모인 것이다. 누락된 기능이 아니다.
 
 ## 자주 쓰는 질의
 
 ```bash
-graphify query "how does the BFF route call GraphQL"
+graphify query "how does the BFF route call REST"
 graphify explain "BookmarksPage"
-graphify explain "graphqlRequest"
+graphify explain "restRequest"
 graphify god-nodes
-graphify path "BookmarksPage" "graphqlRequest" --undirected
+graphify path "BookmarksPage" "restRequest" --undirected
 graphify affected "BookmarksPage"
 ```
 

@@ -1,60 +1,75 @@
-# Graph Report - bookmark  (2026-08-17)
+# Graph Report - bookmark  (2026-08-19)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 88 files · ~47,137 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 566 nodes · 1028 edges · 46 communities (22 shown, 24 thin omitted)
+- 635 nodes · 1080 edges · 60 communities (29 shown, 31 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f92305de`
+- Built from commit: `3009e878`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- Community 0
-- Community 1
-- Community 2
-- Community 3
-- Community 4
-- Community 5
-- Community 6
-- Community 7
-- Community 8
-- Community 9
-- Community 10
-- Community 11
-- Community 12
-- Community 13
-- Community 14
-- Community 15
-- Community 16
-- Community 17
-- Community 18
-- Community 19
-- Community 20
-- Community 21
-- Community 22
-- Community 23
-- Community 24
-- Community 25
-- Community 26
-- Community 27
-- Community 28
-- Community 29
-- Community 30
-- Community 31
-- Community 32
-- Community 33
-- Community 34
-- Community 35
-- Community 36
-- Community 37
-- Community 38
-- Community 39
-- Community 40
+- page.tsx
+- BookmarksPage
+- devDependencies
+- index.tsx
+- cn
+- scripts
+- toast.tsx
+- compilerOptions
+- validation.ts
+- expo
+- release.sh
+- [[...path]]/route.ts
+- components.json
+- include
+- dependencies
+- favicon/route.ts
+- expo-image
+- (dashboard)/layout.tsx
+- not-found.tsx
+- react-native-reanimated
+- scripts
+- expo-device
+- expo-font
+- expo-glass-effect
+- expo-linking
+- expo-splash-screen
+- expo-status-bar
+- expo-system-ui
+- @expo/ui
+- expo-updates
+- expo-web-browser
+- react
+- react-native-gesture-handler
+- react-native-safe-area-context
+- react-native-screens
+- react-native-web
+- react-native-worklets
+- next.config.ts
+- next-env.d.ts
+- sw.js
+- tailwind.config.ts
+- File Map
+- Bookmark 앱 이관 설계
+- Graphify 지식 그래프
+- Bookmark
+- 웹 앱 구조 리팩터 설계
+- Bookmark 모바일 앱
+- Sidebar folder action menu QA
+- AGENTS.md
+- @expo/metro-runtime
+- expo-router
+- expo-secure-store
+- expo-symbols
+- mobile/AGENTS.md
+- react-native
 
 ## God Nodes (most connected - your core abstractions)
 1. `cn()` - 37 edges
@@ -69,109 +84,137 @@
 10. `invalid()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `proxy()` --calls--> `BookmarkClientAccess`  [EXTRACTED]
-  proxy.ts → app/lib/bookmarks/client-auth.ts
-- `BookmarksLoading()` --calls--> `cn()`  [EXTRACTED]
-  app/(dashboard)/bookmarks-ui/BookmarksLoading.tsx → lib/utils.ts
+- `ConsoleSidebar()` --calls--> `cn()`  [EXTRACTED]
+  app/(dashboard)/ConsoleSidebar.tsx → lib/utils.ts
 - `FolderTreeRow()` --calls--> `cn()`  [EXTRACTED]
   app/(dashboard)/ConsoleSidebar.tsx → lib/utils.ts
+- `BookmarksLoading()` --calls--> `cn()`  [EXTRACTED]
+  app/(dashboard)/bookmarks-ui/BookmarksLoading.tsx → lib/utils.ts
 - `BookmarksPage()` --calls--> `cn()`  [EXTRACTED]
   app/(dashboard)/page.tsx → lib/utils.ts
-- `CardAction()` --calls--> `cn()`  [EXTRACTED]
-  components/ui/card.tsx → lib/utils.ts
+- `proxy()` --calls--> `bookmarkClientAccess`  [EXTRACTED]
+  proxy.ts → app/lib/bookmarks/client-auth.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (46 total, 24 thin omitted)
+## Communities (60 total, 31 thin omitted)
 
-### Community 0 - "Community 0"
-Cohesion: 0.07
-Nodes (45): BookmarksLoading(), DatabaseProgressStatus(), Field(), Modal(), SectionActionsMenu(), FolderTreeRow(), BookmarkDialog, BookmarkDraft (+37 more)
+### Community 0 - "page.tsx"
+Cohesion: 0.06
+Nodes (58): BookmarksLoading(), DatabaseProgressStatus(), Field(), Modal(), SectionActionsMenu(), ConsoleSidebar(), ConsoleSidebarProps, FolderTree() (+50 more)
 
-### Community 1 - "Community 1"
-Cohesion: 0.10
-Nodes (34): FolderTree(), handleTreeKeyDown(), toggleFolder(), BookmarksPage(), confirmDelete(), createSectionFromBookmarkDialog(), dropBookmark(), dropFolder() (+26 more)
+### Community 1 - "BookmarksPage"
+Cohesion: 0.15
+Nodes (24): BookmarksPage(), confirmDelete(), createSectionFromBookmarkDialog(), dropBookmark(), dropFolder(), dropSection(), hydrateFromFallback(), loadBookmarks() (+16 more)
 
-### Community 2 - "Community 2"
-Cohesion: 0.05
-Nodes (44): autoprefixer, expo-doctor, jsdom, devDependencies, expo-doctor, @types/react, typescript, main (+36 more)
+### Community 2 - "devDependencies"
+Cohesion: 0.08
+Nodes (25): autoprefixer, jsdom, devDependencies, autoprefixer, jsdom, postcss, tailwindcss, @testing-library/jest-dom (+17 more)
 
-### Community 3 - "Community 3"
+### Community 3 - "index.tsx"
 Cohesion: 0.11
-Nodes (34): expo-router, expo-router, AddBookmarkScreen(), normalizeBookmarkUrl(), styles, errorMessageOf(), Filter, HomeScreen() (+26 more)
+Nodes (36): plugins, AddBookmarkScreen(), normalizeBookmarkUrl(), styles, errorMessageOf(), Filter, HomeScreen(), hostOf() (+28 more)
 
-### Community 4 - "Community 4"
+### Community 4 - "cn"
 Cohesion: 0.11
 Nodes (30): BookmarkActionsMenu(), BookmarkCard(), Favicon(), bookmarkHost(), normalizeUrl(), safeUrl(), Badge(), badgeVariants (+22 more)
 
-### Community 5 - "Community 5"
+### Community 5 - "scripts"
 Cohesion: 0.05
-Nodes (38): class-variance-authority, clsx, lucide-react, react-dom, next, dependencies, class-variance-authority, clsx (+30 more)
+Nodes (37): class-variance-authority, clsx, lucide-react, next, dependencies, class-variance-authority, clsx, lucide-react (+29 more)
 
-### Community 6 - "Community 6"
-Cohesion: 0.09
-Nodes (27): ServiceWorkerRegistration(), clearToastHistory(), dismissToast(), emit(), emitHistory(), historyItems, historyListeners, items (+19 more)
+### Community 6 - "toast.tsx"
+Cohesion: 0.11
+Nodes (24): ServiceWorkerRegistration(), clearToastHistory(), dismissToast(), emit(), emitHistory(), historyItems, historyListeners, items (+16 more)
 
-### Community 7 - "Community 7"
+### Community 7 - "compilerOptions"
 Cohesion: 0.06
 Nodes (30): dom, dom.iterable, es2022, mobile, .next/dev/types/**/*.ts, next-env.d.ts, .next/types/**/*.ts, .next-verify/dev/types/**/*.ts (+22 more)
 
-### Community 8 - "Community 8"
-Cohesion: 0.14
-Nodes (26): BOOKMARK_SELECTION, FOLDER_SELECTION, getGraphqlConfig(), GRAPHQL_ERROR_STATUS, GraphqlPayload, graphqlRequest(), SECTION_SELECTION, BookmarkFormData (+18 more)
+### Community 8 - "validation.ts"
+Cohesion: 0.17
+Nodes (23): errorMessage(), getRestConfig(), restRequest(), RestRequestOptions, BookmarkFormData, FolderFormData, PositionUpdate, SectionFormData (+15 more)
 
-### Community 9 - "Community 9"
+### Community 9 - "expo"
 Cohesion: 0.07
 Nodes (27): package, projectId, reactCompiler, typedRoutes, expo, android, experiments, extra (+19 more)
 
-### Community 10 - "Community 10"
+### Community 10 - "release.sh"
 Cohesion: 0.25
 Nodes (22): build(), die(), doctor(), print_help(), register_ios_device(), require_app_identity(), require_eas_login(), require_eas_project() (+14 more)
 
-### Community 11 - "Community 11"
+### Community 11 - "[[...path]]/route.ts"
 Cohesion: 0.19
 Nodes (14): DELETE(), GET(), jsonError(), noRoute(), PATCH(), POST(), readJson(), requireBookmarkAccess() (+6 more)
 
-### Community 12 - "Community 12"
+### Community 12 - "components.json"
 Cohesion: 0.09
 Nodes (21): aliases, components, hooks, lib, ui, utils, iconLibrary, menuAccent (+13 more)
 
-### Community 13 - "Community 13"
+### Community 13 - "include"
 Cohesion: 0.15
 Nodes (12): compilerOptions, paths, strict, extends, include, **/*.ts, **/*.tsx, @/assets/* (+4 more)
 
-### Community 14 - "Community 14"
-Cohesion: 0.22
-Nodes (9): expo, @expo/metro-runtime, expo-symbols, dependencies, expo, @expo/metro-runtime, expo-symbols, react-native (+1 more)
+### Community 14 - "dependencies"
+Cohesion: 0.29
+Nodes (7): expo, expo-constants, dependencies, expo, expo-constants, react-dom, react-dom
 
-### Community 15 - "Community 15"
+### Community 15 - "favicon/route.ts"
 Cohesion: 0.53
 Nodes (4): CACHE_HEADERS, faviconUrl(), GET(), parseHttpUrl()
 
-### Community 16 - "Community 16"
-Cohesion: 0.40
-Nodes (5): expo-image, expo-secure-store, plugins, expo-image, expo-secure-store
+### Community 20 - "scripts"
+Cohesion: 0.09
+Nodes (21): expo-doctor, devDependencies, expo-doctor, @types/react, typescript, @types/react, typescript, main (+13 more)
+
+### Community 46 - "File Map"
+Cohesion: 0.15
+Nodes (12): App entry and common skeleton, Bookmark App Extraction Implementation Plan, Bookmark domain, Bookmark UI, File Map, Global Constraints, Task 1: Standalone Next.js Skeleton and Entry Route, Task 2: Bookmark Pure Domain Contracts (+4 more)
+
+### Community 47 - "Bookmark 앱 이관 설계"
+Cohesion: 0.15
+Nodes (12): Bookmark 앱 이관 설계, 검증, 구조, 데이터 흐름, 목표, 범위, 브랜드와 UI, 오류 처리 (+4 more)
+
+### Community 48 - "Graphify 지식 그래프"
+Cohesion: 0.22
+Nodes (8): Graphify 지식 그래프, 갱신, 그래프가 놓치는 런타임 엣지, 레이어, 산출물, 워크스페이스, 자주 쓰는 질의, 커뮤니티 해석
+
+### Community 49 - "Bookmark"
+Cohesion: 0.25
+Nodes (7): Bookmark, 검증, 기능, 모바일 앱, 실행, 운영 접근 제어, 환경 변수
+
+### Community 50 - "웹 앱 구조 리팩터 설계"
+Cohesion: 0.29
+Nodes (6): 검증, 계약 (변경 금지), 목표, 목표 구조, 범위, 웹 앱 구조 리팩터 설계
+
+### Community 51 - "Bookmark 모바일 앱"
+Cohesion: 0.29
+Nodes (6): API 경계, Bookmark 모바일 앱, 검증, 릴리스 런처, 배포 전 남은 결정, 실행
+
+### Community 52 - "Sidebar folder action menu QA"
+Cohesion: 0.33
+Nodes (5): Comparison history, Comparison target, Evidence and state, Required fidelity surfaces, Sidebar folder action menu QA
 
 ## Knowledge Gaps
-- **183 isolated node(s):** `BookmarkDialog`, `BookmarkDraft`, `DeleteTarget`, `FolderDialog`, `SectionDialog` (+178 more)
+- **241 isolated node(s):** `ConsoleSidebarProps`, `BookmarkDraft`, `BookmarkDialog`, `FolderDialog`, `SectionDialog` (+236 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **24 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **31 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `dependencies` connect `Community 14` to `Community 2`, `Community 3`, `Community 5`, `Community 16`, `Community 19`, `Community 20`, `Community 21`, `Community 22`, `Community 23`, `Community 24`, `Community 25`, `Community 26`, `Community 27`, `Community 28`, `Community 29`, `Community 30`, `Community 31`, `Community 32`, `Community 33`, `Community 34`, `Community 35`, `Community 36`?**
-  _High betweenness centrality (0.094) - this node is a cross-community bridge._
-- **Why does `expo-router` connect `Community 3` to `Community 16`?**
-  _High betweenness centrality (0.043) - this node is a cross-community bridge._
-- **What connects `BookmarkDialog`, `BookmarkDraft`, `DeleteTarget` to the rest of the system?**
-  _183 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.06672519754170325 - nodes in this community are weakly interconnected._
-- **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.10452961672473868 - nodes in this community are weakly interconnected._
-- **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.045454545454545456 - nodes in this community are weakly interconnected._
-- **Should `Community 3` be split into smaller, more focused modules?**
-  _Cohesion score 0.11205073995771671 - nodes in this community are weakly interconnected._
+- **Why does `cn()` connect `cn` to `page.tsx`, `BookmarksPage`?**
+  _High betweenness centrality (0.017) - this node is a cross-community bridge._
+- **Why does `BRAND` connect `toast.tsx` to `page.tsx`?**
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
+- **Why does `BookmarksPage()` connect `BookmarksPage` to `page.tsx`, `cn`?**
+  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+- **What connects `ConsoleSidebarProps`, `BookmarkDraft`, `BookmarkDialog` to the rest of the system?**
+  _241 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `page.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.05518207282913165 - nodes in this community are weakly interconnected._
+- **Should `BookmarksPage` be split into smaller, more focused modules?**
+  _Cohesion score 0.14942528735632185 - nodes in this community are weakly interconnected._
+- **Should `devDependencies` be split into smaller, more focused modules?**
+  _Cohesion score 0.08 - nodes in this community are weakly interconnected._

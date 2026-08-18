@@ -1,47 +1,43 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-function configureGraphql() {
-  vi.stubEnv(
-    "BOOKMARK_GRAPHQL_URL",
-    "https://graphql.example.com/api/graphql"
-  );
+function configureRest() {
+  vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
+  vi.stubEnv("BOOKMARK_GRAPHQL_URL", "");
   vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
 }
 
-function graphqlResponse(data: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify({ data }), {
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" }
   });
 }
 
-describe("bookmarkStore GraphQL transport", () => {
+describe("bookmarkStore REST transport", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.resetModules();
   });
 
-  it("reads bookmarks through GraphQL with the server key", async () => {
-    configureGraphql();
+  it("reads bookmarks through REST with the server key", async () => {
+    configureRest();
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit
     ) =>
-      graphqlResponse({
-        bookmarks: [
-          {
-            id: "bookmark-1",
-            title: "Example",
-            url: "https://example.com",
-            description: null,
-            isFavorite: false,
-            folderId: null,
-            sectionId: null,
-            position: 0
-          }
-        ]
-      })
+      jsonResponse([
+        {
+          id: "bookmark-1",
+          title: "Example",
+          url: "https://example.com",
+          description: null,
+          isFavorite: false,
+          folderId: null,
+          sectionId: null,
+          position: 0
+        }
+      ])
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -49,18 +45,16 @@ describe("bookmarkStore GraphQL transport", () => {
     await expect(bookmarkStore.listBookmarks()).resolves.toHaveLength(1);
 
     expect(String(fetchMock.mock.calls[0][0])).toBe(
-      "https://graphql.example.com/api/graphql"
+      "https://api.example.com/api/bookmarks"
     );
-    expect(fetchMock.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
     expect(headers.get("X-Bookmark-Key")).toBe("bookmark-api-secret");
-    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.query).toContain("bookmarks");
-    expect(body.variables).toEqual({});
+    expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined();
   });
 
   it("returns the same-folder section when its name already exists", async () => {
-    configureGraphql();
+    configureRest();
     const existing = {
       id: "section-basic",
       name: "기본",
@@ -70,9 +64,7 @@ describe("bookmarkStore GraphQL transport", () => {
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit
-    ) =>
-      graphqlResponse({ sections: [existing] })
-    );
+    ) => jsonResponse([existing]));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
@@ -82,26 +74,25 @@ describe("bookmarkStore GraphQL transport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("deletes a section through GraphQL", async () => {
-    configureGraphql();
+  it("deletes a section through REST", async () => {
+    configureRest();
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit
-    ) =>
-      graphqlResponse({ deleteSection: true })
-    );
+    ) => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
     await bookmarkStore.deleteSection("section-basic");
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.query).toContain("deleteSection");
-    expect(body.variables).toEqual({ id: "section-basic" });
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "https://api.example.com/api/sections/section-basic"
+    );
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
   });
 
-  it("updates a section through GraphQL", async () => {
-    configureGraphql();
+  it("validates and updates a section through REST", async () => {
+    configureRest();
     const updated = {
       id: "section-basic",
       name: "수정된 기본",
@@ -112,7 +103,7 @@ describe("bookmarkStore GraphQL transport", () => {
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit
-    ) => graphqlResponse({ updateSection: updated }));
+    ) => jsonResponse(updated));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
@@ -127,16 +118,16 @@ describe("bookmarkStore GraphQL transport", () => {
       })
     ).resolves.toEqual(updated);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.query).toContain("updateSection");
-    expect(body.variables).toEqual({
-      id: "section-basic",
-      input: { name: "수정된 기본", color: "#16a34a", folderId: "folder-2" }
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("PATCH");
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      name: "수정된 기본",
+      color: "#16a34a",
+      folderId: "folder-2"
     });
   });
 
-  it("creates a section with its color through GraphQL", async () => {
-    configureGraphql();
+  it("creates a section with its color through REST", async () => {
+    configureRest();
     const created = {
       id: "section-colored",
       name: "색상 섹션",
@@ -145,9 +136,9 @@ describe("bookmarkStore GraphQL transport", () => {
       position: 0
     };
     const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(graphqlResponse({ sections: [] }))
-      .mockResolvedValueOnce(graphqlResponse({ createSection: created }));
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse(created, 201));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
@@ -155,43 +146,64 @@ describe("bookmarkStore GraphQL transport", () => {
       bookmarkStore.createSection("folder-1", " 색상 섹션 ", created.color)
     ).resolves.toEqual(created);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
-    expect(body.query).toContain("createSection");
-    expect(body.variables).toEqual({
-      input: { folderId: "folder-1", name: "색상 섹션", color: created.color }
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      folderId: "folder-1",
+      name: "색상 섹션",
+      color: created.color
     });
   });
 
-  it("requires GraphQL server configuration before making a request", async () => {
+  it("requires REST server configuration before making a request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
     await expect(bookmarkStore.listBookmarks()).rejects.toMatchObject({
-      message: "BOOKMARK_GRAPHQL_URL and BOOKMARK_API_KEY are required.",
+      message: "BOOKMARK_API_URL and BOOKMARK_API_KEY are required.",
       status: 500
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("uses a legacy BOOKMARK_API_URL base as the GraphQL endpoint", async () => {
-    vi.stubEnv("BOOKMARK_GRAPHQL_URL", "");
-    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com/");
+  it("derives the REST base from the legacy GraphQL URL", async () => {
+    vi.stubEnv("BOOKMARK_API_URL", "");
+    vi.stubEnv(
+      "BOOKMARK_GRAPHQL_URL",
+      "https://api.example.com/graphql"
+    );
     vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit
-    ) => graphqlResponse({ folders: [] }));
+    ) => jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
     await expect(bookmarkStore.listFolders()).resolves.toEqual([]);
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "https://api.example.com/api/folders"
+    );
+  });
 
-    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.example.com/graphql");
+  it("removes a legacy /graphql suffix from BOOKMARK_API_URL", async () => {
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com/graphql");
+    vi.stubEnv("BOOKMARK_GRAPHQL_URL", "");
+    vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
+    const fetchMock = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ) => jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.listFolders()).resolves.toEqual([]);
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "https://api.example.com/api/folders"
+    );
   });
 
   it("rejects a malformed bookmark before making a request", async () => {
-    configureGraphql();
+    configureRest();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -208,8 +220,8 @@ describe("bookmarkStore GraphQL transport", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("normalizes bookmark URLs in GraphQL variables", async () => {
-    configureGraphql();
+  it("normalizes bookmark URLs in REST bodies", async () => {
+    configureRest();
     const bookmark = {
       id: "bookmark-1",
       title: "Example",
@@ -223,9 +235,7 @@ describe("bookmarkStore GraphQL transport", () => {
     const fetchMock = vi.fn(async (
       _input: RequestInfo | URL,
       _init?: RequestInit
-    ) =>
-      graphqlResponse({ createBookmark: bookmark })
-    );
+    ) => jsonResponse(bookmark, 201));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
@@ -239,11 +249,11 @@ describe("bookmarkStore GraphQL transport", () => {
     });
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.variables.input.url).toBe("https://example.com/");
+    expect(body.url).toBe("https://example.com/");
   });
 
-  it("forwards folder parentId and deletion destination through GraphQL", async () => {
-    configureGraphql();
+  it("forwards folder parentId and deletion destination through REST", async () => {
+    configureRest();
     const folder = {
       id: "child-folder",
       name: "하위 폴더",
@@ -252,9 +262,9 @@ describe("bookmarkStore GraphQL transport", () => {
       position: 0
     };
     const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(graphqlResponse({ createFolder: folder }))
-      .mockResolvedValueOnce(graphqlResponse({ deleteFolder: true }));
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(jsonResponse(folder, 201))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
@@ -267,35 +277,24 @@ describe("bookmarkStore GraphQL transport", () => {
     ).resolves.toEqual(folder);
     await bookmarkStore.deleteFolder("child-folder", "fallback-folder");
 
-    const createBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(createBody.query).toContain("parentId");
-    expect(createBody.variables).toEqual({
-      input: { name: "하위 폴더", color: "#4f46e5", parentId: "root-folder" }
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      name: "하위 폴더",
+      color: "#4f46e5",
+      parentId: "root-folder"
     });
-    const deleteBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
-    expect(deleteBody.query).toContain("destinationFolderId");
-    expect(deleteBody.variables).toEqual({
-      id: "child-folder",
-      destinationFolderId: "fallback-folder"
-    });
+    expect(String(fetchMock.mock.calls[1][0])).toBe(
+      "https://api.example.com/api/folders/child-folder?destination_folder_id=fallback-folder"
+    );
   });
 
-  it("maps GraphQL errors to the existing store error contract", async () => {
-    configureGraphql();
+  it("maps REST errors to the existing store error contract", async () => {
+    configureRest();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            data: null,
-            errors: [
-              {
-                message: "Not found",
-                extensions: { code: "NOT_FOUND" }
-              }
-            ]
-          }),
-          { status: 200 }
+        jsonResponse(
+          { code: "not_found", message: "Not found", request_id: "req-1" },
+          404
         )
       )
     );
@@ -307,35 +306,33 @@ describe("bookmarkStore GraphQL transport", () => {
     });
   });
 
-  it("preserves GraphQL conflicts for optimistic mutation rollback", async () => {
-    configureGraphql();
+  it("preserves REST conflicts for optimistic mutation rollback", async () => {
+    configureRest();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            data: null,
-            errors: [
-              {
-                message: "Folder structure contains a cycle",
-                extensions: { code: "CONFLICT" }
-              }
-            ]
-          }),
-          { status: 200 }
+        jsonResponse(
+          {
+            code: "conflict",
+            message: "Folder structure contains a cycle",
+            request_id: "req-2"
+          },
+          409
         )
       )
     );
 
     const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
-    await expect(bookmarkStore.reorderFolders([{ id: "folder-1", position: 0 }])).rejects.toMatchObject({
+    await expect(
+      bookmarkStore.reorderFolders([{ id: "folder-1", position: 0 }])
+    ).rejects.toMatchObject({
       message: "Folder structure contains a cycle",
       status: 409
     });
   });
 
   it("rejects malformed reorder data before forwarding", async () => {
-    configureGraphql();
+    configureRest();
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 

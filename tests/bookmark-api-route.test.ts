@@ -34,9 +34,9 @@ describe("bookmark API write boundary", () => {
   });
 
   it("allows unauthenticated browser requests when access is configured", async () => {
-    vi.stubEnv("BOOKMARK_GRAPHQL_URL", "https://graphql.example.com/api/graphql");
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: { bookmarks: [] } }), { status: 200 })
+      new Response(JSON.stringify([]), { status: 200 })
     );
     vi.stubGlobal("fetch", fetchMock);
     const { GET } = await import("@/app/api/[resource]/[[...path]]/route");
@@ -68,26 +68,19 @@ describe("bookmark API write boundary", () => {
   });
 
   it("normalizes an omitted bookmark URL scheme before writing", async () => {
-    vi.stubEnv(
-      "BOOKMARK_GRAPHQL_URL",
-      "https://graphql.example.com/api/graphql"
-    );
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
     vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: {
-            createBookmark: {
-              id: "bookmark-1",
-              title: "Example",
-              url: "https://example.com/",
-              description: null,
-              isFavorite: false,
-              folderId: null,
-              sectionId: null,
-              position: 1
-            }
-          }
+          id: "bookmark-1",
+          title: "Example",
+          url: "https://example.com/",
+          description: null,
+          isFavorite: false,
+          folderId: null,
+          sectionId: null,
+          position: 1
         }),
         { status: 200 }
       )
@@ -108,9 +101,9 @@ describe("bookmark API write boundary", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(
-      JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body)).variables
-    ).toMatchObject({ input: { url: "https://example.com/" } });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toMatchObject({
+      url: "https://example.com/"
+    });
   });
 
   it.each([
@@ -157,24 +150,17 @@ describe("bookmark API write boundary", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("forwards section PATCH color and folder move requests to GraphQL", async () => {
-    vi.stubEnv(
-      "BOOKMARK_GRAPHQL_URL",
-      "https://graphql.example.com/api/graphql"
-    );
+  it("forwards section PATCH color and folder move requests to REST", async () => {
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
     vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: {
-            updateSection: {
-              id: "section-1",
-              name: "수정된 섹션",
-              color: "#16a34a",
-              folderId: "folder-2",
-              position: 0
-            }
-          }
+          id: "section-1",
+          name: "수정된 섹션",
+          color: "#16a34a",
+          folderId: "folder-2",
+          position: 0
         }),
         { status: 200 }
       )
@@ -192,37 +178,29 @@ describe("bookmark API write boundary", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(
-      JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables
-    ).toEqual({
-      id: "section-1",
-      input: { name: "수정된 섹션", color: "#16a34a", folderId: "folder-2" }
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      name: "수정된 섹션",
+      color: "#16a34a",
+      folderId: "folder-2"
     });
   });
 
   it("forwards a section color on creation", async () => {
-    vi.stubEnv(
-      "BOOKMARK_GRAPHQL_URL",
-      "https://graphql.example.com/api/graphql"
-    );
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
     vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: { sections: [] } }), { status: 200 })
+        new Response(JSON.stringify([]), { status: 200 })
       )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            data: {
-              createSection: {
-                id: "section-1",
-                name: "새 섹션",
-                color: "#db2777",
-                folderId: "folder-1",
-                position: 0
-              }
-            }
+            id: "section-1",
+            name: "새 섹션",
+            color: "#db2777",
+            folderId: "folder-1",
+            position: 0
           }),
           { status: 200 }
         )
@@ -240,41 +218,32 @@ describe("bookmark API write boundary", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(
-      JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).variables
-    ).toEqual({
-      input: { folderId: "folder-1", name: "새 섹션", color: "#db2777" }
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      folderId: "folder-1",
+      name: "새 섹션",
+      color: "#db2777"
     });
   });
 
-  it("forwards folder parentId and destination_folder_id to GraphQL", async () => {
-    vi.stubEnv(
-      "BOOKMARK_GRAPHQL_URL",
-      "https://graphql.example.com/api/graphql"
-    );
+  it("forwards folder parentId and destination_folder_id to REST", async () => {
+    vi.stubEnv("BOOKMARK_API_URL", "https://api.example.com");
     vi.stubEnv("BOOKMARK_API_KEY", "bookmark-api-secret");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            data: {
-              updateFolder: {
-                id: "child-folder",
-                name: "하위 폴더",
-                color: "#4f46e5",
-                parentId: "root-folder",
-                position: 0
-              }
-            }
+            id: "child-folder",
+            name: "하위 폴더",
+            color: "#4f46e5",
+            parentId: "root-folder",
+            position: 0
           }),
           { status: 200 }
         )
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: { deleteFolder: true } }), {
-          status: 200
-        })
+        new Response(null, { status: 204 })
       );
     vi.stubGlobal("fetch", fetchMock);
     const { DELETE, PATCH } = await import("@/app/api/[resource]/[[...path]]/route");
@@ -296,13 +265,12 @@ describe("bookmark API write boundary", () => {
 
     expect(patchResponse.status).toBe(200);
     expect(deleteResponse.status).toBe(204);
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).variables).toEqual({
-      id: "child-folder",
-      input: { name: "하위 폴더", parentId: "root-folder" }
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      name: "하위 폴더",
+      parentId: "root-folder"
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).variables).toEqual({
-      id: "child-folder",
-      destinationFolderId: "fallback-folder"
-    });
+    expect(String(fetchMock.mock.calls[1][0])).toBe(
+      "https://api.example.com/api/folders/child-folder?destination_folder_id=fallback-folder"
+    );
   });
 });
