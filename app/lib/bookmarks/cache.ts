@@ -1,5 +1,5 @@
 import { STORAGE_KEY } from "@/app/lib/bookmarks/constants";
-import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
 
 export type BookmarkCache = {
   version: 3;
@@ -7,6 +7,7 @@ export type BookmarkCache = {
   savedAt: number;
   folders: Folder[];
   sections: Section[];
+  folderSections?: FolderSection[];
   bookmarks: BookmarkItem[];
   selection?: { kind: "folder" | "section"; id: string };
 };
@@ -22,7 +23,10 @@ export function readBookmarkCache() {
     !Array.isArray(parsed.sections) ||
     !Array.isArray(parsed.bookmarks)
   ) return null;
-  return parsed as BookmarkCache;
+  return {
+    ...parsed,
+    folderSections: Array.isArray(parsed.folderSections) ? parsed.folderSections : []
+  } as BookmarkCache;
 }
 
 export function writeBookmarkCache(cache: BookmarkCache) {

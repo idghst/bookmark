@@ -97,6 +97,30 @@ describe("bookmark API write boundary", () => {
     });
   });
 
+  it("forwards folder-section CRUD without sidebar section fields", async () => {
+    const created = {
+      id: "folder-section-1",
+      name: "읽을 글",
+      folderId: "folder-1",
+      position: 0
+    };
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response(JSON.stringify(created), { status: 201 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("@/app/api/[resource]/[[...path]]/route");
+    const response = await POST(request("/api/folder-sections", "POST", {
+      name: "읽을 글",
+      folderId: "folder-1"
+    }), context("folder-sections"));
+    expect(response.status).toBe(201);
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      name: "읽을 글",
+      folderId: "folder-1"
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).not.toHaveProperty("sectionId");
+  });
+
   it("forwards folder sectionId", async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () => new Response(JSON.stringify({

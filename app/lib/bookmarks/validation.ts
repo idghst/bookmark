@@ -1,6 +1,7 @@
 import type {
   BookmarkFormData,
   FolderFormData,
+  FolderSectionFormData,
   PositionUpdate,
   SectionFormData
 } from "@/app/lib/bookmarks/types";
@@ -10,10 +11,12 @@ const BOOKMARK_FIELDS = new Set([
   "url",
   "description",
   "isFavorite",
-  "folderId"
+  "folderId",
+  "folderSectionId"
 ]);
 const FOLDER_FIELDS = new Set(["name", "color", "sectionId"]);
 const SECTION_FIELDS = new Set(["name", "color"]);
+const FOLDER_SECTION_FIELDS = new Set(["name", "color", "folderId"]);
 
 export class StoreError extends Error {
   constructor(message: string, public readonly status = 500) {
@@ -57,6 +60,19 @@ function normalizeBookmarkUrl(value: unknown) {
   }
 }
 
+function optionalNullableId(
+  data: Record<string, unknown>,
+  key: string,
+  label: string
+) {
+  if (!Object.hasOwn(data, key)) return undefined;
+  if (data[key] === null) return null;
+  if (typeof data[key] !== "string") {
+    invalid(`${label} must be a string or null.`);
+  }
+  return nonEmptyString(data[key], label);
+}
+
 function assertAllowedFields(
   data: Record<string, unknown>,
   allowed: Set<string>,
@@ -95,7 +111,8 @@ export function validateBookmarkCreate(value: unknown): BookmarkFormData {
     folderId:
       data.folderId === null
         ? null
-        : nonEmptyString(data.folderId, "Bookmark folderId")
+        : nonEmptyString(data.folderId, "Bookmark folderId"),
+    folderSectionId: optionalNullableId(data, "folderSectionId", "Bookmark folderSectionId")
   };
 }
 
@@ -129,6 +146,15 @@ export function validateBookmarkPatch(value: unknown): Partial<BookmarkFormData>
       data.folderId === null
         ? null
         : nonEmptyString(data.folderId, "Bookmark folderId");
+  }
+  if (Object.hasOwn(data, "folderSectionId")) {
+    if (data.folderSectionId !== null && typeof data.folderSectionId !== "string") {
+      invalid("Bookmark folderSectionId must be a string or null.");
+    }
+    result.folderSectionId =
+      data.folderSectionId === null
+        ? null
+        : nonEmptyString(data.folderSectionId, "Bookmark folderSectionId");
   }
   return result;
 }
@@ -182,6 +208,40 @@ export function validateFolderPatch(value: unknown): Partial<FolderFormData> {
       data.sectionId === null
         ? null
         : nonEmptyString(data.sectionId, "Folder sectionId");
+  }
+  return result;
+}
+
+export function validateFolderSectionCreate(value: unknown): FolderSectionFormData {
+  const data = record(value, "Folder section");
+  assertAllowedFields(data, FOLDER_SECTION_FIELDS, "Folder section");
+  if (
+    data.color !== undefined &&
+    data.color !== null &&
+    typeof data.color !== "string"
+  ) {
+    invalid("Folder section color must be a string or null.");
+  }
+  return {
+    name: nonEmptyString(data.name, "Folder section name"),
+    color: data.color as string | null | undefined,
+    folderId: nonEmptyString(data.folderId, "Folder section folderId")
+  };
+}
+
+export function validateFolderSectionPatch(value: unknown): Partial<FolderSectionFormData> {
+  const data = record(value, "Folder section");
+  assertAllowedFields(data, new Set(["name", "color"]), "Folder section");
+  if (!Object.keys(data).length) invalid("Folder section PATCH body must not be empty.");
+  const result: Partial<FolderSectionFormData> = {};
+  if (Object.hasOwn(data, "name")) {
+    result.name = nonEmptyString(data.name, "Folder section name");
+  }
+  if (Object.hasOwn(data, "color")) {
+    if (data.color !== null && typeof data.color !== "string") {
+      invalid("Folder section color must be a string or null.");
+    }
+    result.color = data.color as string | null;
   }
   return result;
 }

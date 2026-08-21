@@ -23,6 +23,7 @@ const bookmarks: BookmarkItem[] = [
     description: null,
     isFavorite: false,
     folderId: "work",
+    folderSectionId: "work-read",
     position: 0
   },
   {
@@ -32,8 +33,23 @@ const bookmarks: BookmarkItem[] = [
     description: null,
     isFavorite: false,
     folderId: "tools",
+    folderSectionId: null,
     position: 0
+  },
+  {
+    id: "b3",
+    title: "C",
+    url: "https://c.example",
+    description: null,
+    isFavorite: false,
+    folderId: "work",
+    folderSectionId: null,
+    position: 1
   }
+];
+
+const folderSections = [
+  { id: "work-read", name: "읽을 글", folderId: "work", position: 0 }
 ];
 
 describe("bookmark groups", () => {
@@ -47,7 +63,21 @@ describe("bookmark groups", () => {
 
   it("groups bookmarks by visible folder and removes empty groups only while filtering", () => {
     const visible = [folders[1], folders[2]];
-    expect(buildBookmarkGroups(bookmarks, visible, false).map((group) => group.label)).toEqual(["작업", "도구"]);
-    expect(buildBookmarkGroups(bookmarks.slice(0, 1), visible, true).map((group) => group.label)).toEqual(["작업"]);
+    expect(buildBookmarkGroups(bookmarks, visible, [], false).map((group) => group.label)).toEqual(["작업", "도구"]);
+    expect(buildBookmarkGroups(bookmarks.slice(0, 1), visible, [], true).map((group) => group.label)).toEqual(["작업"]);
+  });
+
+  it("keeps folder-owned sections separate and always shows 섹션 없음", () => {
+    const visible = [folders[1]];
+    const groups = buildBookmarkGroups(bookmarks, visible, folderSections, false);
+    expect(groups.map((group) => [group.label, group.folderSection?.id ?? null, group.items.map((item) => item.id)])).toEqual([
+      ["읽을 글", "work-read", ["b1"]],
+      ["섹션 없음", null, ["b3"]]
+    ]);
+  });
+
+  it("labels the unassigned bucket 섹션 없음 when a folder is the current view", () => {
+    const visible = [folders[1]];
+    expect(buildBookmarkGroups(bookmarks, visible, [], false, true).map((group) => group.label)).toEqual(["섹션 없음"]);
   });
 });

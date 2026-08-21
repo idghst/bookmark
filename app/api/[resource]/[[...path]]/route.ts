@@ -51,6 +51,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (resource === "bookmarks") return NextResponse.json(await bookmarkStore.listBookmarks());
     if (resource === "folders") return NextResponse.json(await bookmarkStore.listFolders());
     if (resource === "sections") return NextResponse.json(await bookmarkStore.listSections());
+    if (resource === "folder-sections") return NextResponse.json(await bookmarkStore.listFolderSections());
     return noRoute();
   } catch (error) {
     return jsonError(error);
@@ -80,6 +81,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
       if (path.length === 0) {
         return NextResponse.json(await bookmarkStore.createFolder(await readJson(request)), { status: 201 });
+      }
+    }
+
+    if (resource === "folder-sections") {
+      if (path.length === 1 && path[0] === "reorder") {
+        await bookmarkStore.reorderFolderSections(await readJson(request));
+        return new Response(null, { status: 204 });
+      }
+      if (path.length === 0) {
+        return NextResponse.json(await bookmarkStore.createFolderSection(await readJson(request)), { status: 201 });
       }
     }
 
@@ -125,6 +136,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (resource === "bookmarks") return NextResponse.json(await bookmarkStore.updateBookmark(id, body));
     if (resource === "folders") return NextResponse.json(await bookmarkStore.updateFolder(id, body));
     if (resource === "sections") return NextResponse.json(await bookmarkStore.updateSection(id, body));
+    if (resource === "folder-sections") return NextResponse.json(await bookmarkStore.updateFolderSection(id, body));
     return noRoute();
   } catch (error) {
     return jsonError(error);
@@ -153,6 +165,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
     if (resource === "sections") {
       await bookmarkStore.deleteSection(id);
+      return new Response(null, { status: 204 });
+    }
+    if (resource === "folder-sections") {
+      await bookmarkStore.deleteFolderSection(id);
       return new Response(null, { status: 204 });
     }
 

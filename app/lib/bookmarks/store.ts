@@ -1,6 +1,6 @@
 import { restRequest } from "@/app/lib/bookmarks/rest";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
-import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
 import {
   StoreError,
   invalid,
@@ -9,6 +9,8 @@ import {
   validateBookmarkPatch,
   validateFolderCreate,
   validateFolderPatch,
+  validateFolderSectionCreate,
+  validateFolderSectionPatch,
   validatePositionUpdates,
   validateSectionPatch
 } from "@/app/lib/bookmarks/validation";
@@ -117,6 +119,37 @@ export const bookmarkStore = {
 
   async reorderSections(value: unknown) {
     await restRequest<void>("sections/reorder", {
+      method: "POST",
+      body: validatePositionUpdates(value)
+    });
+  },
+
+  async listFolderSections() {
+    return restRequest<FolderSection[]>("folder-sections");
+  },
+
+  async createFolderSection(value: unknown) {
+    return restRequest<FolderSection>("folder-sections", {
+      method: "POST",
+      body: validateFolderSectionCreate(value)
+    });
+  },
+
+  async updateFolderSection(id: string, value: unknown) {
+    return restRequest<FolderSection>(`folder-sections/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: validateFolderSectionPatch(value)
+    });
+  },
+
+  async deleteFolderSection(id: string) {
+    await restRequest<void>(`folder-sections/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  },
+
+  async reorderFolderSections(value: unknown) {
+    await restRequest<void>("folder-sections/reorder", {
       method: "POST",
       body: validatePositionUpdates(value)
     });

@@ -57,6 +57,7 @@ function setup(
     if ((init?.method ?? "GET") === "GET") {
       if (path === "/api/folders") return new Response(JSON.stringify(snapshot.folders), { status: 200 });
       if (path === "/api/sections") return new Response(JSON.stringify(snapshot.sections), { status: 200 });
+      if (path === "/api/folder-sections") return new Response(JSON.stringify([]), { status: 200 });
       if (path === "/api/bookmarks") return new Response(JSON.stringify(snapshot.bookmarks), { status: 200 });
     }
     return mutation(input, init);
@@ -93,7 +94,8 @@ describe("section-first bookmark UI", () => {
     setup();
     const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
     fireEvent.click(within(nav).getByRole("button", { name: "운영 1" }));
-    expect((await screen.findAllByRole("heading", { name: "운영" })).some((heading) => heading.tagName === "H2")).toBe(true);
+    expect((await screen.findAllByRole("heading", { name: "섹션 없음" })).some((heading) => heading.tagName === "H2")).toBe(true);
+    expect((await screen.findAllByRole("heading", { name: "운영" })).some((heading) => heading.tagName === "H1")).toBe(true);
     expect(screen.getByRole("link", { name: /운영 A/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /프로젝트 A/ })).not.toBeInTheDocument();
   });
@@ -191,7 +193,7 @@ describe("section-first bookmark UI", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
     const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
     expect(within(dialog).getByRole("combobox", { name: "폴더" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("combobox", { name: "섹션" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "섹션" })).toHaveTextContent("섹션 없음");
     expect(within(dialog).queryByText("새 섹션 만들기")).not.toBeInTheDocument();
   });
 
@@ -302,6 +304,7 @@ describe("section-first bookmark UI", () => {
     const { setItem } = installCache(data);
     let resolveFolders!: (response: Response) => void;
     let resolveSections!: (response: Response) => void;
+    let resolveFolderSections!: (response: Response) => void;
     let resolveBookmarks!: (response: Response) => void;
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       if (String(input) === "/api/folders") {
@@ -309,6 +312,9 @@ describe("section-first bookmark UI", () => {
       }
       if (String(input) === "/api/sections") {
         return new Promise<Response>((resolve) => { resolveSections = resolve; });
+      }
+      if (String(input) === "/api/folder-sections") {
+        return new Promise<Response>((resolve) => { resolveFolderSections = resolve; });
       }
       return new Promise<Response>((resolve) => { resolveBookmarks = resolve; });
     });
@@ -319,6 +325,7 @@ describe("section-first bookmark UI", () => {
     await act(async () => {
       resolveFolders(new Response(JSON.stringify(folders), { status: 200 }));
       resolveSections(new Response(JSON.stringify(sections), { status: 200 }));
+      resolveFolderSections(new Response(JSON.stringify([]), { status: 200 }));
       resolveBookmarks(new Response(JSON.stringify([remote]), { status: 200 }));
     });
     expect(await screen.findByRole("link", { name: /Remote/ })).toBeInTheDocument();
@@ -343,13 +350,13 @@ describe("section-first bookmark UI", () => {
     render(<BookmarksPage />);
 
     expect(await screen.findByRole("link", { name: /Cached/ })).toBeInTheDocument();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     await waitFor(() => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved).toMatchObject({ apiBacked: false, bookmarks: [{ id: "cached" }] });
     });
     fireEvent.click(screen.getByRole("button", { name: "Cached 즐겨찾기" }));
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(screen.getByRole("button", { name: "Cached 즐겨찾기" }).querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
   });
 
@@ -399,6 +406,7 @@ describe("section-first bookmark UI", () => {
     await act(async () => {
       resolvers.get("/api/folders")?.(new Response(JSON.stringify(folders), { status: 200 }));
       resolvers.get("/api/sections")?.(new Response(JSON.stringify(sections), { status: 200 }));
+      resolvers.get("/api/folder-sections")?.(new Response(JSON.stringify([]), { status: 200 }));
       resolvers.get("/api/bookmarks")?.(new Response(JSON.stringify([bookmark]), { status: 200 }));
     });
     await waitFor(() => expect(favorite).toBeEnabled());
@@ -523,6 +531,7 @@ describe("section-first bookmark UI", () => {
       if ((init?.method ?? "GET") === "GET") {
         if (path === "/api/folders") return new Response(JSON.stringify(snapshot.folders), { status: 200 });
         if (path === "/api/sections") return new Response(JSON.stringify(snapshot.sections), { status: 200 });
+        if (path === "/api/folder-sections") return new Response(JSON.stringify([]), { status: 200 });
         return new Response(JSON.stringify(snapshot.bookmarks), { status: 200 });
       }
       return path.endsWith("/first")
@@ -531,7 +540,7 @@ describe("section-first bookmark UI", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<BookmarksPage />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     fireEvent.click(screen.getByRole("button", { name: "First 즐겨찾기" }));
     fireEvent.click(screen.getByRole("button", { name: "Second 즐겨찾기" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Second 즐겨찾기" }).querySelector("svg")).toHaveClass("fill-[var(--color-brand)]"));
@@ -565,7 +574,7 @@ describe("section-first bookmark UI", () => {
         ? firstRequest
         : new Response(JSON.stringify(bookmark), { status: 200 });
     });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     const favorite = screen.getByRole("button", { name: "Serial 즐겨찾기" });
     fireEvent.click(favorite);
     await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
@@ -601,6 +610,7 @@ describe("section-first bookmark UI", () => {
       }
       if (path === "/api/folders") return new Response(JSON.stringify(folders), { status: 200 });
       if (path === "/api/sections") return new Response(JSON.stringify(sections), { status: 200 });
+      if (path === "/api/folder-sections") return new Response(JSON.stringify([]), { status: 200 });
       bookmarkReads += 1;
       return new Response(
         JSON.stringify(
@@ -613,7 +623,7 @@ describe("section-first bookmark UI", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<BookmarksPage />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     fireEvent.dragStart(screen.getByRole("link", { name: /캐시 첫/ }));
     const second = screen.getByRole("link", { name: /캐시 둘/ });
     fireEvent.dragOver(second);
@@ -621,7 +631,7 @@ describe("section-first bookmark UI", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("순서 저장 실패");
     expect(await screen.findByRole("link", { name: /DB 첫/ })).toBeInTheDocument();
     expect(bookmarkReads).toBe(2);
-    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET") === "GET")).toHaveLength(6);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET") === "GET")).toHaveLength(8);
   });
 
   it("serializes overlapping reorder and preserves the later order after failure", async () => {
@@ -637,7 +647,7 @@ describe("section-first bookmark UI", () => {
       reorderCount += 1;
       return reorderCount === 1 ? firstRequest : new Response(null, { status: 204 });
     });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     fireEvent.dragStart(screen.getByRole("link", { name: /^A https:\/\/p1/ }));
     fireEvent.dragOver(screen.getByRole("link", { name: /^B https:\/\/p2/ }));
     fireEvent.drop(screen.getByRole("link", { name: /^B https:\/\/p2/ }));

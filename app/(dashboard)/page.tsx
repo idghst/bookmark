@@ -11,7 +11,7 @@ import { BookmarkCard } from "@/app/(dashboard)/bookmarks-ui/BookmarkCard";
 import { BookmarksLoading } from "@/app/(dashboard)/bookmarks-ui/BookmarksLoading";
 import { DatabaseProgressStatus } from "@/app/(dashboard)/bookmarks-ui/DatabaseProgressStatus";
 import { Field } from "@/app/(dashboard)/bookmarks-ui/Field";
-import { FolderActionsMenu } from "@/app/(dashboard)/bookmarks-ui/SectionActionsMenu";
+import { FolderActionsMenu, FolderSectionActionsMenu } from "@/app/(dashboard)/bookmarks-ui/SectionActionsMenu";
 import { Modal } from "@/app/(dashboard)/bookmarks-ui/Modal";
 import { readBookmarkCache, writeBookmarkCache } from "@/app/lib/bookmarks/cache";
 import { apiRequest } from "@/app/lib/bookmarks/client-api";
@@ -26,7 +26,7 @@ import {
 } from "@/app/lib/bookmarks/constants";
 import { countBookmarks, matchesBookmarkFilters } from "@/app/lib/bookmarks/counts";
 import { flattenFolderResponse, folderSectionId, normalizeFolderPositions } from "@/app/lib/bookmarks/folder-tree";
-import { buildBookmarkGroups } from "@/app/lib/bookmarks/groups";
+import { bookmarkFolderSectionId, buildBookmarkGroups } from "@/app/lib/bookmarks/groups";
 import {
   applyPositions,
   createId,
@@ -37,7 +37,7 @@ import {
 } from "@/app/lib/bookmarks/positions";
 import { INITIAL_BOOKMARKS, INITIAL_FOLDERS, INITIAL_SECTIONS } from "@/app/lib/bookmarks/sample-data";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
-import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
 import { safeUrl } from "@/app/lib/bookmarks/url";
 import { cn } from "@/lib/utils";
 
@@ -45,27 +45,30 @@ type Selection = { kind: "folder" | "section"; id: string };
 type BookmarkDialog = { mode: "create" | "edit"; bookmarkId?: string };
 type FolderDialog = { mode: "create" | "edit"; folderId?: string };
 type SectionDialog = { mode: "create" | "edit"; sectionId?: string };
-type DeleteTarget = { type: "bookmark" | "folder" | "section"; id: string };
+type DeleteTarget = { type: "bookmark" | "folder" | "section" | "folderSection"; id: string };
 
 type BookmarkDraft = {
   title: string;
   url: string;
   description: string;
   folderId: string;
+  folderSectionId: string;
   isFavorite: boolean;
 };
 
-const emptyBookmarkDraft = (folderId: string): BookmarkDraft => ({
+const emptyBookmarkDraft = (folderId: string, folderSectionId = NO_SECTION): BookmarkDraft => ({
   title: "",
   url: "",
   description: "",
   folderId,
+  folderSectionId,
   isFavorite: false
 });
 
 export default function BookmarksPage() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [folderSections, setFolderSections] = useState<FolderSection[]>([]);
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [query, setQuery] = useState("");
@@ -83,6 +86,7 @@ export default function BookmarksPage() {
   const [bookmarkDialog, setBookmarkDialog] = useState<BookmarkDialog | null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialog | null>(null);
   const [sectionDialog, setSectionDialog] = useState<SectionDialog | null>(null);
+  const [folderSectionDialog, setFolderSectionDialog] = useState<{ mode: "create" | "edit"; folderSectionId?: string; folderId?: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [bookmarkDraft, setBookmarkDraft] = useState(() => emptyBookmarkDraft(INITIAL_FOLDERS[0]?.id ?? ""));
   const [folderDraft, setFolderDraft] = useState<{ name: string; color: string | null; sectionId: string }>({
@@ -91,6 +95,7 @@ export default function BookmarksPage() {
     sectionId: NO_SECTION
   });
   const [sectionDraft, setSectionDraft] = useState({ name: "", color: null as string | null });
+  const [folderSectionDraft, setFolderSectionDraft] = useState({ name: "", color: null as string | null });
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
   const [draggingBookmarkId, setDraggingBookmarkId] = useState<string | null>(null);
@@ -136,8 +141,12 @@ export default function BookmarksPage() {
   );
   const hasActiveFilter = favoriteOnly || Boolean(query.trim());
   const groups = useMemo(
-    () => buildBookmarkGroups(filtered, visibleFolders, hasActiveFilter),
-    [filtered, hasActiveFilter, visibleFolders]
+    () => buildBookmarkGroups(filtered, visibleFolders, folderSections, hasActiveFilter, Boolean(selectedFolder)),
+    [filtered, folderSections, hasActiveFilter, selectedFolder, visibleFolders]
+  );
+  const folderSectionsForDraft = useMemo(
+    () => folderSections.filter((section) => section.folderId === bookmarkDraft.folderId).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ko")),
+    [bookmarkDraft.folderId, folderSections]
   );
   const visibleBookmarks = bookmarks.filter((bookmark) => visibleFolderIds.has(bookmark.folderId ?? ""));
   const currentCount = hasActiveFilter ? filtered.length : visibleBookmarks.length;
@@ -158,6 +167,7 @@ export default function BookmarksPage() {
     if (cache) {
       setFolders(normalizeFolderPositions(cache.folders));
       setSections(normalizePositions(cache.sections));
+      setFolderSections(cache.folderSections ?? []);
       setBookmarks(cache.bookmarks);
       setSelection(cache.selection ?? { kind: "folder", id: cache.folders[0].id });
       setHydrated(true);
@@ -182,10 +192,11 @@ export default function BookmarksPage() {
       savedAt: Date.now(),
       folders,
       sections,
+      folderSections,
       bookmarks,
       selection: selection ?? undefined
     });
-  }, [apiBacked, bookmarks, folders, hydrated, sections, selection]);
+  }, [apiBacked, bookmarks, folderSections, folders, hydrated, sections, selection]);
 
   useEffect(() => {
     if (
@@ -213,9 +224,10 @@ export default function BookmarksPage() {
   } = {}) {
     setRefreshing(true);
     try {
-      const [remoteFolders, remoteSections, remoteBookmarks] = await Promise.all([
+      const [remoteFolders, remoteSections, remoteFolderSections, remoteBookmarks] = await Promise.all([
         apiRequest<Folder[]>("/api/folders"),
         apiRequest<Section[]>("/api/sections"),
+        apiRequest<FolderSection[]>("/api/folder-sections"),
         apiRequest<BookmarkItem[]>("/api/bookmarks")
       ]);
       if (isCancelled()) return false;
@@ -223,6 +235,7 @@ export default function BookmarksPage() {
       if (!flatFolders.length) throw new Error("폴더 데이터가 없습니다.");
       setFolders(flatFolders);
       setSections(normalizePositions(remoteSections));
+      setFolderSections(normalizePositions(remoteFolderSections));
       setBookmarks(remoteBookmarks);
       setSelection((current) => {
         if (current?.kind === "folder" && flatFolders.some((folder) => folder.id === current.id)) return current;
@@ -236,6 +249,7 @@ export default function BookmarksPage() {
       if (fallbackToInitial && !isCancelled()) {
         setFolders(INITIAL_FOLDERS);
         setSections(INITIAL_SECTIONS);
+        setFolderSections([]);
         setBookmarks(INITIAL_BOOKMARKS);
         setSelection(INITIAL_SECTIONS[0]
           ? { kind: "section", id: INITIAL_SECTIONS[0].id }
@@ -306,6 +320,7 @@ export default function BookmarksPage() {
         url: bookmark.url,
         description: bookmark.description ?? "",
         folderId: bookmark.folderId ?? folder?.id ?? orderedFolders[0]?.id ?? "",
+        folderSectionId: bookmarkFolderSectionId(bookmark) ?? NO_SECTION,
         isFavorite: bookmark.isFavorite
       });
       return;
@@ -314,6 +329,24 @@ export default function BookmarksPage() {
     if (!target) return;
     setBookmarkDraft(emptyBookmarkDraft(target.id));
     setBookmarkDialog({ mode: "create" });
+  }
+
+  function openBookmarkDialogInSection(folder: Folder, folderSection: FolderSection | null) {
+    if (bootstrapping) return;
+    setFormError("");
+    setBookmarkDraft(emptyBookmarkDraft(folder.id, folderSection?.id ?? NO_SECTION));
+    setBookmarkDialog({ mode: "create" });
+  }
+
+  function openFolderSectionDialog(folderSection?: FolderSection, folderId?: string) {
+    if (bootstrapping) return;
+    const targetFolderId = folderSection?.folderId ?? folderId ?? selectedFolder?.id;
+    if (!targetFolderId) return;
+    setFormError("");
+    setFolderSectionDraft({ name: folderSection?.name ?? "", color: folderSection?.color ?? null });
+    setFolderSectionDialog(folderSection
+      ? { mode: "edit", folderSectionId: folderSection.id, folderId: folderSection.folderId }
+      : { mode: "create", folderId: targetFolderId });
   }
 
   function openFolderDialog(folder?: Folder) {
@@ -347,6 +380,7 @@ export default function BookmarksPage() {
       url,
       description: bookmarkDraft.description.trim() || null,
       folderId: bookmarkDraft.folderId,
+      folderSectionId: bookmarkDraft.folderSectionId === NO_SECTION ? null : bookmarkDraft.folderSectionId,
       isFavorite: bookmarkDraft.isFavorite
     };
     setSaving(true);
@@ -360,7 +394,14 @@ export default function BookmarksPage() {
       } else {
         const created = apiBacked
           ? await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) })
-          : { id: createId("bm"), ...payload, position: bookmarks.filter((bookmark) => bookmark.folderId === payload.folderId).length };
+          : {
+              id: createId("bm"),
+              ...payload,
+              position: bookmarks.filter((bookmark) => (
+                bookmark.folderId === payload.folderId
+                && bookmarkFolderSectionId(bookmark) === payload.folderSectionId
+              )).length
+            };
         setBookmarks((current) => [...current, created]);
       }
       setBookmarkDialog(null);
@@ -449,6 +490,49 @@ export default function BookmarksPage() {
     }
   }
 
+  async function saveFolderSection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = folderSectionDraft.name.trim();
+    const folderId = folderSectionDialog?.folderId;
+    if (!name) return setFormError("섹션 이름을 입력하세요.");
+    if (!folderId) return setFormError("폴더를 선택하세요.");
+    const duplicate = folderSections.find((section) => (
+      section.folderId === folderId
+      && section.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase()
+      && section.id !== folderSectionDialog.folderSectionId
+    ));
+    if (duplicate) return setFormError("같은 이름의 섹션이 이미 있습니다.");
+    setSaving(true);
+    setFormError("");
+    try {
+      if (folderSectionDialog.mode === "edit" && folderSectionDialog.folderSectionId) {
+        const existing = folderSections.find((section) => section.id === folderSectionDialog.folderSectionId);
+        const payload: { name?: string; color?: string | null } = {};
+        if (existing?.name !== name) payload.name = name;
+        if ((existing?.color ?? null) !== folderSectionDraft.color) payload.color = folderSectionDraft.color;
+        if (!Object.keys(payload).length) {
+          setFolderSectionDialog(null);
+          return;
+        }
+        const updated = apiBacked
+          ? await apiRequest<FolderSection>(`/api/folder-sections/${folderSectionDialog.folderSectionId}`, { method: "PATCH", body: JSON.stringify(payload) })
+          : { ...existing!, ...payload };
+        setFolderSections((current) => current.map((section) => section.id === updated.id ? updated : section));
+      } else {
+        const payload = { name, color: folderSectionDraft.color, folderId };
+        const created = apiBacked
+          ? await apiRequest<FolderSection>("/api/folder-sections", { method: "POST", body: JSON.stringify(payload) })
+          : { id: createId("folder-section"), ...payload, position: folderSections.filter((section) => section.folderId === folderId).length };
+        setFolderSections((current) => [...current, created]);
+      }
+      setFolderSectionDialog(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "섹션 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleteTarget || deleting) return;
     setDeleting(true);
@@ -457,6 +541,14 @@ export default function BookmarksPage() {
       if (deleteTarget.type === "bookmark") {
         if (apiBacked) await apiRequest<void>(`/api/bookmarks/${deleteTarget.id}`, { method: "DELETE" });
         setBookmarks((current) => current.filter((bookmark) => bookmark.id !== deleteTarget.id));
+      } else if (deleteTarget.type === "folderSection") {
+        if (apiBacked) await apiRequest<void>(`/api/folder-sections/${deleteTarget.id}`, { method: "DELETE" });
+        setFolderSections((current) => current.filter((section) => section.id !== deleteTarget.id));
+        setBookmarks((current) => current.map((bookmark) => (
+          bookmarkFolderSectionId(bookmark) === deleteTarget.id
+            ? { ...bookmark, folderSectionId: null }
+            : bookmark
+        )));
       } else if (deleteTarget.type === "section") {
         if (apiBacked) await apiRequest<void>(`/api/sections/${deleteTarget.id}`, { method: "DELETE" });
         setSections((current) => normalizePositions(current.filter((section) => section.id !== deleteTarget.id)));
@@ -473,7 +565,12 @@ export default function BookmarksPage() {
           await apiRequest<void>(`/api/folders/${deleteTarget.id}?destination_folder_id=${encodeURIComponent(fallback.id)}`, { method: "DELETE" });
         }
         setFolders((current) => normalizeFolderPositions(current.filter((folder) => folder.id !== deleteTarget.id)));
-        setBookmarks((current) => current.map((bookmark) => bookmark.folderId === deleteTarget.id ? { ...bookmark, folderId: fallback.id } : bookmark));
+        setFolderSections((current) => current.filter((section) => section.folderId !== deleteTarget.id));
+        setBookmarks((current) => current.map((bookmark) => (
+          bookmark.folderId === deleteTarget.id
+            ? { ...bookmark, folderId: fallback.id, folderSectionId: null }
+            : bookmark
+        )));
         if (selection?.kind === "folder" && selection.id === deleteTarget.id) setSelection({ kind: "folder", id: fallback.id });
       }
       setDeleteTarget(null);
@@ -545,12 +642,20 @@ export default function BookmarksPage() {
     const source = bookmarks.find((bookmark) => bookmark.id === draggingBookmarkId);
     const target = bookmarks.find((bookmark) => bookmark.id === targetId);
     if (!source || !target || source.folderId !== target.folderId) return clearBookmarkDrag();
-    const scoped = bookmarks.filter((bookmark) => bookmark.folderId === source.folderId).sort((a, b) => a.position - b.position);
+    const sourceSectionId = bookmarkFolderSectionId(source);
+    const targetSectionId = bookmarkFolderSectionId(target);
+    if (sourceSectionId !== targetSectionId) {
+      moveBookmarkToSection(source, targetSectionId, target.position);
+      return;
+    }
+    const scoped = bookmarks
+      .filter((bookmark) => bookmark.folderId === source.folderId && bookmarkFolderSectionId(bookmark) === sourceSectionId)
+      .sort((a, b) => a.position - b.position);
     const moved = moveById(scoped, source.id, target.id);
     const changes = getPositionChanges(scoped, moved);
     if (changes.length) {
       persistOptimisticMutation(
-        `reorder:bookmarks:${source.folderId}`,
+        `reorder:bookmarks:${source.folderId}:${sourceSectionId ?? NO_SECTION}`,
         () => setBookmarks((current) => applyPositions(current, moved)),
         () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
         () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
@@ -558,6 +663,33 @@ export default function BookmarksPage() {
         true
       );
     }
+    clearBookmarkDrag();
+  }
+
+  function moveBookmarkToSection(source: BookmarkItem, folderSectionId: string | null, position?: number) {
+    if (source.folderId === null || bookmarkFolderSectionId(source) === folderSectionId) {
+      clearBookmarkDrag();
+      return;
+    }
+    const nextPosition = position ?? bookmarks.filter((bookmark) => (
+      bookmark.folderId === source.folderId && bookmarkFolderSectionId(bookmark) === folderSectionId
+    )).length;
+    persistOptimisticMutation(
+      `move:bookmark:${source.id}`,
+      () => setBookmarks((current) => current.map((bookmark) => (
+        bookmark.id === source.id ? { ...bookmark, folderSectionId, position: nextPosition } : bookmark
+      ))),
+      () => setBookmarks((current) => current.map((bookmark) => (
+        bookmark.id === source.id
+          ? { ...bookmark, folderSectionId: bookmarkFolderSectionId(source), position: source.position }
+          : bookmark
+      ))),
+      () => apiRequest<BookmarkItem>(`/api/bookmarks/${source.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ folderSectionId })
+      }),
+      "북마크 이동에 실패했습니다."
+    );
     clearBookmarkDrag();
   }
 
@@ -649,6 +781,11 @@ export default function BookmarksPage() {
           <SearchBox query={query} setQuery={setQuery} />
           <div className="flex items-center gap-2">
             <FavoriteButton count={favoriteCount} active={favoriteOnly} onClick={() => setFavoriteOnly((value) => !value)} />
+            {selectedFolder ? (
+              <Button size="sm" variant="outline" disabled={bootstrapping} onClick={() => openFolderSectionDialog(undefined, selectedFolder.id)} className="h-10 px-3 text-sm">
+                <Plus className="h-4 w-4" />섹션 추가
+              </Button>
+            ) : null}
             <Button size="sm" disabled={bootstrapping || !visibleFolders.length} onClick={() => openBookmarkDialog()} className="h-10 px-3 text-sm">
               <Plus className="h-4 w-4" />북마크 추가
             </Button>
@@ -665,17 +802,39 @@ export default function BookmarksPage() {
               </div>
             ) : groups.map((group) => (
               <section key={group.key} className="space-y-3">
-                <div className={BOOKMARK_SECTION_HEADER_CLASS}>
-                  <span data-folder-color={group.folder.color ?? COLOR_FALLBACK} className="h-6 w-1 rounded-full" style={{ backgroundColor: group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
+                <div
+                  className={BOOKMARK_SECTION_HEADER_CLASS}
+                  onDragOver={(event) => {
+                    if (!draggingBookmarkId) return;
+                    event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const source = bookmarks.find((item) => item.id === draggingBookmarkId);
+                    if (!source || source.folderId !== group.folder.id) return clearBookmarkDrag();
+                    moveBookmarkToSection(source, group.folderSection?.id ?? null);
+                  }}
+                >
+                  <span data-folder-color={group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK} className="h-6 w-1 rounded-full" style={{ backgroundColor: group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
                   <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--text-heading)]">{group.label}</h2>
                   <span className="rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{group.items.length}</span>
-                  <FolderActionsMenu
-                    folder={group.folder}
-                    mutationsDisabled={bootstrapping}
-                    onAddBookmark={(folder) => openBookmarkDialog(undefined, folder)}
-                    onEdit={openFolderDialog}
-                    onDelete={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
-                  />
+                  {group.folderSection ? (
+                    <FolderSectionActionsMenu
+                      folderSection={group.folderSection}
+                      mutationsDisabled={bootstrapping}
+                      onAddBookmark={(folderSection) => openBookmarkDialogInSection(group.folder, folderSection)}
+                      onEdit={openFolderSectionDialog}
+                      onDelete={(folderSection) => setDeleteTarget({ type: "folderSection", id: folderSection.id })}
+                    />
+                  ) : (
+                    <FolderActionsMenu
+                      folder={group.folder}
+                      mutationsDisabled={bootstrapping}
+                      onAddBookmark={(folder) => openBookmarkDialogInSection(folder, null)}
+                      onEdit={openFolderDialog}
+                      onDelete={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
+                    />
+                  )}
                 </div>
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4" aria-label={`${group.label} 북마크, 드래그해서 위치 변경`}>
                   {group.items.map((bookmark) => (
@@ -712,9 +871,18 @@ export default function BookmarksPage() {
             <Field label="제목"><Input value={bookmarkDraft.title} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, title: event.target.value }))} /></Field>
             <Field label="설명"><Textarea value={bookmarkDraft.description} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, description: event.target.value }))} rows={2} /></Field>
             <Field label="폴더">
-              <Select value={bookmarkDraft.folderId} onValueChange={(folderId) => setBookmarkDraft((draft) => ({ ...draft, folderId }))}>
+              <Select value={bookmarkDraft.folderId} onValueChange={(folderId) => setBookmarkDraft((draft) => ({ ...draft, folderId, folderSectionId: NO_SECTION }))}>
                 <SelectTrigger aria-label="폴더"><SelectValue /></SelectTrigger>
                 <SelectContent>{orderedFolders.map((folder) => <SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+            <Field label="섹션">
+              <Select value={bookmarkDraft.folderSectionId} onValueChange={(folderSectionId) => setBookmarkDraft((draft) => ({ ...draft, folderSectionId }))}>
+                <SelectTrigger aria-label="섹션"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SECTION}>섹션 없음</SelectItem>
+                  {folderSectionsForDraft.map((section) => <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </Field>
             <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={bookmarkDraft.isFavorite} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, isFavorite: event.target.checked }))} />즐겨찾기</label>
@@ -752,10 +920,22 @@ export default function BookmarksPage() {
         </Modal>
       ) : null}
 
+      {folderSectionDialog ? (
+        <Modal title={folderSectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setFolderSectionDialog(null)} closeDisabled={saving}>
+          <form className="space-y-4" onSubmit={saveFolderSection}>
+            <Field label="이름"><Input value={folderSectionDraft.name} onChange={(event) => setFolderSectionDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
+            <ColorPicker color={folderSectionDraft.color} allowDefault onChange={(color) => setFolderSectionDraft((draft) => ({ ...draft, color }))} />
+            <FormFooter saving={saving} error={formError} onCancel={() => setFolderSectionDialog(null)} />
+          </form>
+        </Modal>
+      ) : null}
+
       {deleteTarget ? (
         <Modal title={`${deleteTarget.type === "bookmark" ? "북마크" : deleteTarget.type === "folder" ? "폴더" : "섹션"} 삭제`} onClose={() => setDeleteTarget(null)} closeDisabled={deleting}>
           <p className="text-sm text-[var(--text-secondary)]">
-            {deleteTarget.type === "section"
+            {deleteTarget.type === "folderSection"
+              ? "이 섹션을 삭제합니다. 북마크는 삭제되지 않고 섹션 없음으로 이동합니다."
+              : deleteTarget.type === "section"
               ? "이 섹션을 삭제합니다. 소속 폴더는 삭제되지 않고 섹션 없음으로 이동합니다."
               : deleteTarget.type === "folder"
                 ? "이 폴더를 삭제하고 북마크는 다른 폴더로 이동합니다."

@@ -81,6 +81,32 @@ describe("bookmarkStore REST transport", () => {
     expect(String(fetchMock.mock.calls[1][0])).toContain("destination_folder_id=fallback-folder");
   });
 
+  it("lists and creates folder-owned sections without touching sidebar sections", async () => {
+    configureRest();
+    const created = {
+      id: "folder-section-1",
+      name: "읽을 글",
+      color: null,
+      folderId: "folder-1",
+      position: 0
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse(created, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.listFolderSections()).resolves.toEqual([]);
+    await expect(bookmarkStore.createFolderSection({
+      name: " 읽을 글 ",
+      folderId: " folder-1 "
+    })).resolves.toEqual(created);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.example.com/api/folder-sections");
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      name: "읽을 글",
+      folderId: "folder-1"
+    });
+  });
+
   it("normalizes bookmark URLs and rejects sectionId", async () => {
     configureRest();
     const bookmark = {
@@ -104,6 +130,18 @@ describe("bookmarkStore REST transport", () => {
     });
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).url).toBe("https://example.com/");
     await expect(bookmarkStore.createBookmark({ ...bookmark, sectionId: "old" })).rejects.toMatchObject({ status: 400 });
+    await bookmarkStore.createBookmark({
+      title: "Example",
+      url: "https://example.com",
+      description: null,
+      isFavorite: false,
+      folderId: "folder-1",
+      folderSectionId: "folder-section-1"
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
+      folderId: "folder-1",
+      folderSectionId: "folder-section-1"
+    });
   });
 
   it("maps REST errors to StoreError", async () => {
