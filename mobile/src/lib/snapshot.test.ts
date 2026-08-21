@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   applyPendingBookmarks,
+  isCurrentMutation,
   joinSnapshotPayload,
   mutationsDisabled,
   parseSnapshot,
@@ -77,6 +78,12 @@ describe("optimistic reconcile", () => {
     assert.equal(next[0].folderSectionId, null);
     assert.equal(next[0].isFavorite, true);
     assert.equal(remote[0].folderId, "docs");
+  });
+
+  it("ignores stale mutation completion when a newer epoch is pending", () => {
+    assert.equal(isCurrentMutation(3, 1), false);
+    assert.equal(isCurrentMutation(3, 3), true);
+    assert.equal(isCurrentMutation(undefined, 1), false);
   });
 });
 

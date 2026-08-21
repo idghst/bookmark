@@ -19,7 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, fetchSnapshot, updateBookmark } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
-import { applyPendingBookmarks, mutationsDisabled } from "@/lib/snapshot";
+import { applyPendingBookmarks, isCurrentMutation, mutationsDisabled } from "@/lib/snapshot";
 import { loadSnapshotCache, saveSnapshotCache } from "@/lib/snapshot-store";
 import type { BookmarkItem, BookmarkPatch, Folder, FolderSection, Section } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
@@ -59,6 +59,8 @@ export default function HomeScreen() {
   const configRef = useRef<ApiConfig | null>(null);
   const hasDataRef = useRef(false);
   const pendingRef = useRef(new Map<string, BookmarkPatch>());
+  const pendingEpochRef = useRef(new Map<string, number>());
+  const mutationEpochRef = useRef(0);
   const fetchGenRef = useRef(0);
   const refreshInFlightRef = useRef(0);
 
@@ -195,19 +197,22 @@ export default function HomeScreen() {
     const config = configRef.current;
     if (!config || mutationsDisabled(hasDataRef.current)) return;
     const nextValue = !bookmark.isFavorite;
+    const epoch = ++mutationEpochRef.current;
     pendingRef.current.set(bookmark.id, { isFavorite: nextValue });
+    pendingEpochRef.current.set(bookmark.id, epoch);
     setBookmarks((prev) =>
       prev.map((item) => (item.id === bookmark.id ? { ...item, isFavorite: nextValue } : item)),
     );
     updateBookmark(config, bookmark.id, { isFavorite: nextValue })
       .then(() => {
-        const current = pendingRef.current.get(bookmark.id);
-        if (current?.isFavorite === nextValue) pendingRef.current.delete(bookmark.id);
+        if (!isCurrentMutation(pendingEpochRef.current.get(bookmark.id), epoch)) return;
+        pendingRef.current.delete(bookmark.id);
+        pendingEpochRef.current.delete(bookmark.id);
       })
       .catch((error: unknown) => {
-        const current = pendingRef.current.get(bookmark.id);
-        if (current?.isFavorite !== nextValue) return;
+        if (!isCurrentMutation(pendingEpochRef.current.get(bookmark.id), epoch)) return;
         pendingRef.current.delete(bookmark.id);
+        pendingEpochRef.current.delete(bookmark.id);
         setBookmarks((prev) =>
           prev.map((item) =>
             item.id === bookmark.id ? { ...item, isFavorite: bookmark.isFavorite } : item,

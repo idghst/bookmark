@@ -103,6 +103,7 @@ export default function BookmarksPage() {
   const mutationQueues = useRef(new Map<string, Promise<void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
   const mutationEpoch = useRef(0);
+  const latestMutationEpoch = useRef(new Map<string, number>());
   const persistRemoteRef = useRef(false);
   persistRemoteRef.current = apiBacked || refreshing;
   const hasHydratedData = hydrated;
@@ -279,25 +280,40 @@ export default function BookmarksPage() {
     if (!hasHydratedData) return;
     setMutationError("");
     noteMutation();
+    const epoch = mutationEpoch.current;
+    latestMutationEpoch.current.set(key, epoch);
     apply();
     if (!persistRemoteRef.current) return;
     const token = Symbol(key);
-    pendingOptimistic.current.set(token, apply);
+    pendingOptimistic.current.set(token, () => {
+      if (latestMutationEpoch.current.get(key) !== epoch) return;
+      apply();
+    });
     const previous = mutationQueues.current.get(key) ?? Promise.resolve();
     const queued = previous.catch(() => undefined).then(async () => {
-      apply();
       try {
         await request();
         pendingOptimistic.current.delete(token);
         noteMutation();
+        if (
+          pendingOptimistic.current.size === 0
+          && latestMutationEpoch.current.get(key) === epoch
+        ) {
+          await refreshBookmarks();
+        }
       } catch (error) {
         pendingOptimistic.current.delete(token);
-        const refreshed = reconcileOnFailure
-          ? await refreshBookmarks({ reapplyOptimistic: true })
-          : false;
-        if (!refreshed) rollback();
+        const isLatest = latestMutationEpoch.current.get(key) === epoch;
+        if (isLatest) {
+          const refreshed = reconcileOnFailure
+            ? await refreshBookmarks({ reapplyOptimistic: true })
+            : false;
+          if (!refreshed) rollback();
+        }
         noteMutation();
-        setMutationError(error instanceof Error ? error.message : fallbackMessage);
+        if (isLatest) {
+          setMutationError(error instanceof Error ? error.message : fallbackMessage);
+        }
       }
     });
     mutationQueues.current.set(key, queued);

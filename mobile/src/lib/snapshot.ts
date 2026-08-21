@@ -57,6 +57,10 @@ export function applyPendingBookmarks(
   });
 }
 
+export function isCurrentMutation(pendingEpoch: number | undefined, epoch: number) {
+  return pendingEpoch === epoch;
+}
+
 export function mutationsDisabled(hasData: boolean): boolean {
   return !hasData;
 }

@@ -46,6 +46,42 @@ function installCache(
   return { setItem };
 }
 
+function applyMutationToSnapshot(path: string, method: string, bodyText: string | undefined) {
+  if (!bodyText) return;
+  if (method === "POST" && path.endsWith("/reorder")) {
+    const body = JSON.parse(bodyText) as Array<{ id: string; position: number }>;
+    const collection = path.includes("/folders/")
+      ? "folders"
+      : path.includes("/sections/")
+        ? "sections"
+        : "bookmarks";
+    snapshot = {
+      ...snapshot,
+      [collection]: snapshot[collection].map((item) => {
+        const next = body.find((entry) => entry.id === item.id);
+        return next ? { ...item, position: next.position } : item;
+      })
+    };
+    return;
+  }
+  if (method !== "PATCH") return;
+  const patch = JSON.parse(bodyText) as Record<string, unknown>;
+  if (path.startsWith("/api/folders/")) {
+    const id = path.slice("/api/folders/".length);
+    snapshot = {
+      ...snapshot,
+      folders: snapshot.folders.map((folder) => folder.id === id ? { ...folder, ...patch } : folder)
+    };
+  }
+  if (path.startsWith("/api/bookmarks/")) {
+    const id = path.slice("/api/bookmarks/".length);
+    snapshot = {
+      ...snapshot,
+      bookmarks: snapshot.bookmarks.map((item) => item.id === id ? { ...item, ...patch } : item)
+    };
+  }
+}
+
 function setup(
   data = snapshot,
   mutation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> =
@@ -55,13 +91,16 @@ function setup(
   const { setItem } = installCache(data);
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    if ((init?.method ?? "GET") === "GET") {
+    const method = init?.method ?? "GET";
+    if (method === "GET") {
       if (path === "/api/folders") return new Response(JSON.stringify(snapshot.folders), { status: 200 });
       if (path === "/api/sections") return new Response(JSON.stringify(snapshot.sections), { status: 200 });
       if (path === "/api/folder-sections") return new Response(JSON.stringify([]), { status: 200 });
       if (path === "/api/bookmarks") return new Response(JSON.stringify(snapshot.bookmarks), { status: 200 });
     }
-    return mutation(input, init);
+    const response = await mutation(input, init);
+    if (response.ok) applyMutationToSnapshot(path, method, init?.body ? String(init.body) : undefined);
+    return response;
   });
   vi.stubGlobal("fetch", fetchMock);
   render(<BookmarksPage />);
@@ -77,9 +116,23 @@ async function openMenu(label: string, scope: HTMLElement = document.body) {
   return screen.findByRole("menu", { name: `${label} 메뉴` });
 }
 
+function folderNamesInSection(sectionName: string) {
+  const list = screen.getByRole("list", { name: `${sectionName} 폴더` });
+  return within(list)
+    .getAllByRole("listitem")
+    .map((item) => (within(item).getByRole("button", { name: /메뉴$/ }).getAttribute("aria-label") ?? "").replace(/ 메뉴$/, ""));
+}
+
+function dropFolderOn(sourceName: string, targetName: string, nav: HTMLElement) {
+  fireEvent.dragStart(within(nav).getByRole("button", { name: `${sourceName} 0` }));
+  fireEvent.dragOver(within(nav).getByRole("button", { name: `${targetName} 0` }));
+  fireEvent.drop(within(nav).getByRole("button", { name: `${targetName} 0` }));
+}
+
 describe("section-first bookmark UI", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    snapshot = { folders, sections, bookmarks };
   });
 
   it("shows a selected section as folder-based bookmark groups", async () => {
@@ -474,6 +527,52 @@ describe("section-first bookmark UI", () => {
       releaseRefresh(new Response(JSON.stringify(folders), { status: 200 }));
     });
     expect(within(within(nav).getByRole("region", { name: "업무" })).getByText("미분류")).toBeInTheDocument();
+  });
+
+  it("keeps the latest folder order when earlier reorder responses arrive late", async () => {
+    const workFolders: Folder[] = [
+      { id: "a", name: "폴더A", color: "#4f46e5", sectionId: "work", position: 0 },
+      { id: "b", name: "폴더B", color: "#d97706", sectionId: "work", position: 1 },
+      { id: "c", name: "폴더C", color: "#2166d7", sectionId: "work", position: 2 },
+      { id: "d", name: "폴더D", color: "#797979", sectionId: "work", position: 3 }
+    ];
+    const data = { folders: workFolders, sections: [sections[0]], bookmarks: [] };
+    const finalOrder = ["폴더B", "폴더C", "폴더D", "폴더A"];
+    const held: Array<(response: Response) => void> = [];
+    setup(data, async (input, init) => {
+      if (String(input) !== "/api/folders/reorder") return new Response(null, { status: 204 });
+      return new Promise<Response>((resolve) => {
+        held.push(resolve);
+      });
+    });
+
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    dropFolderOn("폴더A", "폴더B", nav);
+    expect(folderNamesInSection("업무")).toEqual(["폴더B", "폴더A", "폴더C", "폴더D"]);
+    dropFolderOn("폴더A", "폴더C", nav);
+    expect(folderNamesInSection("업무")).toEqual(["폴더B", "폴더C", "폴더A", "폴더D"]);
+    dropFolderOn("폴더A", "폴더D", nav);
+    expect(folderNamesInSection("업무")).toEqual(finalOrder);
+
+    await waitFor(() => expect(held).toHaveLength(1));
+
+    const release = async (index: number) => {
+      const resolve = held[index];
+      if (!resolve) throw new Error(`reorder ${index} is not in flight`);
+      await act(async () => {
+        resolve(new Response(null, { status: 204 }));
+      });
+    };
+
+    await release(0);
+    expect(folderNamesInSection("업무")).toEqual(finalOrder);
+    await waitFor(() => expect(held).toHaveLength(2));
+    await release(1);
+    expect(folderNamesInSection("업무")).toEqual(finalOrder);
+    await waitFor(() => expect(held).toHaveLength(3));
+    await release(2);
+    expect(folderNamesInSection("업무")).toEqual(finalOrder);
+    expect(screen.getByRole("button", { name: "새 폴더" })).toBeEnabled();
   });
 
   it("shows a created bookmark before the server responds", async () => {
