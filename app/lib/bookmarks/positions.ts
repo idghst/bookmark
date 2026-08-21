@@ -10,8 +10,29 @@ export function moveById<T extends { id: string; position: number }>(items: T[],
   const from = items.findIndex((item) => item.id === activeId);
   const to = items.findIndex((item) => item.id === targetId);
   if (from < 0 || to < 0 || from === to) return items;
+  return moveToIndex(items, activeId, from < to ? to + 1 : to);
+}
+
+export function insertIndexFromPointer(
+  clientY: number,
+  rect: { top: number; height: number } | null | undefined,
+  targetIndex: number
+) {
+  if (!rect || rect.height <= 0) return targetIndex + 1;
+  return clientY < rect.top + rect.height / 2 ? targetIndex : targetIndex + 1;
+}
+
+export function moveToIndex<T extends { id: string; position: number }>(
+  items: T[],
+  activeId: string,
+  insertIndex: number
+) {
+  const from = items.findIndex((item) => item.id === activeId);
+  if (from < 0) return items;
   const next = [...items];
   const [moved] = next.splice(from, 1);
+  const to = Math.max(0, Math.min(insertIndex > from ? insertIndex - 1 : insertIndex, next.length));
+  if (to === from) return items;
   next.splice(to, 0, moved);
   return normalizePositions(next);
 }

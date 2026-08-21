@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   applyPositions,
   getPositionChanges,
+  insertIndexFromPointer,
   moveById,
+  moveToIndex,
   normalizePositions,
   updateMatchingPositions
 } from "@/app/lib/bookmarks/positions";
@@ -26,6 +28,32 @@ describe("bookmark positions", () => {
       { id: "a", position: 1 },
       { id: "b", position: 2 }
     ]);
+  });
+
+  it("inserts before or after a target from pointer Y", () => {
+    const rect = { top: 100, height: 40 };
+    expect(insertIndexFromPointer(110, rect, 2)).toBe(2);
+    expect(insertIndexFromPointer(130, rect, 2)).toBe(3);
+    expect(insertIndexFromPointer(0, { top: 0, height: 0 }, 1)).toBe(2);
+  });
+
+  it("moves an item to an insert index without swapping past the intended gap", () => {
+    const items = [
+      { id: "a", position: 0 },
+      { id: "b", position: 1 },
+      { id: "c", position: 2 }
+    ];
+    expect(moveToIndex(items, "a", 3)).toEqual([
+      { id: "b", position: 0 },
+      { id: "c", position: 1 },
+      { id: "a", position: 2 }
+    ]);
+    expect(moveToIndex(items, "c", 1)).toEqual([
+      { id: "a", position: 0 },
+      { id: "c", position: 1 },
+      { id: "b", position: 2 }
+    ]);
+    expect(moveToIndex(items, "a", 1)).toEqual(items);
   });
 
   it("records only changed positions and can roll them back", () => {

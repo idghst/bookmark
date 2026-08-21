@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { DragEvent } from "react";
 import {
   Folder as FolderIcon,
   FolderPlus,
@@ -18,6 +19,7 @@ import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 import { cn } from "@/lib/utils";
 
 type Selection = { kind: "folder" | "section"; id: string };
+type InsertEdge = "before" | "after";
 
 export type ConsoleSidebarProps = {
   folders: Folder[];
@@ -29,6 +31,7 @@ export type ConsoleSidebarProps = {
   draggingSectionId: string | null;
   dragOverFolderId: string | null;
   dragOverSectionId: string | null;
+  sectionInsertEdge: InsertEdge | null;
   onSelectFolder: (id: string) => void;
   onSelectSection: (id: string) => void;
   onAddFolder: () => void;
@@ -43,10 +46,10 @@ export type ConsoleSidebarProps = {
   onDragFolder: (folderId: string | null) => void;
   onDragSection: (sectionId: string | null) => void;
   onDragOverFolder: (folderId: string | null) => void;
-  onDragOverSection: (sectionId: string | null) => void;
+  onDragOverSection: (sectionId: string | null, edge?: InsertEdge) => void;
   onDropFolder: (folderId: string) => void;
   onDropFolderOnSection: (sectionId: string | null) => void;
-  onDropSection: (sectionId: string) => void;
+  onDropSection: (sectionId: string, event: DragEvent<HTMLElement>) => void;
   className?: string;
   id?: string;
 };
@@ -97,20 +100,31 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   <div
                     className={cn(
                       "group/section flex min-h-9 items-center rounded-md",
-                      props.dragOverSectionId === group.section.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25",
-                      props.draggingSectionId === group.section.id && "opacity-60"
+                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25",
+                      props.draggingSectionId === group.section.id && "opacity-60",
+                      props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
+                      props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
                     )}
                     draggable={!props.mutationsDisabled}
                     onDragStart={() => props.onDragSection(group.section?.id ?? null)}
                     onDragEnd={() => props.onDragSection(null)}
                     onDragOver={(event) => {
                       event.preventDefault();
-                      props.onDragOverSection(group.section?.id ?? null);
+                      if (props.draggingFolderId) {
+                        props.onDragOverSection(group.section?.id ?? null);
+                        return;
+                      }
+                      if (!props.draggingSectionId) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      props.onDragOverSection(
+                        group.section?.id ?? null,
+                        event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                      );
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
                       if (props.draggingFolderId) props.onDropFolderOnSection(group.section?.id ?? null);
-                      else props.onDropSection(group.section?.id ?? "");
+                      else props.onDropSection(group.section?.id ?? "", event);
                     }}
                   >
                     <button
@@ -143,6 +157,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       props.dragOverSectionId === "__none__" && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
                     )}
                     onDragOver={(event) => {
+                      if (!props.draggingFolderId) return;
                       event.preventDefault();
                       props.onDragOverSection("__none__");
                     }}

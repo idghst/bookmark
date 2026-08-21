@@ -30,7 +30,9 @@ import {
   applyPositions,
   createId,
   getPositionChanges,
+  insertIndexFromPointer,
   moveById,
+  moveToIndex,
   normalizePositions,
   updateMatchingPositions
 } from "@/app/lib/bookmarks/positions";
@@ -96,9 +98,12 @@ export default function BookmarksPage() {
   const [folderSectionDraft, setFolderSectionDraft] = useState({ name: "", color: null as string | null });
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
+  const [draggingFolderSectionId, setDraggingFolderSectionId] = useState<string | null>(null);
   const [draggingBookmarkId, setDraggingBookmarkId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverSectionId, setDragOverSectionId] = useState<string | null>(null);
+  const [sectionInsertEdge, setSectionInsertEdge] = useState<"before" | "after" | null>(null);
+  const [folderSectionInsert, setFolderSectionInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
   const [dragOverBookmarkId, setDragOverBookmarkId] = useState<string | null>(null);
   const mutationQueues = useRef(new Map<string, Promise<void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
@@ -711,9 +716,15 @@ export default function BookmarksPage() {
     clearFolderDrag();
   }
 
-  function dropSection(targetId: string) {
+  function dropSection(targetId: string, event: { clientY: number; currentTarget: EventTarget }) {
     if (!draggingSectionId) return;
-    const moved = moveById(orderedSections, draggingSectionId, targetId);
+    const targetIndex = orderedSections.findIndex((section) => section.id === targetId);
+    if (targetIndex < 0) return;
+    const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
+    const insertIndex = sectionInsertEdge
+      ? (sectionInsertEdge === "before" ? targetIndex : targetIndex + 1)
+      : insertIndexFromPointer(event.clientY, rect, targetIndex);
+    const moved = moveToIndex(orderedSections, draggingSectionId, insertIndex);
     const changes = getPositionChanges(orderedSections, moved);
     if (changes.length) {
       persistOptimisticMutation(
@@ -727,6 +738,33 @@ export default function BookmarksPage() {
     }
     setDraggingSectionId(null);
     setDragOverSectionId(null);
+    setSectionInsertEdge(null);
+  }
+
+  function dropFolderSection(targetId: string, event: { clientY: number; currentTarget: EventTarget }) {
+    if (!draggingFolderSectionId) return;
+    const source = folderSections.find((section) => section.id === draggingFolderSectionId);
+    const target = folderSections.find((section) => section.id === targetId);
+    if (!source || !target || source.folderId !== target.folderId) return clearFolderSectionDrag();
+    const scoped = folderSections.filter((section) => section.folderId === source.folderId).sort((a, b) => a.position - b.position);
+    const targetIndex = scoped.findIndex((section) => section.id === targetId);
+    const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
+    const insertIndex = folderSectionInsert?.id === targetId
+      ? (folderSectionInsert.edge === "before" ? targetIndex : targetIndex + 1)
+      : insertIndexFromPointer(event.clientY, rect, targetIndex);
+    const moved = moveToIndex(scoped, source.id, insertIndex);
+    const changes = getPositionChanges(scoped, moved);
+    if (changes.length) {
+      persistOptimisticMutation(
+        `reorder:folder-sections:${source.folderId}`,
+        () => setFolderSections((current) => applyPositions(current, moved)),
+        () => setFolderSections((current) => updateMatchingPositions(current, changes, "rollback")),
+        () => apiRequest<void>("/api/folder-sections/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+        "섹션 순서 저장에 실패했습니다.",
+        true
+      );
+    }
+    clearFolderSectionDrag();
   }
 
   function dropBookmark(targetId: string) {
@@ -736,10 +774,7 @@ export default function BookmarksPage() {
     if (!source || !target || source.folderId !== target.folderId) return clearBookmarkDrag();
     const sourceSectionId = bookmarkFolderSectionId(source);
     const targetSectionId = bookmarkFolderSectionId(target);
-    if (sourceSectionId !== targetSectionId) {
-      moveBookmarkToSection(source, targetSectionId, target.position);
-      return;
-    }
+    if (sourceSectionId !== targetSectionId) return clearBookmarkDrag();
     const scoped = bookmarks
       .filter((bookmark) => bookmark.folderId === source.folderId && bookmarkFolderSectionId(bookmark) === sourceSectionId)
       .sort((a, b) => a.position - b.position);
@@ -802,6 +837,12 @@ export default function BookmarksPage() {
     setDraggingFolderId(null);
     setDragOverFolderId(null);
     setDragOverSectionId(null);
+    setSectionInsertEdge(null);
+  }
+
+  function clearFolderSectionDrag() {
+    setDraggingFolderSectionId(null);
+    setFolderSectionInsert(null);
   }
 
   function clearBookmarkDrag() {
@@ -821,6 +862,7 @@ export default function BookmarksPage() {
     draggingSectionId,
     dragOverFolderId,
     dragOverSectionId,
+    sectionInsertEdge,
     onSelectFolder: selectFolder,
     onSelectSection: selectSection,
     onAddFolder: () => openFolderDialog(),
@@ -838,10 +880,16 @@ export default function BookmarksPage() {
     },
     onDragSection: (id: string | null) => {
       if (!mutationsDisabled) setDraggingSectionId(id);
-      if (!id) setDragOverSectionId(null);
+      if (!id) {
+        setDragOverSectionId(null);
+        setSectionInsertEdge(null);
+      }
     },
     onDragOverFolder: setDragOverFolderId,
-    onDragOverSection: setDragOverSectionId,
+    onDragOverSection: (id: string | null, edge?: "before" | "after") => {
+      setDragOverSectionId(id);
+      setSectionInsertEdge(edge ?? null);
+    },
     onDropFolder: dropFolder,
     onDropFolderOnSection: moveFolderToSection,
     onDropSection: dropSection
@@ -895,13 +943,40 @@ export default function BookmarksPage() {
             ) : groups.map((group) => (
               <section key={group.key} className="space-y-3">
                 <div
-                  className={BOOKMARK_SECTION_HEADER_CLASS}
+                  className={cn(
+                    BOOKMARK_SECTION_HEADER_CLASS,
+                    draggingFolderSectionId === group.folderSection?.id && "opacity-60",
+                    draggingBookmarkId && "ring-1 ring-transparent hover:ring-[var(--color-brand)]/30",
+                    folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
+                    folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
+                  )}
+                  draggable={Boolean(group.folderSection) && !mutationsDisabled}
+                  onDragStart={(event) => {
+                    if (!group.folderSection || mutationsDisabled) return;
+                    event.dataTransfer.setData("text/plain", group.folderSection.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    setDraggingFolderSectionId(group.folderSection.id);
+                  }}
+                  onDragEnd={clearFolderSectionDrag}
                   onDragOver={(event) => {
+                    if (draggingFolderSectionId && group.folderSection) {
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setFolderSectionInsert({
+                        id: group.folderSection.id,
+                        edge: event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                      });
+                      return;
+                    }
                     if (!draggingBookmarkId) return;
                     event.preventDefault();
                   }}
                   onDrop={(event) => {
                     event.preventDefault();
+                    if (draggingFolderSectionId && group.folderSection) {
+                      dropFolderSection(group.folderSection.id, event);
+                      return;
+                    }
                     const source = bookmarks.find((item) => item.id === draggingBookmarkId);
                     if (!source || source.folderId !== group.folder.id) return clearBookmarkDrag();
                     moveBookmarkToSection(source, group.folderSection?.id ?? null);
@@ -941,7 +1016,13 @@ export default function BookmarksPage() {
                       onDragOver={(id) => {
                         const source = bookmarks.find((item) => item.id === draggingBookmarkId);
                         const target = bookmarks.find((item) => item.id === id);
-                        setDragOverBookmarkId(source?.folderId === target?.folderId ? id : null);
+                        setDragOverBookmarkId(
+                          source && target
+                            && source.folderId === target.folderId
+                            && bookmarkFolderSectionId(source) === bookmarkFolderSectionId(target)
+                            ? id
+                            : null
+                        );
                       }}
                       onDrop={dropBookmark}
                       onEdit={openBookmarkDialog}

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BookmarksPage from "@/app/(dashboard)/page";
-import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
 
 const sections: Section[] = [
   { id: "work", name: "업무", color: "#4f46e5", position: 0 },
@@ -20,10 +20,20 @@ const bookmarks: BookmarkItem[] = [
   { id: "d1", title: "문서 A", url: "https://d1.example.com", description: null, isFavorite: false, folderId: "docs", position: 0 }
 ];
 
-let snapshot = { folders, sections, bookmarks };
+let snapshot: {
+  folders: Folder[];
+  sections: Section[];
+  bookmarks: BookmarkItem[];
+  folderSections: FolderSection[];
+} = { folders, sections, bookmarks, folderSections: [] };
 
 function installCache(
-  data: { folders: Folder[]; sections: Section[]; bookmarks: BookmarkItem[] },
+  data: {
+    folders: Folder[];
+    sections: Section[];
+    bookmarks: BookmarkItem[];
+    folderSections?: FolderSection[];
+  },
   selection: { kind: "folder" | "section"; id: string } = { kind: "section", id: "work" }
 ) {
   const cache = JSON.stringify({
@@ -50,11 +60,13 @@ function applyMutationToSnapshot(path: string, method: string, bodyText: string 
   if (!bodyText) return;
   if (method === "POST" && path.endsWith("/reorder")) {
     const body = JSON.parse(bodyText) as Array<{ id: string; position: number }>;
-    const collection = path.includes("/folders/")
-      ? "folders"
-      : path.includes("/sections/")
-        ? "sections"
-        : "bookmarks";
+    const collection = path.includes("/folder-sections/")
+      ? "folderSections"
+      : path.includes("/folders/")
+        ? "folders"
+        : path.includes("/sections/")
+          ? "sections"
+          : "bookmarks";
     snapshot = {
       ...snapshot,
       [collection]: snapshot[collection].map((item) => {
@@ -83,11 +95,16 @@ function applyMutationToSnapshot(path: string, method: string, bodyText: string 
 }
 
 function setup(
-  data = snapshot,
+  data: {
+    folders: Folder[];
+    sections: Section[];
+    bookmarks: BookmarkItem[];
+    folderSections?: FolderSection[];
+  } = snapshot,
   mutation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> =
     async () => new Response(null, { status: 204 })
 ) {
-  snapshot = data;
+  snapshot = { ...data, folderSections: data.folderSections ?? [] };
   const { setItem } = installCache(data);
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
@@ -95,7 +112,7 @@ function setup(
     if (method === "GET") {
       if (path === "/api/folders") return new Response(JSON.stringify(snapshot.folders), { status: 200 });
       if (path === "/api/sections") return new Response(JSON.stringify(snapshot.sections), { status: 200 });
-      if (path === "/api/folder-sections") return new Response(JSON.stringify([]), { status: 200 });
+      if (path === "/api/folder-sections") return new Response(JSON.stringify(snapshot.folderSections), { status: 200 });
       if (path === "/api/bookmarks") return new Response(JSON.stringify(snapshot.bookmarks), { status: 200 });
     }
     const response = await mutation(input, init);
@@ -123,6 +140,26 @@ function folderNamesInSection(sectionName: string) {
     .map((item) => (within(item).getByRole("button", { name: /메뉴$/ }).getAttribute("aria-label") ?? "").replace(/ 메뉴$/, ""));
 }
 
+function mockRect(top: number, height: number) {
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+    top,
+    height,
+    bottom: top + height,
+    left: 0,
+    right: 200,
+    width: 200,
+    x: 0,
+    y: top,
+    toJSON: () => ({})
+  });
+}
+
+function firePointerDrag(el: HTMLElement, type: "dragover" | "drop", clientY: number) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clientY", { value: clientY });
+  fireEvent(el, event);
+}
+
 function dropFolderOn(sourceName: string, targetName: string, nav: HTMLElement) {
   fireEvent.dragStart(within(nav).getByRole("button", { name: `${sourceName} 0` }));
   fireEvent.dragOver(within(nav).getByRole("button", { name: `${targetName} 0` }));
@@ -132,7 +169,8 @@ function dropFolderOn(sourceName: string, targetName: string, nav: HTMLElement) 
 describe("section-first bookmark UI", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
-    snapshot = { folders, sections, bookmarks };
+    vi.restoreAllMocks();
+    snapshot = { folders, sections, bookmarks, folderSections: [] };
   });
 
   it("shows a selected section as folder-based bookmark groups", async () => {
@@ -240,6 +278,81 @@ describe("section-first bookmark UI", () => {
     fireEvent.dragOver(otherFolder);
     fireEvent.drop(otherFolder);
     expect(mutations(fetchMock)).toHaveLength(1);
+  });
+
+  it("moves a bookmark to another section only when dropped on that section header", async () => {
+    const folderSections: FolderSection[] = [
+      { id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 },
+      { id: "weekly", name: "주간", color: "#16a34a", folderId: "projects", position: 1 }
+    ];
+    const scoped: BookmarkItem[] = [
+      { ...bookmarks[0], folderSectionId: "daily", position: 0 },
+      { ...bookmarks[1], folderSectionId: "weekly", position: 0 }
+    ];
+    const { fetchMock } = setup({ folders, sections, bookmarks: scoped, folderSections });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.click(within(nav).getByRole("button", { name: "프로젝트 2" }));
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    const otherCard = screen.getByRole("link", { name: /프로젝트 B/ });
+    fireEvent.dragStart(source);
+    fireEvent.dragOver(otherCard);
+    fireEvent.drop(otherCard);
+    expect(mutations(fetchMock)).toHaveLength(0);
+
+    fireEvent.dragStart(screen.getByRole("link", { name: /프로젝트 A/ }));
+    fireEvent.drop(screen.getByRole("heading", { name: "주간" }));
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(mutations(fetchMock)[0][0]).toBe("/api/bookmarks/p1");
+    expect(JSON.parse(String(mutations(fetchMock)[0][1]?.body))).toEqual({ folderSectionId: "weekly" });
+  });
+
+  it("reorders sidebar sections by drop position instead of swapping onto the target", async () => {
+    const extra: Section = { id: "life", name: "생활", color: "#16a34a", position: 2 };
+    const { fetchMock } = setup({ folders, sections: [...sections, extra], bookmarks: [] });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const work = within(nav).getByRole("button", { name: "업무" });
+    const life = within(nav).getByRole("button", { name: "생활" });
+    const target = life.closest("[draggable]") as HTMLElement;
+    mockRect(100, 40);
+    fireEvent.dragStart(work);
+    firePointerDrag(target, "dragover", 110);
+    firePointerDrag(target, "drop", 110);
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(mutations(fetchMock)[0][0]).toBe("/api/sections/reorder");
+    expect(JSON.parse(String(mutations(fetchMock)[0][1]?.body))).toEqual([
+      { id: "knowledge", position: 0 },
+      { id: "work", position: 1 },
+      { id: "life", position: 2 }
+    ]);
+  });
+
+  it("reorders folder sections when a section header is dropped after another", async () => {
+    const folderSections: FolderSection[] = [
+      { id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 },
+      { id: "weekly", name: "주간", color: "#16a34a", folderId: "projects", position: 1 }
+    ];
+    const { fetchMock } = setup({
+      folders,
+      sections,
+      bookmarks: [{ ...bookmarks[0], folderSectionId: "daily" }],
+      folderSections
+    });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.click(within(nav).getByRole("button", { name: "프로젝트 1" }));
+    const daily = await screen.findByRole("heading", { name: "매일" });
+    const weekly = screen.getByRole("heading", { name: "주간" });
+    const dailyHeader = daily.parentElement as HTMLElement;
+    const weeklyHeader = weekly.parentElement as HTMLElement;
+    mockRect(100, 40);
+    fireEvent.dragStart(dailyHeader);
+    firePointerDrag(weeklyHeader, "dragover", 130);
+    firePointerDrag(weeklyHeader, "drop", 130);
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(mutations(fetchMock)[0][0]).toBe("/api/folder-sections/reorder");
+    expect(JSON.parse(String(mutations(fetchMock)[0][1]?.body))).toEqual([
+      { id: "weekly", position: 0 },
+      { id: "daily", position: 1 }
+    ]);
   });
 
   it("removes section selection from the bookmark modal", async () => {
@@ -354,7 +467,7 @@ describe("section-first bookmark UI", () => {
     };
     const remote: BookmarkItem = { ...cached, id: "remote", title: "Remote" };
     const data = { folders, sections, bookmarks: [cached] };
-    snapshot = data;
+    snapshot = { ...data, folderSections: [] };
     const { setItem } = installCache(data);
     let resolveFolders!: (response: Response) => void;
     let resolveSections!: (response: Response) => void;
@@ -489,7 +602,7 @@ describe("section-first bookmark UI", () => {
 
   it("does not let a background refresh overwrite an in-flight folder move", async () => {
     installCache({ folders, sections, bookmarks });
-    snapshot = { folders, sections, bookmarks };
+    snapshot = { folders, sections, bookmarks, folderSections: [] };
     let folderGets = 0;
     let releaseRefresh!: (response: Response) => void;
     const refreshFolders = new Promise<Response>((resolve) => { releaseRefresh = resolve; });
@@ -704,7 +817,7 @@ describe("section-first bookmark UI", () => {
     const first = { ...bookmarks[0], id: "first", title: "First" };
     const second = { ...bookmarks[1], id: "second", title: "Second" };
     const { setItem } = installCache({ folders, sections, bookmarks: [first, second] });
-    snapshot = { folders, sections, bookmarks: [first, second] };
+    snapshot = { folders, sections, bookmarks: [first, second], folderSections: [] };
     let failFirst!: (response: Response) => void;
     const firstRequest = new Promise<Response>((resolve) => { failFirst = resolve; });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
