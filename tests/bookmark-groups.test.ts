@@ -67,13 +67,25 @@ describe("bookmark groups", () => {
     expect(buildBookmarkGroups(bookmarks.slice(0, 1), visible, [], true).map((group) => group.label)).toEqual(["작업"]);
   });
 
-  it("keeps folder-owned sections separate and always shows 섹션 없음", () => {
+  it("keeps folder-owned sections separate and shows 섹션 없음 only when it has bookmarks", () => {
     const visible = [folders[1]];
     const groups = buildBookmarkGroups(bookmarks, visible, folderSections, false);
     expect(groups.map((group) => [group.label, group.folderSection?.id ?? null, group.items.map((item) => item.id)])).toEqual([
       ["읽을 글", "work-read", ["b1"]],
       ["섹션 없음", null, ["b3"]]
     ]);
+  });
+
+  it("hides empty 섹션 없음 inside a folder that already has named sections", () => {
+    const visible = [folders[1]];
+    const groups = buildBookmarkGroups(
+      bookmarks.filter((bookmark) => bookmark.id !== "b3"),
+      visible,
+      folderSections,
+      false,
+      true
+    );
+    expect(groups.map((group) => group.label)).toEqual(["읽을 글"]);
   });
 
   it("labels the unassigned bucket 섹션 없음 when a folder is the current view", () => {

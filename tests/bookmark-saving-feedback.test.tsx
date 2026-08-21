@@ -382,6 +382,9 @@ describe("section-first bookmark UI", () => {
     });
     const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
     fireEvent.click(within(nav).getByRole("button", { name: "프로젝트 1" }));
+    expect(screen.getByRole("heading", { name: "매일" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "주간" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "섹션 없음" })).not.toBeInTheDocument();
     const daily = await screen.findByRole("heading", { name: "매일" });
     const weekly = screen.getByRole("heading", { name: "주간" });
     const dailyHeader = daily.parentElement as HTMLElement;

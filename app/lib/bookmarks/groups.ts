@@ -63,18 +63,16 @@ export function buildBookmarkGroups(
       folderSection: null,
       items: itemsByKey.get(`${folder.id}:${NO_SECTION}`) ?? []
     };
-    const groups = owned.length
-      ? [
-          ...owned.map((folderSection) => ({
-            key: `${folder.id}:${folderSection.id}`,
-            label: sectionLabel(folder, folderSection, multipleFolders),
-            folder,
-            folderSection,
-            items: itemsByKey.get(`${folder.id}:${folderSection.id}`) ?? []
-          })),
-          unsectioned
-        ]
-      : [unsectioned];
+    const groups = [
+      ...owned.map((folderSection) => ({
+        key: `${folder.id}:${folderSection.id}`,
+        label: sectionLabel(folder, folderSection, multipleFolders),
+        folder,
+        folderSection,
+        items: itemsByKey.get(`${folder.id}:${folderSection.id}`) ?? []
+      })),
+      ...(unsectioned.items.length > 0 || (!owned.length && !alwaysShowUnsectioned) ? [unsectioned] : [])
+    ];
     return hasActiveFilter ? groups.filter((group) => group.items.length) : groups;
   });
 }
