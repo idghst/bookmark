@@ -1,4 +1,4 @@
-export const STORAGE_KEY = "bookmark-cache-v3";
+export const STORAGE_KEY = "bookmark-cache-v4";
 export const NO_SECTION = "__none__";
 export const COLOR_OPTIONS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#797979"];
 export const COLOR_FALLBACK = "#797979";

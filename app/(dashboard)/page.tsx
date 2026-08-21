@@ -21,8 +21,7 @@ import {
   BOOKMARK_TOUCH_TARGET_CLASS,
   COLOR_FALLBACK,
   COLOR_OPTIONS,
-  NO_SECTION,
-  STORAGE_KEY
+  NO_SECTION
 } from "@/app/lib/bookmarks/constants";
 import { countBookmarks, matchesBookmarkFilters } from "@/app/lib/bookmarks/counts";
 import { flattenFolderResponse, folderSectionId, normalizeFolderPositions } from "@/app/lib/bookmarks/folder-tree";
@@ -75,7 +74,6 @@ export default function BookmarksPage() {
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [apiBacked, setApiBacked] = useState(false);
-  const [bootstrapping, setBootstrapping] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -104,6 +102,15 @@ export default function BookmarksPage() {
   const [dragOverBookmarkId, setDragOverBookmarkId] = useState<string | null>(null);
   const mutationQueues = useRef(new Map<string, Promise<void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
+  const mutationEpoch = useRef(0);
+  const persistRemoteRef = useRef(false);
+  persistRemoteRef.current = apiBacked || refreshing;
+  const hasHydratedData = hydrated;
+  const mutationsDisabled = !hasHydratedData;
+
+  function noteMutation() {
+    mutationEpoch.current += 1;
+  }
 
   const orderedSections = useMemo(
     () => [...sections].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ko")),
@@ -156,28 +163,19 @@ export default function BookmarksPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const cache = (() => {
-      try {
-        return readBookmarkCache();
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-        return null;
-      }
-    })();
+    const cache = readBookmarkCache();
     if (cache) {
       setFolders(normalizeFolderPositions(cache.folders));
       setSections(normalizePositions(cache.sections));
-      setFolderSections(cache.folderSections ?? []);
+      setFolderSections(cache.folderSections);
       setBookmarks(cache.bookmarks);
-      setSelection(cache.selection ?? { kind: "folder", id: cache.folders[0].id });
+      setSelection(cache.selection ?? (cache.folders[0] ? { kind: "folder", id: cache.folders[0].id } : null));
       setHydrated(true);
     }
     void refreshBookmarks({
       fallbackToInitial: !cache,
       markHydrated: !cache,
       isCancelled: () => cancelled
-    }).finally(() => {
-      if (!cancelled) setBootstrapping(false);
     });
     return () => {
       cancelled = true;
@@ -187,7 +185,6 @@ export default function BookmarksPage() {
   useEffect(() => {
     if (!hydrated) return;
     writeBookmarkCache({
-      version: 3,
       apiBacked,
       savedAt: Date.now(),
       folders,
@@ -222,6 +219,7 @@ export default function BookmarksPage() {
     reapplyOptimistic?: boolean;
     isCancelled?: () => boolean;
   } = {}) {
+    const epochAtStart = mutationEpoch.current;
     setRefreshing(true);
     try {
       const [remoteFolders, remoteSections, remoteFolderSections, remoteBookmarks] = await Promise.all([
@@ -233,17 +231,22 @@ export default function BookmarksPage() {
       if (isCancelled()) return false;
       const flatFolders = flattenFolderResponse(remoteFolders);
       if (!flatFolders.length) throw new Error("폴더 데이터가 없습니다.");
-      setFolders(flatFolders);
-      setSections(normalizePositions(remoteSections));
-      setFolderSections(normalizePositions(remoteFolderSections));
-      setBookmarks(remoteBookmarks);
-      setSelection((current) => {
-        if (current?.kind === "folder" && flatFolders.some((folder) => folder.id === current.id)) return current;
-        if (current?.kind === "section" && remoteSections.some((section) => section.id === current.id)) return current;
-        return { kind: "folder", id: flatFolders[0].id };
-      });
+      const stale = !reapplyOptimistic && (
+        pendingOptimistic.current.size > 0 || mutationEpoch.current !== epochAtStart
+      );
+      if (!stale) {
+        setFolders(flatFolders);
+        setSections(normalizePositions(remoteSections));
+        setFolderSections(normalizePositions(remoteFolderSections));
+        setBookmarks(remoteBookmarks);
+        setSelection((current) => {
+          if (current?.kind === "folder" && flatFolders.some((folder) => folder.id === current.id)) return current;
+          if (current?.kind === "section" && remoteSections.some((section) => section.id === current.id)) return current;
+          return { kind: "folder", id: flatFolders[0].id };
+        });
+      }
+      pendingOptimistic.current.forEach((apply) => apply());
       setApiBacked(true);
-      if (reapplyOptimistic) pendingOptimistic.current.forEach((apply) => apply());
       return true;
     } catch {
       if (fallbackToInitial && !isCancelled()) {
@@ -273,10 +276,11 @@ export default function BookmarksPage() {
     fallbackMessage: string,
     reconcileOnFailure = false
   ) {
-    if (bootstrapping) return;
+    if (!hasHydratedData) return;
     setMutationError("");
+    noteMutation();
     apply();
-    if (!apiBacked) return;
+    if (!persistRemoteRef.current) return;
     const token = Symbol(key);
     pendingOptimistic.current.set(token, apply);
     const previous = mutationQueues.current.get(key) ?? Promise.resolve();
@@ -285,12 +289,14 @@ export default function BookmarksPage() {
       try {
         await request();
         pendingOptimistic.current.delete(token);
+        noteMutation();
       } catch (error) {
         pendingOptimistic.current.delete(token);
         const refreshed = reconcileOnFailure
           ? await refreshBookmarks({ reapplyOptimistic: true })
           : false;
         if (!refreshed) rollback();
+        noteMutation();
         setMutationError(error instanceof Error ? error.message : fallbackMessage);
       }
     });
@@ -311,7 +317,6 @@ export default function BookmarksPage() {
   }
 
   function openBookmarkDialog(bookmark?: BookmarkItem, folder?: Folder) {
-    if (bootstrapping) return;
     setFormError("");
     if (bookmark) {
       setBookmarkDialog({ mode: "edit", bookmarkId: bookmark.id });
@@ -332,14 +337,12 @@ export default function BookmarksPage() {
   }
 
   function openBookmarkDialogInSection(folder: Folder, folderSection: FolderSection | null) {
-    if (bootstrapping) return;
     setFormError("");
     setBookmarkDraft(emptyBookmarkDraft(folder.id, folderSection?.id ?? NO_SECTION));
     setBookmarkDialog({ mode: "create" });
   }
 
   function openFolderSectionDialog(folderSection?: FolderSection, folderId?: string) {
-    if (bootstrapping) return;
     const targetFolderId = folderSection?.folderId ?? folderId ?? selectedFolder?.id;
     if (!targetFolderId) return;
     setFormError("");
@@ -350,7 +353,6 @@ export default function BookmarksPage() {
   }
 
   function openFolderDialog(folder?: Folder) {
-    if (bootstrapping) return;
     setFormError("");
     setFolderDraft({
       name: folder?.name ?? "",
@@ -361,7 +363,6 @@ export default function BookmarksPage() {
   }
 
   function openSectionDialog(section?: Section) {
-    if (bootstrapping) return;
     setFormError("");
     setSectionDraft({ name: section?.name ?? "", color: section?.color ?? null });
     setSectionDialog(section ? { mode: "edit", sectionId: section.id } : { mode: "create" });
@@ -385,27 +386,43 @@ export default function BookmarksPage() {
     };
     setSaving(true);
     setFormError("");
+    const editingId = bookmarkDialog?.mode === "edit" ? bookmarkDialog.bookmarkId : undefined;
+    const previous = editingId ? bookmarks.find((bookmark) => bookmark.id === editingId) : undefined;
+    const tempId = editingId ? null : createId("bm");
     try {
-      if (bookmarkDialog?.mode === "edit" && bookmarkDialog.bookmarkId) {
-        const updated = apiBacked
-          ? await apiRequest<BookmarkItem>(`/api/bookmarks/${bookmarkDialog.bookmarkId}`, { method: "PATCH", body: JSON.stringify(payload) })
-          : { ...bookmarks.find((bookmark) => bookmark.id === bookmarkDialog.bookmarkId)!, ...payload };
-        setBookmarks((current) => current.map((bookmark) => bookmark.id === updated.id ? updated : bookmark));
-      } else {
-        const created = apiBacked
-          ? await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) })
-          : {
-              id: createId("bm"),
-              ...payload,
-              position: bookmarks.filter((bookmark) => (
-                bookmark.folderId === payload.folderId
-                && bookmarkFolderSectionId(bookmark) === payload.folderSectionId
-              )).length
-            };
-        setBookmarks((current) => [...current, created]);
+      if (editingId && previous) {
+        noteMutation();
+        setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? { ...previous, ...payload } : bookmark));
+        if (persistRemoteRef.current) {
+          const updated = await apiRequest<BookmarkItem>(`/api/bookmarks/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) });
+          setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? updated : bookmark));
+          noteMutation();
+        }
+      } else if (tempId) {
+        const optimistic = {
+          id: tempId,
+          ...payload,
+          position: bookmarks.filter((bookmark) => (
+            bookmark.folderId === payload.folderId
+            && bookmarkFolderSectionId(bookmark) === payload.folderSectionId
+          )).length
+        };
+        noteMutation();
+        setBookmarks((current) => [...current, optimistic]);
+        if (persistRemoteRef.current) {
+          const created = await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) });
+          setBookmarks((current) => current.map((bookmark) => bookmark.id === tempId ? created : bookmark));
+          noteMutation();
+        }
       }
       setBookmarkDialog(null);
     } catch (error) {
+      if (editingId && previous) {
+        setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? previous : bookmark));
+      } else if (tempId) {
+        setBookmarks((current) => current.filter((bookmark) => bookmark.id !== tempId));
+      }
+      noteMutation();
       setFormError(error instanceof Error ? error.message : "북마크 저장에 실패했습니다.");
     } finally {
       setSaving(false);
@@ -420,32 +437,40 @@ export default function BookmarksPage() {
     const payload = { name, color: folderDraft.color, sectionId };
     setSaving(true);
     setFormError("");
+    const editingId = folderDialog?.mode === "edit" ? folderDialog.folderId : undefined;
+    const existing = editingId ? folders.find((folder) => folder.id === editingId) : undefined;
+    const tempId = editingId ? null : createId("folder");
+    const local = {
+      ...(existing ?? { id: tempId!, position: folders.filter((folder) => folderSectionId(folder) === sectionId).length }),
+      ...payload,
+      position: existing && folderSectionId(existing) === sectionId
+        ? existing.position
+        : folders.filter((folder) => folderSectionId(folder) === sectionId).length
+    };
     try {
-      if (folderDialog?.mode === "edit" && folderDialog.folderId) {
-        const existing = folders.find((folder) => folder.id === folderDialog.folderId)!;
-        const updated = apiBacked
-          ? await apiRequest<Folder>(`/api/folders/${folderDialog.folderId}`, { method: "PATCH", body: JSON.stringify(payload) })
-          : {
-              ...existing,
-              ...payload,
-              position: folderSectionId(existing) === sectionId
-                ? existing.position
-                : folders.filter((folder) => folderSectionId(folder) === sectionId).length
-            };
-        setFolders((current) => normalizeFolderPositions(current.map((folder) => folder.id === updated.id ? updated : folder)));
-      } else {
-        const created = apiBacked
-          ? await apiRequest<Folder>("/api/folders", { method: "POST", body: JSON.stringify(payload) })
-          : {
-              id: createId("folder"),
-              ...payload,
-              position: folders.filter((folder) => folderSectionId(folder) === sectionId).length
-            };
-        setFolders((current) => normalizeFolderPositions([...current, created]));
-        setSelection({ kind: "folder", id: created.id });
+      noteMutation();
+      setFolders((current) => normalizeFolderPositions(
+        editingId
+          ? current.map((folder) => folder.id === editingId ? local : folder)
+          : [...current, local]
+      ));
+      if (!editingId) setSelection({ kind: "folder", id: local.id });
+      if (persistRemoteRef.current) {
+        const saved = editingId
+          ? await apiRequest<Folder>(`/api/folders/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) })
+          : await apiRequest<Folder>("/api/folders", { method: "POST", body: JSON.stringify(payload) });
+        setFolders((current) => normalizeFolderPositions(current.map((folder) => folder.id === local.id ? saved : folder)));
+        if (!editingId) setSelection({ kind: "folder", id: saved.id });
+        noteMutation();
       }
       setFolderDialog(null);
     } catch (error) {
+      setFolders((current) => normalizeFolderPositions(
+        editingId && existing
+          ? current.map((folder) => folder.id === editingId ? existing : folder)
+          : current.filter((folder) => folder.id !== local.id)
+      ));
+      noteMutation();
       setFormError(error instanceof Error ? error.message : "폴더 저장에 실패했습니다.");
     } finally {
       setSaving(false);
@@ -460,30 +485,45 @@ export default function BookmarksPage() {
     if (duplicate && duplicate.id !== sectionDialog?.sectionId) return setFormError("같은 이름의 섹션이 이미 있습니다.");
     setSaving(true);
     setFormError("");
+    const editingId = sectionDialog?.mode === "edit" ? sectionDialog.sectionId : undefined;
+    const existing = editingId ? sections.find((section) => section.id === editingId) : undefined;
+    const tempId = editingId ? null : createId("section");
     try {
-      if (sectionDialog?.mode === "edit" && sectionDialog.sectionId) {
-        const existing = sections.find((section) => section.id === sectionDialog.sectionId);
-        const payload: { name?: string; color?: string | null } = {};
-        if (existing?.name !== name) payload.name = name;
-        if ((existing?.color ?? null) !== sectionDraft.color) payload.color = sectionDraft.color;
-        if (!Object.keys(payload).length) {
+      if (editingId) {
+        const patch: { name?: string; color?: string | null } = {};
+        if (existing?.name !== name) patch.name = name;
+        if ((existing?.color ?? null) !== sectionDraft.color) patch.color = sectionDraft.color;
+        if (!Object.keys(patch).length) {
           setSectionDialog(null);
           return;
         }
-        const updated = apiBacked
-          ? await apiRequest<Section>(`/api/sections/${sectionDialog.sectionId}`, { method: "PATCH", body: JSON.stringify(payload) })
-          : { ...sections.find((section) => section.id === sectionDialog.sectionId)!, ...payload };
-        setSections((current) => current.map((section) => section.id === updated.id ? updated : section));
-      } else {
+        noteMutation();
+        setSections((current) => current.map((section) => section.id === editingId ? { ...section, ...patch } : section));
+        if (persistRemoteRef.current) {
+          const updated = await apiRequest<Section>(`/api/sections/${editingId}`, { method: "PATCH", body: JSON.stringify(patch) });
+          setSections((current) => current.map((section) => section.id === editingId ? updated : section));
+          noteMutation();
+        }
+      } else if (tempId) {
         const payload = { name, color: sectionDraft.color };
-        const created = apiBacked
-          ? await apiRequest<Section>("/api/sections", { method: "POST", body: JSON.stringify(payload) })
-          : { id: createId("section"), ...payload, position: sections.length };
-        setSections((current) => [...current, created]);
-        setSelection({ kind: "section", id: created.id });
+        noteMutation();
+        setSections((current) => [...current, { id: tempId, ...payload, position: sections.length }]);
+        setSelection({ kind: "section", id: tempId });
+        if (persistRemoteRef.current) {
+          const created = await apiRequest<Section>("/api/sections", { method: "POST", body: JSON.stringify(payload) });
+          setSections((current) => current.map((section) => section.id === tempId ? created : section));
+          setSelection({ kind: "section", id: created.id });
+          noteMutation();
+        }
       }
       setSectionDialog(null);
     } catch (error) {
+      if (editingId && existing) {
+        setSections((current) => current.map((section) => section.id === editingId ? existing : section));
+      } else if (tempId) {
+        setSections((current) => current.filter((section) => section.id !== tempId));
+      }
+      noteMutation();
       setFormError(error instanceof Error ? error.message : "섹션 저장에 실패했습니다.");
     } finally {
       setSaving(false);
@@ -504,9 +544,11 @@ export default function BookmarksPage() {
     if (duplicate) return setFormError("같은 이름의 섹션이 이미 있습니다.");
     setSaving(true);
     setFormError("");
+    const editingId = folderSectionDialog.mode === "edit" ? folderSectionDialog.folderSectionId : undefined;
+    const existing = editingId ? folderSections.find((section) => section.id === editingId) : undefined;
+    const tempId = editingId ? null : createId("folder-section");
     try {
-      if (folderSectionDialog.mode === "edit" && folderSectionDialog.folderSectionId) {
-        const existing = folderSections.find((section) => section.id === folderSectionDialog.folderSectionId);
+      if (editingId) {
         const payload: { name?: string; color?: string | null } = {};
         if (existing?.name !== name) payload.name = name;
         if ((existing?.color ?? null) !== folderSectionDraft.color) payload.color = folderSectionDraft.color;
@@ -514,19 +556,36 @@ export default function BookmarksPage() {
           setFolderSectionDialog(null);
           return;
         }
-        const updated = apiBacked
-          ? await apiRequest<FolderSection>(`/api/folder-sections/${folderSectionDialog.folderSectionId}`, { method: "PATCH", body: JSON.stringify(payload) })
-          : { ...existing!, ...payload };
-        setFolderSections((current) => current.map((section) => section.id === updated.id ? updated : section));
-      } else {
+        noteMutation();
+        setFolderSections((current) => current.map((section) => section.id === editingId ? { ...section, ...payload } : section));
+        if (persistRemoteRef.current) {
+          const updated = await apiRequest<FolderSection>(`/api/folder-sections/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) });
+          setFolderSections((current) => current.map((section) => section.id === editingId ? updated : section));
+          noteMutation();
+        }
+      } else if (tempId) {
         const payload = { name, color: folderSectionDraft.color, folderId };
-        const created = apiBacked
-          ? await apiRequest<FolderSection>("/api/folder-sections", { method: "POST", body: JSON.stringify(payload) })
-          : { id: createId("folder-section"), ...payload, position: folderSections.filter((section) => section.folderId === folderId).length };
-        setFolderSections((current) => [...current, created]);
+        const optimistic = {
+          id: tempId,
+          ...payload,
+          position: folderSections.filter((section) => section.folderId === folderId).length
+        };
+        noteMutation();
+        setFolderSections((current) => [...current, optimistic]);
+        if (persistRemoteRef.current) {
+          const created = await apiRequest<FolderSection>("/api/folder-sections", { method: "POST", body: JSON.stringify(payload) });
+          setFolderSections((current) => current.map((section) => section.id === tempId ? created : section));
+          noteMutation();
+        }
       }
       setFolderSectionDialog(null);
     } catch (error) {
+      if (editingId && existing) {
+        setFolderSections((current) => current.map((section) => section.id === editingId ? existing : section));
+      } else if (tempId) {
+        setFolderSections((current) => current.filter((section) => section.id !== tempId));
+      }
+      noteMutation();
       setFormError(error instanceof Error ? error.message : "섹션 저장에 실패했습니다.");
     } finally {
       setSaving(false);
@@ -535,46 +594,63 @@ export default function BookmarksPage() {
 
   async function confirmDelete() {
     if (!deleteTarget || deleting) return;
+    const target = deleteTarget;
+    const previousBookmarks = bookmarks;
+    const previousFolders = folders;
+    const previousSections = sections;
+    const previousFolderSections = folderSections;
+    const previousSelection = selection;
     setDeleting(true);
     setDeleteError("");
     try {
-      if (deleteTarget.type === "bookmark") {
-        if (apiBacked) await apiRequest<void>(`/api/bookmarks/${deleteTarget.id}`, { method: "DELETE" });
-        setBookmarks((current) => current.filter((bookmark) => bookmark.id !== deleteTarget.id));
-      } else if (deleteTarget.type === "folderSection") {
-        if (apiBacked) await apiRequest<void>(`/api/folder-sections/${deleteTarget.id}`, { method: "DELETE" });
-        setFolderSections((current) => current.filter((section) => section.id !== deleteTarget.id));
+      if (target.type === "folder") {
+        if (folders.length <= 1) throw new Error("마지막 폴더는 삭제할 수 없습니다.");
+        if (!folders.some((folder) => folder.id !== target.id)) throw new Error("북마크를 이동할 대상 폴더가 없습니다.");
+      }
+      const fallback = folders.find((folder) => folder.id !== target.id);
+      noteMutation();
+      if (target.type === "bookmark") {
+        setBookmarks((current) => current.filter((bookmark) => bookmark.id !== target.id));
+        if (persistRemoteRef.current) await apiRequest<void>(`/api/bookmarks/${target.id}`, { method: "DELETE" });
+      } else if (target.type === "folderSection") {
+        setFolderSections((current) => current.filter((section) => section.id !== target.id));
         setBookmarks((current) => current.map((bookmark) => (
-          bookmarkFolderSectionId(bookmark) === deleteTarget.id
+          bookmarkFolderSectionId(bookmark) === target.id
             ? { ...bookmark, folderSectionId: null }
             : bookmark
         )));
-      } else if (deleteTarget.type === "section") {
-        if (apiBacked) await apiRequest<void>(`/api/sections/${deleteTarget.id}`, { method: "DELETE" });
-        setSections((current) => normalizePositions(current.filter((section) => section.id !== deleteTarget.id)));
-        setFolders((current) => normalizeFolderPositions(current.map((folder) => folderSectionId(folder) === deleteTarget.id ? { ...folder, sectionId: null } : folder)));
-        if (selection?.kind === "section" && selection.id === deleteTarget.id) {
-          const fallback = folders.find((folder) => folderSectionId(folder) === deleteTarget.id) ?? folders[0];
-          setSelection(fallback ? { kind: "folder", id: fallback.id } : null);
+        if (persistRemoteRef.current) await apiRequest<void>(`/api/folder-sections/${target.id}`, { method: "DELETE" });
+      } else if (target.type === "section") {
+        setSections((current) => normalizePositions(current.filter((section) => section.id !== target.id)));
+        setFolders((current) => normalizeFolderPositions(current.map((folder) => folderSectionId(folder) === target.id ? { ...folder, sectionId: null } : folder)));
+        if (selection?.kind === "section" && selection.id === target.id) {
+          const next = folders.find((folder) => folderSectionId(folder) === target.id) ?? folders[0];
+          setSelection(next ? { kind: "folder", id: next.id } : null);
         }
+        if (persistRemoteRef.current) await apiRequest<void>(`/api/sections/${target.id}`, { method: "DELETE" });
       } else {
-        if (folders.length <= 1) throw new Error("마지막 폴더는 삭제할 수 없습니다.");
-        const fallback = folders.find((folder) => folder.id !== deleteTarget.id);
         if (!fallback) throw new Error("북마크를 이동할 대상 폴더가 없습니다.");
-        if (apiBacked) {
-          await apiRequest<void>(`/api/folders/${deleteTarget.id}?destination_folder_id=${encodeURIComponent(fallback.id)}`, { method: "DELETE" });
-        }
-        setFolders((current) => normalizeFolderPositions(current.filter((folder) => folder.id !== deleteTarget.id)));
-        setFolderSections((current) => current.filter((section) => section.folderId !== deleteTarget.id));
+        setFolders((current) => normalizeFolderPositions(current.filter((folder) => folder.id !== target.id)));
+        setFolderSections((current) => current.filter((section) => section.folderId !== target.id));
         setBookmarks((current) => current.map((bookmark) => (
-          bookmark.folderId === deleteTarget.id
+          bookmark.folderId === target.id
             ? { ...bookmark, folderId: fallback.id, folderSectionId: null }
             : bookmark
         )));
-        if (selection?.kind === "folder" && selection.id === deleteTarget.id) setSelection({ kind: "folder", id: fallback.id });
+        if (selection?.kind === "folder" && selection.id === target.id) setSelection({ kind: "folder", id: fallback.id });
+        if (persistRemoteRef.current) {
+          await apiRequest<void>(`/api/folders/${target.id}?destination_folder_id=${encodeURIComponent(fallback.id)}`, { method: "DELETE" });
+        }
       }
       setDeleteTarget(null);
+      noteMutation();
     } catch (error) {
+      setBookmarks(previousBookmarks);
+      setFolders(previousFolders);
+      setSections(previousSections);
+      setFolderSections(previousFolderSections);
+      setSelection(previousSelection);
+      noteMutation();
       setDeleteError(error instanceof Error ? error.message : "삭제에 실패했습니다.");
     } finally {
       setDeleting(false);
@@ -717,7 +793,7 @@ export default function BookmarksPage() {
     setDragOverBookmarkId(null);
   }
 
-  if (!hydrated) return <BookmarksLoading />;
+  if (!hasHydratedData) return <BookmarksLoading />;
 
   const sidebarProps = {
     folders: orderedFolders,
@@ -739,13 +815,13 @@ export default function BookmarksPage() {
     onDeleteSection: (section: Section) => setDeleteTarget({ type: "section" as const, id: section.id }),
     onRefresh: () => void refreshBookmarks(),
     refreshing,
-    mutationsDisabled: bootstrapping,
+    mutationsDisabled,
     onDragFolder: (id: string | null) => {
-      if (!bootstrapping) setDraggingFolderId(id);
+      if (!mutationsDisabled) setDraggingFolderId(id);
       if (!id) clearFolderDrag();
     },
     onDragSection: (id: string | null) => {
-      if (!bootstrapping) setDraggingSectionId(id);
+      if (!mutationsDisabled) setDraggingSectionId(id);
       if (!id) setDragOverSectionId(null);
     },
     onDragOverFolder: setDragOverFolderId,
@@ -756,7 +832,7 @@ export default function BookmarksPage() {
   };
 
   return (
-    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white" aria-busy={bootstrapping}>
+    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white" aria-busy={!hasHydratedData}>
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="북마크 메뉴">
@@ -782,11 +858,11 @@ export default function BookmarksPage() {
           <div className="flex items-center gap-2">
             <FavoriteButton count={favoriteCount} active={favoriteOnly} onClick={() => setFavoriteOnly((value) => !value)} />
             {selectedFolder ? (
-              <Button size="sm" variant="outline" disabled={bootstrapping} onClick={() => openFolderSectionDialog(undefined, selectedFolder.id)} className="h-10 px-3 text-sm">
+              <Button size="sm" variant="outline" disabled={mutationsDisabled} onClick={() => openFolderSectionDialog(undefined, selectedFolder.id)} className="h-10 px-3 text-sm">
                 <Plus className="h-4 w-4" />섹션 추가
               </Button>
             ) : null}
-            <Button size="sm" disabled={bootstrapping || !visibleFolders.length} onClick={() => openBookmarkDialog()} className="h-10 px-3 text-sm">
+            <Button size="sm" disabled={mutationsDisabled || !visibleFolders.length} onClick={() => openBookmarkDialog()} className="h-10 px-3 text-sm">
               <Plus className="h-4 w-4" />북마크 추가
             </Button>
           </div>
@@ -821,7 +897,7 @@ export default function BookmarksPage() {
                   {group.folderSection ? (
                     <FolderSectionActionsMenu
                       folderSection={group.folderSection}
-                      mutationsDisabled={bootstrapping}
+                      mutationsDisabled={mutationsDisabled}
                       onAddBookmark={(folderSection) => openBookmarkDialogInSection(group.folder, folderSection)}
                       onEdit={openFolderSectionDialog}
                       onDelete={(folderSection) => setDeleteTarget({ type: "folderSection", id: folderSection.id })}
@@ -829,7 +905,7 @@ export default function BookmarksPage() {
                   ) : (
                     <FolderActionsMenu
                       folder={group.folder}
-                      mutationsDisabled={bootstrapping}
+                      mutationsDisabled={mutationsDisabled}
                       onAddBookmark={(folder) => openBookmarkDialogInSection(folder, null)}
                       onEdit={openFolderDialog}
                       onDelete={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
@@ -843,7 +919,7 @@ export default function BookmarksPage() {
                       bookmark={bookmark}
                       dragging={draggingBookmarkId === bookmark.id}
                       dragOver={dragOverBookmarkId === bookmark.id}
-                      mutationsDisabled={bootstrapping}
+                      mutationsDisabled={mutationsDisabled}
                       onDragStart={setDraggingBookmarkId}
                       onDragEnd={clearBookmarkDrag}
                       onDragOver={(id) => {

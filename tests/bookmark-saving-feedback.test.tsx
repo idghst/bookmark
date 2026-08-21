@@ -27,9 +27,10 @@ function installCache(
   selection: { kind: "folder" | "section"; id: string } = { kind: "section", id: "work" }
 ) {
   const cache = JSON.stringify({
-    version: 3,
+    version: 4,
     apiBacked: true,
     savedAt: Date.now(),
+    folderSections: [],
     ...data,
     selection
   });
@@ -371,51 +372,133 @@ describe("section-first bookmark UI", () => {
     expect(screen.getByRole("dialog", { name: "북마크 추가" })).toBeInTheDocument();
   });
 
-  it("blocks cached mutation controls until the initial remote bootstrap succeeds", async () => {
-    const bookmark = { ...bookmarks[0], id: "blocked", title: "Blocked" };
+  it("keeps mutation buttons enabled while refreshing cached data", async () => {
+    const bookmark = { ...bookmarks[0], id: "cached-refresh", title: "Cached Refresh" };
     const data = { folders, sections, bookmarks: [bookmark] };
-    const { setItem } = installCache(data);
-    const resolvers = new Map<string, (response: Response) => void>();
+    installCache(data);
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if ((init?.method ?? "GET") === "GET") {
-        return new Promise<Response>((resolve) => { resolvers.set(String(input), resolve); });
+        return new Promise<Response>(() => {});
       }
       return Promise.resolve(new Response(JSON.stringify({ ...bookmark, isFavorite: true }), { status: 200 }));
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<BookmarksPage />);
 
-    const card = await screen.findByRole("link", { name: /Blocked/ });
-    const favorite = screen.getByRole("button", { name: "Blocked 즐겨찾기" });
-    expect(screen.getByRole("main").closest("[aria-busy]")).toHaveAttribute("aria-busy", "true");
-    expect(card).toHaveAttribute("draggable", "false");
-    expect(favorite).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Blocked 메뉴" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "업무 메뉴" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "프로젝트 메뉴" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "새 폴더" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "새 섹션" })).toBeDisabled();
-    screen.getAllByRole("button", { name: "북마크 추가" }).forEach((button) => expect(button).toBeDisabled());
-    fireEvent.click(favorite);
-    expect(mutations(fetchMock)).toHaveLength(0);
-    await waitFor(() => {
-      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
-      expect(saved.bookmarks[0]).toMatchObject({ id: "blocked", isFavorite: false });
-    });
-
-    await act(async () => {
-      resolvers.get("/api/folders")?.(new Response(JSON.stringify(folders), { status: 200 }));
-      resolvers.get("/api/sections")?.(new Response(JSON.stringify(sections), { status: 200 }));
-      resolvers.get("/api/folder-sections")?.(new Response(JSON.stringify([]), { status: 200 }));
-      resolvers.get("/api/bookmarks")?.(new Response(JSON.stringify([bookmark]), { status: 200 }));
-    });
-    await waitFor(() => expect(favorite).toBeEnabled());
+    const card = await screen.findByRole("link", { name: /Cached Refresh/ });
+    const favorite = screen.getByRole("button", { name: "Cached Refresh 즐겨찾기" });
     expect(card).toHaveAttribute("draggable", "true");
+    expect(favorite).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Cached Refresh 메뉴" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "업무 메뉴" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "프로젝트 메뉴" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "새 폴더" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "새 섹션" })).toBeEnabled();
+    screen.getAllByRole("button", { name: "북마크 추가" }).forEach((button) => expect(button).toBeEnabled());
     fireEvent.click(favorite);
     await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(favorite.querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
   });
 
-  it("unlocks local fallback mutations after the initial remote bootstrap fails", async () => {
+  it("does not show mutation buttons before the first hydrate", async () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn()
+      }
+    });
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<BookmarksPage />);
+
+    expect(screen.queryByRole("button", { name: "북마크 추가" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "새 폴더" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "새 섹션" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "북마크 폴더" })).not.toBeInTheDocument();
+  });
+
+  it("shows a folder move before the server responds, even during refresh", async () => {
+    installCache({ folders, sections, bookmarks });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET") return new Promise<Response>(() => {});
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "업무" }));
+    fireEvent.drop(within(nav).getByRole("button", { name: "업무" }));
+    expect(within(within(nav).getByRole("region", { name: "업무" })).getByText("미분류")).toBeInTheDocument();
+  });
+
+  it("does not let a background refresh overwrite an in-flight folder move", async () => {
+    installCache({ folders, sections, bookmarks });
+    snapshot = { folders, sections, bookmarks };
+    let folderGets = 0;
+    let releaseRefresh!: (response: Response) => void;
+    const refreshFolders = new Promise<Response>((resolve) => { releaseRefresh = resolve; });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "PATCH") return new Promise<Response>(() => {});
+      if (method === "GET" && path === "/api/folders") {
+        folderGets += 1;
+        if (folderGets === 1) return Promise.resolve(new Response(JSON.stringify(folders), { status: 200 }));
+        return refreshFolders;
+      }
+      if (method === "GET" && path === "/api/sections") {
+        return Promise.resolve(new Response(JSON.stringify(sections), { status: 200 }));
+      }
+      if (method === "GET" && path === "/api/folder-sections") {
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }
+      if (method === "GET" && path === "/api/bookmarks") {
+        return Promise.resolve(new Response(JSON.stringify(bookmarks), { status: 200 }));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    await waitFor(() => expect(folderGets).toBe(1));
+    fireEvent.click(screen.getByRole("button", { name: "북마크 새로고침" }));
+    await waitFor(() => expect(folderGets).toBe(2));
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "업무" }));
+    fireEvent.drop(within(nav).getByRole("button", { name: "업무" }));
+    expect(within(within(nav).getByRole("region", { name: "업무" })).getByText("미분류")).toBeInTheDocument();
+    await act(async () => {
+      releaseRefresh(new Response(JSON.stringify(folders), { status: 200 }));
+    });
+    expect(within(within(nav).getByRole("region", { name: "업무" })).getByText("미분류")).toBeInTheDocument();
+  });
+
+  it("shows a created bookmark before the server responds", async () => {
+    const request = new Promise<Response>(() => {});
+    setup(snapshot, async () => request);
+    fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    fireEvent.change(within(dialog).getByLabelText("URL"), { target: { value: "https://example.com" } });
+    fireEvent.change(within(dialog).getByLabelText("제목"), { target: { value: "Example" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+    expect(await screen.findByRole("link", { name: /Example/ })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("데이터베이스에 저장 중");
+  });
+
+  it("removes a bookmark before the server responds", async () => {
+    setup(snapshot, async () => new Promise<Response>(() => {}));
+    const trigger = await screen.findByRole("button", { name: "프로젝트 A 메뉴" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "삭제" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "북마크 삭제" })).getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(screen.queryByRole("link", { name: /프로젝트 A/ })).not.toBeInTheDocument());
+    expect(screen.getByRole("status")).toHaveTextContent("데이터베이스에서 삭제 중");
+  });
+
+  it("keeps cached mutations local after the initial remote bootstrap fails", async () => {
     const bookmark = { ...bookmarks[0], id: "fallback", title: "Fallback" };
     const data = { folders, sections, bookmarks: [bookmark] };
     const { setItem } = installCache(data);
@@ -430,7 +513,7 @@ describe("section-first bookmark UI", () => {
     render(<BookmarksPage />);
 
     const favorite = await screen.findByRole("button", { name: "Fallback 즐겨찾기" });
-    expect(favorite).toBeDisabled();
+    expect(favorite).toBeEnabled();
     await act(async () => {
       resolvers.forEach((resolve) =>
         resolve(new Response(JSON.stringify({ detail: "offline" }), {
@@ -439,7 +522,6 @@ describe("section-first bookmark UI", () => {
         }))
       );
     });
-    await waitFor(() => expect(favorite).toBeEnabled());
     fireEvent.click(favorite);
     expect(mutations(fetchMock)).toHaveLength(0);
     expect(favorite.querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
