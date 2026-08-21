@@ -179,9 +179,10 @@ export default function HomeScreen() {
         : null;
       byId.set(sectionId, [...(byId.get(sectionId) ?? []), bookmark]);
     }
+    const unsectioned = byId.get(null) ?? [];
     return [
       ...owned.map((section) => ({ title: section.name, data: byId.get(section.id) ?? [] })),
-      { title: "섹션 없음", data: byId.get(null) ?? [] },
+      ...(unsectioned.length ? [{ title: "섹션 없음", data: unsectioned }] : []),
     ];
   }, [filter, folderSections, visibleBookmarks]);
 
