@@ -8,6 +8,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -16,9 +17,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApiError, listBookmarks, listFolders, listSections, updateBookmark } from "@/lib/api";
+import { ApiError, listBookmarks, listFolderSections, listFolders, listSections, updateBookmark } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
-import type { BookmarkItem, Folder, Section } from "@/lib/types";
+import type { BookmarkItem, Folder, FolderSection, Section } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
 
 type Status = "loading" | "ready" | "error" | "unconfigured";
@@ -47,6 +48,7 @@ export default function HomeScreen() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [folderSections, setFolderSections] = useState<FolderSection[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -65,14 +67,16 @@ export default function HomeScreen() {
     }
     if (!hasDataRef.current) setStatus("loading");
     try {
-      const [nextBookmarks, nextFolders, nextSections] = await Promise.all([
+      const [nextBookmarks, nextFolders, nextSections, nextFolderSections] = await Promise.all([
         listBookmarks(config),
         listFolders(config),
         listSections(config),
+        listFolderSections(config),
       ]);
       setBookmarks(nextBookmarks);
       setFolders(nextFolders);
       setSections(nextSections);
+      setFolderSections(nextFolderSections);
       hasDataRef.current = true;
       setStatus("ready");
     } catch (error) {
@@ -96,6 +100,10 @@ export default function HomeScreen() {
   }, [load]);
 
   const folderById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
+  const folderSectionById = useMemo(
+    () => new Map(folderSections.map((section) => [section.id, section])),
+    [folderSections],
+  );
 
   const visibleBookmarks = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -110,6 +118,25 @@ export default function HomeScreen() {
       );
     });
   }, [bookmarks, filter, search]);
+
+  const folderBookmarkSections = useMemo(() => {
+    if (filter === "all" || filter === "favorites") return null;
+    const owned = folderSections
+      .filter((section) => section.folderId === filter)
+      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ko"));
+    const known = new Set(owned.map((section) => section.id));
+    const byId = new Map<string | null, BookmarkItem[]>();
+    for (const bookmark of visibleBookmarks) {
+      const sectionId = bookmark.folderSectionId && known.has(bookmark.folderSectionId)
+        ? bookmark.folderSectionId
+        : null;
+      byId.set(sectionId, [...(byId.get(sectionId) ?? []), bookmark]);
+    }
+    return [
+      ...owned.map((section) => ({ title: section.name, data: byId.get(section.id) ?? [] })),
+      { title: "섹션 없음", data: byId.get(null) ?? [] },
+    ];
+  }, [filter, folderSections, visibleBookmarks]);
 
   const openBookmark = useCallback(async (bookmark: BookmarkItem) => {
     try {
@@ -139,6 +166,7 @@ export default function HomeScreen() {
   const renderBookmark = useCallback(
     ({ item }: { item: BookmarkItem }) => {
       const folder = item.folderId ? folderById.get(item.folderId) : undefined;
+      const folderSection = item.folderSectionId ? folderSectionById.get(item.folderSectionId) : undefined;
       const accent = folder?.color ?? colors.primary;
       const subtitle = [hostOf(item.url), item.description ?? ""].filter(Boolean).join(" · ");
       return (
@@ -161,7 +189,7 @@ export default function HomeScreen() {
             </Text>
             {folder ? (
               <Text numberOfLines={1} style={[styles.rowFolder, { color: colors.muted }]}>
-                {folder.name}
+                {folderSection ? `${folder.name} · ${folderSection.name}` : `${folder.name} · 섹션 없음`}
               </Text>
             ) : null}
           </View>
@@ -178,7 +206,7 @@ export default function HomeScreen() {
         </Pressable>
       );
     },
-    [colors, folderById, openBookmark, toggleFavorite],
+    [colors, folderById, folderSectionById, openBookmark, toggleFavorite],
   );
 
   const pinnedChips: Chip[] = [
@@ -330,22 +358,44 @@ export default function HomeScreen() {
               ) : null}
             </ScrollView>
           )}
-          <FlatList
-            data={visibleBookmarks}
-            keyExtractor={(item) => item.id}
-            renderItem={renderBookmark}
-            contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.muted} />
-            }
-            ListEmptyComponent={
-              <View style={styles.listEmpty}>
-                <Text style={[styles.emptyText, { color: colors.muted }]}>
-                  {search.trim() || filter !== "all" ? "조건에 맞는 북마크가 없습니다." : "북마크가 없습니다."}
-                </Text>
-              </View>
-            }
-          />
+          {folderBookmarkSections ? (
+            <SectionList
+              sections={folderBookmarkSections}
+              keyExtractor={(item) => item.id}
+              renderItem={renderBookmark}
+              renderSectionHeader={({ section }) => (
+                <Text style={[styles.bookmarkSectionHeader, { color: colors.muted }]}>{section.title}</Text>
+              )}
+              contentContainerStyle={styles.list}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.muted} />
+              }
+              ListEmptyComponent={
+                <View style={styles.listEmpty}>
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    {search.trim() || filter !== "all" ? "조건에 맞는 북마크가 없습니다." : "북마크가 없습니다."}
+                  </Text>
+                </View>
+              }
+            />
+          ) : (
+            <FlatList
+              data={visibleBookmarks}
+              keyExtractor={(item) => item.id}
+              renderItem={renderBookmark}
+              contentContainerStyle={styles.list}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.muted} />
+              }
+              ListEmptyComponent={
+                <View style={styles.listEmpty}>
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    {search.trim() || filter !== "all" ? "조건에 맞는 북마크가 없습니다." : "북마크가 없습니다."}
+                  </Text>
+                </View>
+              }
+            />
+          )}
           <Pressable
             onPress={() => router.push("/add")}
             accessibilityLabel="북마크 추가"
@@ -431,6 +481,12 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  bookmarkSectionHeader: {
+    fontSize: 13,
+    fontWeight: "700",
+    paddingTop: 12,
+    paddingBottom: 6,
   },
   chip: {
     flexDirection: "row",

@@ -14,9 +14,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApiError, createBookmark, listFolders } from "@/lib/api";
+import { ApiError, createBookmark, listFolderSections, listFolders } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
-import type { Folder } from "@/lib/types";
+import type { Folder, FolderSection } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
 
 function normalizeBookmarkUrl(input: string): string | null {
@@ -39,9 +39,11 @@ export default function AddBookmarkScreen() {
 
   const [config, setConfig] = useState<ApiConfig | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [folderSections, setFolderSections] = useState<FolderSection[]>([]);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [folderId, setFolderId] = useState<string | null>(null);
+  const [folderSectionId, setFolderSectionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -49,9 +51,15 @@ export default function AddBookmarkScreen() {
     void loadConfig().then((loaded) => {
       setConfig(loaded);
       if (!loaded) return;
-      listFolders(loaded)
-        .then(setFolders)
-        .catch(() => setFolders([]));
+      Promise.all([listFolders(loaded), listFolderSections(loaded)])
+        .then(([nextFolders, nextSections]) => {
+          setFolders(nextFolders);
+          setFolderSections(nextSections);
+        })
+        .catch(() => {
+          setFolders([]);
+          setFolderSections([]);
+        });
     });
   }, []);
 
@@ -80,6 +88,7 @@ export default function AddBookmarkScreen() {
         description: null,
         isFavorite: false,
         folderId,
+        folderSectionId,
       });
       router.back();
     } catch (caught) {
@@ -133,7 +142,10 @@ export default function AddBookmarkScreen() {
             <Text style={[styles.label, { color: colors.text }]}>폴더</Text>
             <View style={styles.chips}>
               <Pressable
-                onPress={() => setFolderId(null)}
+                onPress={() => {
+                  setFolderId(null);
+                  setFolderSectionId(null);
+                }}
                 style={[
                   styles.chip,
                   {
@@ -151,7 +163,10 @@ export default function AddBookmarkScreen() {
                 return (
                   <Pressable
                     key={folder.id}
-                    onPress={() => setFolderId(folder.id)}
+                    onPress={() => {
+                      setFolderId(folder.id);
+                      setFolderSectionId(null);
+                    }}
                     style={[
                       styles.chip,
                       {
@@ -169,6 +184,51 @@ export default function AddBookmarkScreen() {
               })}
             </View>
           </View>
+
+          {folderId ? (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>섹션</Text>
+              <View style={styles.chips}>
+                <Pressable
+                  onPress={() => setFolderSectionId(null)}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: folderSectionId === null ? colors.primary : colors.surface,
+                      borderColor: folderSectionId === null ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: folderSectionId === null ? "#ffffff" : colors.text }]}>
+                    섹션 없음
+                  </Text>
+                </Pressable>
+                {folderSections
+                  .filter((section) => section.folderId === folderId)
+                  .sort((a, b) => a.position - b.position)
+                  .map((section) => {
+                    const active = folderSectionId === section.id;
+                    return (
+                      <Pressable
+                        key={section.id}
+                        onPress={() => setFolderSectionId(section.id)}
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: active ? colors.primary : colors.surface,
+                            borderColor: active ? colors.primary : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>
+                          {section.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+              </View>
+            </View>
+          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 

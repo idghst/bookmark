@@ -1,5 +1,5 @@
 import type { ApiConfig } from "@/lib/config";
-import type { BookmarkCreateInput, BookmarkItem, BookmarkPatch, Folder, Section } from "@/lib/types";
+import type { BookmarkCreateInput, BookmarkItem, BookmarkPatch, Folder, FolderSection, Section } from "@/lib/types";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -73,6 +73,10 @@ export function listFolders(config: ApiConfig): Promise<Folder[]> {
 
 export function listSections(config: ApiConfig): Promise<Section[]> {
   return request<Section[]>(config, "/api/sections");
+}
+
+export function listFolderSections(config: ApiConfig): Promise<FolderSection[]> {
+  return request<FolderSection[]>(config, "/api/folder-sections");
 }
 
 export function createBookmark(config: ApiConfig, input: BookmarkCreateInput): Promise<BookmarkItem> {
