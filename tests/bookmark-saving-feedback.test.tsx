@@ -326,6 +326,49 @@ describe("section-first bookmark UI", () => {
     ]);
   });
 
+  it("does not highlight a folder in another section as a drop target", async () => {
+    setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "프로젝트 2" }));
+    expect(within(nav).getByRole("button", { name: "프로젝트 2" }).closest("li")).not.toHaveClass("ring-2");
+  });
+
+  it("does not highlight a folder while a sidebar section is being dragged", async () => {
+    setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "업무" }));
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "문서 1" }));
+    expect(within(nav).getByRole("button", { name: "문서 1" }).closest("li")).not.toHaveClass("ring-2");
+  });
+
+  it("dims a sidebar section together with its folders while it is dragged", async () => {
+    setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "업무" }));
+    const region = within(nav).getByRole("region", { name: "업무" });
+    expect(region).toHaveClass("opacity-60");
+    expect(within(region).getByText("프로젝트")).toBeInTheDocument();
+  });
+
+  it("reorders sidebar sections when dropped onto another section's folders", async () => {
+    const extra: Section = { id: "life", name: "생활", color: "#16a34a", position: 2 };
+    const { fetchMock } = setup({ folders, sections: [...sections, extra], bookmarks: [] });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "업무" }));
+    const knowledge = within(nav).getByRole("region", { name: "지식" });
+    mockRect(100, 80);
+    firePointerDrag(knowledge, "dragover", 150);
+    firePointerDrag(knowledge, "drop", 150);
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(mutations(fetchMock)[0][0]).toBe("/api/sections/reorder");
+    expect(JSON.parse(String(mutations(fetchMock)[0][1]?.body))).toEqual([
+      { id: "knowledge", position: 0 },
+      { id: "work", position: 1 },
+      { id: "life", position: 2 }
+    ]);
+  });
+
   it("reorders folder sections when a section header is dropped after another", async () => {
     const folderSections: FolderSection[] = [
       { id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 },

@@ -95,36 +95,55 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
               ? props.selection?.kind === "section" && props.selection.id === group.section.id
               : false;
             return (
-              <section key={sectionId ?? "__none__"} aria-label={group.section?.name ?? "섹션 없음"}>
+              <section
+                key={sectionId ?? "__none__"}
+                aria-label={group.section?.name ?? "섹션 없음"}
+                className={cn(
+                  group.section && props.draggingSectionId === group.section.id && "opacity-60",
+                  group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
+                  group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
+                )}
+                onDragOver={(event) => {
+                  if (!props.draggingSectionId || !group.section) return;
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  props.onDragOverSection(
+                    group.section.id,
+                    event.clientY < rect.top + rect.height / 2 ? "before" : "after"
+                  );
+                }}
+                onDrop={(event) => {
+                  if (!props.draggingSectionId || !group.section) return;
+                  event.preventDefault();
+                  props.onDropSection(group.section.id, event);
+                }}
+              >
                 {group.section ? (
                   <div
                     className={cn(
                       "group/section flex min-h-9 items-center rounded-md",
-                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25",
-                      props.draggingSectionId === group.section.id && "opacity-60",
-                      props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
-                      props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
+                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
                     )}
                     draggable={!props.mutationsDisabled}
-                    onDragStart={() => props.onDragSection(group.section?.id ?? null)}
+                    onDragStart={(event) => {
+                      props.onDragSection(group.section?.id ?? null);
+                      const groupEl = event.currentTarget.closest("section");
+                      if (!groupEl) return;
+                      const rect = groupEl.getBoundingClientRect();
+                      event.dataTransfer?.setDragImage?.(groupEl, event.clientX - rect.left, event.clientY - rect.top);
+                    }}
                     onDragEnd={() => props.onDragSection(null)}
                     onDragOver={(event) => {
+                      if (!props.draggingFolderId) return;
                       event.preventDefault();
-                      if (props.draggingFolderId) {
-                        props.onDragOverSection(group.section?.id ?? null);
-                        return;
-                      }
-                      if (!props.draggingSectionId) return;
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      props.onDragOverSection(
-                        group.section?.id ?? null,
-                        event.clientY < rect.top + rect.height / 2 ? "before" : "after"
-                      );
+                      event.stopPropagation();
+                      props.onDragOverSection(group.section?.id ?? null);
                     }}
                     onDrop={(event) => {
+                      if (!props.draggingFolderId) return;
                       event.preventDefault();
-                      if (props.draggingFolderId) props.onDropFolderOnSection(group.section?.id ?? null);
-                      else props.onDropSection(group.section?.id ?? "", event);
+                      event.stopPropagation();
+                      props.onDropFolderOnSection(group.section?.id ?? null);
                     }}
                   >
                     <button
@@ -154,7 +173,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   <div
                     className={cn(
                       "flex min-h-9 items-center rounded-md px-2 text-xs font-extrabold uppercase tracking-[0.06em] text-[var(--text-muted)]",
-                      props.dragOverSectionId === "__none__" && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
+                      props.draggingFolderId && props.dragOverSectionId === "__none__" && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
                     )}
                     onDragOver={(event) => {
                       if (!props.draggingFolderId) return;
@@ -173,23 +192,35 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   {group.folders.map((folder) => {
                     const active = props.selection?.kind === "folder" && props.selection.id === folder.id;
                     const count = countBookmarks(props.bookmarks, { folderId: folder.id, favoriteOnly: props.favoriteOnly });
+                    const sourceFolder = props.folders.find((item) => item.id === props.draggingFolderId);
+                    const sameSectionDrop = Boolean(
+                      sourceFolder && (sourceFolder.sectionId ?? null) === (folder.sectionId ?? null)
+                    );
                     return (
                       <li
                         key={folder.id}
                         className={cn(
                           "group/folder flex min-h-9 items-center rounded-md",
                           props.draggingFolderId === folder.id && "opacity-60",
-                          props.dragOverFolderId === folder.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
+                          sameSectionDrop && props.dragOverFolderId === folder.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
                         )}
                         draggable={!props.mutationsDisabled}
                         onDragStart={() => props.onDragFolder(folder.id)}
                         onDragEnd={() => props.onDragFolder(null)}
                         onDragOver={(event) => {
+                          if (!props.draggingFolderId) return;
+                          if (!sameSectionDrop) {
+                            props.onDragOverFolder(null);
+                            return;
+                          }
                           event.preventDefault();
+                          event.stopPropagation();
                           props.onDragOverFolder(folder.id);
                         }}
                         onDrop={(event) => {
+                          if (!props.draggingFolderId) return;
                           event.preventDefault();
+                          event.stopPropagation();
                           props.onDropFolder(folder.id);
                         }}
                       >

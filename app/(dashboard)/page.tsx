@@ -883,12 +883,21 @@ export default function BookmarksPage() {
       if (!id) {
         setDragOverSectionId(null);
         setSectionInsertEdge(null);
+      } else {
+        setDragOverFolderId(null);
       }
     },
-    onDragOverFolder: setDragOverFolderId,
+    onDragOverFolder: (id: string | null) => {
+      setDragOverFolderId(id);
+      if (id) {
+        setDragOverSectionId(null);
+        setSectionInsertEdge(null);
+      }
+    },
     onDragOverSection: (id: string | null, edge?: "before" | "after") => {
       setDragOverSectionId(id);
       setSectionInsertEdge(edge ?? null);
+      if (id) setDragOverFolderId(null);
     },
     onDropFolder: dropFolder,
     onDropFolderOnSection: moveFolderToSection,
@@ -953,8 +962,8 @@ export default function BookmarksPage() {
                   draggable={Boolean(group.folderSection) && !mutationsDisabled}
                   onDragStart={(event) => {
                     if (!group.folderSection || mutationsDisabled) return;
-                    event.dataTransfer.setData("text/plain", group.folderSection.id);
-                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer?.setData("text/plain", group.folderSection.id);
+                    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                     setDraggingFolderSectionId(group.folderSection.id);
                   }}
                   onDragEnd={clearFolderSectionDrag}
