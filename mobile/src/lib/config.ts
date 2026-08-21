@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { storageDelete, storageGet, storageSet } from "./storage";
 
 export const DEFAULT_API_URL = "https://api-bookmark.idghst.co.kr";
 
@@ -9,29 +9,6 @@ export type ApiConfig = {
   url: string;
   key: string;
 };
-
-async function storageGet(key: string): Promise<string | null> {
-  if (await SecureStore.isAvailableAsync()) {
-    return SecureStore.getItemAsync(key);
-  }
-  return globalThis.localStorage?.getItem(key) ?? null;
-}
-
-async function storageSet(key: string, value: string): Promise<void> {
-  if (await SecureStore.isAvailableAsync()) {
-    await SecureStore.setItemAsync(key, value);
-    return;
-  }
-  globalThis.localStorage?.setItem(key, value);
-}
-
-async function storageDelete(key: string): Promise<void> {
-  if (await SecureStore.isAvailableAsync()) {
-    await SecureStore.deleteItemAsync(key);
-    return;
-  }
-  globalThis.localStorage?.removeItem(key);
-}
 
 /** http(s) origin만 허용하고 뒤쪽 슬래시를 제거합니다. 잘못된 입력이면 null. */
 export function normalizeApiUrl(input: string): string | null {

@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,9 +17,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApiError, listBookmarks, listFolderSections, listFolders, listSections, updateBookmark } from "@/lib/api";
+import { ApiError, fetchSnapshot, updateBookmark } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
-import type { BookmarkItem, Folder, FolderSection, Section } from "@/lib/types";
+import { applyPendingBookmarks, mutationsDisabled } from "@/lib/snapshot";
+import { loadSnapshotCache, saveSnapshotCache } from "@/lib/snapshot-store";
+import type { BookmarkItem, BookmarkPatch, Folder, FolderSection, Section } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
 
 type Status = "loading" | "ready" | "error" | "unconfigured";
@@ -56,36 +58,81 @@ export default function HomeScreen() {
 
   const configRef = useRef<ApiConfig | null>(null);
   const hasDataRef = useRef(false);
+  const pendingRef = useRef(new Map<string, BookmarkPatch>());
+  const fetchGenRef = useRef(0);
+  const refreshInFlightRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const applySnapshot = useCallback(
+    (next: {
+      folders: Folder[];
+      sections: Section[];
+      folderSections: FolderSection[];
+      bookmarks: BookmarkItem[];
+    }) => {
+      setFolders(next.folders);
+      setSections(next.sections);
+      setFolderSections(next.folderSections);
+      setBookmarks(applyPendingBookmarks(next.bookmarks, pendingRef.current));
+      hasDataRef.current = true;
+    },
+    [],
+  );
+
+  const load = useCallback(async (opts?: { userRefresh?: boolean }) => {
     const config = await loadConfig();
     configRef.current = config;
     if (!config) {
       hasDataRef.current = false;
+      pendingRef.current.clear();
       setStatus("unconfigured");
       return;
     }
-    if (!hasDataRef.current) setStatus("loading");
+
+    if (!hasDataRef.current) {
+      const cache = await loadSnapshotCache();
+      if (cache) {
+        applySnapshot(cache);
+        setStatus("ready");
+      } else {
+        setStatus("loading");
+      }
+    }
+
+    if (opts?.userRefresh) {
+      refreshInFlightRef.current += 1;
+      setRefreshing(true);
+    }
+
+    const gen = ++fetchGenRef.current;
     try {
-      const [nextBookmarks, nextFolders, nextSections, nextFolderSections] = await Promise.all([
-        listBookmarks(config),
-        listFolders(config),
-        listSections(config),
-        listFolderSections(config),
-      ]);
-      setBookmarks(nextBookmarks);
-      setFolders(nextFolders);
-      setSections(nextSections);
-      setFolderSections(nextFolderSections);
-      hasDataRef.current = true;
+      const remote = await fetchSnapshot(config);
+      if (gen !== fetchGenRef.current) return;
+      applySnapshot(remote);
       setStatus("ready");
     } catch (error) {
+      if (gen !== fetchGenRef.current) return;
       if (!hasDataRef.current) {
         setErrorMessage(errorMessageOf(error));
         setStatus("error");
       }
+    } finally {
+      if (opts?.userRefresh) {
+        refreshInFlightRef.current = Math.max(0, refreshInFlightRef.current - 1);
+        if (refreshInFlightRef.current === 0) setRefreshing(false);
+      }
     }
-  }, []);
+  }, [applySnapshot]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    void saveSnapshotCache({
+      folders,
+      sections,
+      folderSections,
+      bookmarks,
+      savedAt: Date.now(),
+    });
+  }, [bookmarks, folderSections, folders, sections, status]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,9 +141,7 @@ export default function HomeScreen() {
   );
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
+    await load({ userRefresh: true });
   }, [load]);
 
   const folderById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
@@ -148,19 +193,28 @@ export default function HomeScreen() {
 
   const toggleFavorite = useCallback((bookmark: BookmarkItem) => {
     const config = configRef.current;
-    if (!config) return;
+    if (!config || mutationsDisabled(hasDataRef.current)) return;
     const nextValue = !bookmark.isFavorite;
+    pendingRef.current.set(bookmark.id, { isFavorite: nextValue });
     setBookmarks((prev) =>
       prev.map((item) => (item.id === bookmark.id ? { ...item, isFavorite: nextValue } : item)),
     );
-    updateBookmark(config, bookmark.id, { isFavorite: nextValue }).catch((error: unknown) => {
-      setBookmarks((prev) =>
-        prev.map((item) =>
-          item.id === bookmark.id ? { ...item, isFavorite: bookmark.isFavorite } : item,
-        ),
-      );
-      Alert.alert("즐겨찾기 변경 실패", errorMessageOf(error));
-    });
+    updateBookmark(config, bookmark.id, { isFavorite: nextValue })
+      .then(() => {
+        const current = pendingRef.current.get(bookmark.id);
+        if (current?.isFavorite === nextValue) pendingRef.current.delete(bookmark.id);
+      })
+      .catch((error: unknown) => {
+        const current = pendingRef.current.get(bookmark.id);
+        if (current?.isFavorite !== nextValue) return;
+        pendingRef.current.delete(bookmark.id);
+        setBookmarks((prev) =>
+          prev.map((item) =>
+            item.id === bookmark.id ? { ...item, isFavorite: bookmark.isFavorite } : item,
+          ),
+        );
+        Alert.alert("즐겨찾기 변경 실패", errorMessageOf(error));
+      });
   }, []);
 
   const renderBookmark = useCallback(

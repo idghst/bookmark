@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, listBookmarks } from "@/lib/api";
 import { clearConfig, DEFAULT_API_URL, loadConfig, normalizeApiUrl, saveConfig } from "@/lib/config";
+import { clearSnapshotCache } from "@/lib/snapshot-store";
 import { APP_THEME } from "@/theme/tokens";
 
 export default function SettingsScreen() {
@@ -55,7 +56,11 @@ export default function SettingsScreen() {
     const candidate = { url: normalizedUrl, key: trimmedKey };
     try {
       await listBookmarks(candidate);
+      const previous = await loadConfig();
       await saveConfig(candidate);
+      if (!previous || previous.url !== candidate.url || previous.key !== candidate.key) {
+        await clearSnapshotCache();
+      }
       router.back();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "연결 확인에 실패했습니다.");
@@ -68,6 +73,7 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       await clearConfig();
+      await clearSnapshotCache();
       router.back();
     } finally {
       setBusy(false);

@@ -79,6 +79,21 @@ export function listFolderSections(config: ApiConfig): Promise<FolderSection[]> 
   return request<FolderSection[]>(config, "/api/folder-sections");
 }
 
+export async function fetchSnapshot(config: ApiConfig): Promise<{
+  folders: Folder[];
+  sections: Section[];
+  folderSections: FolderSection[];
+  bookmarks: BookmarkItem[];
+}> {
+  const [folders, sections, folderSections, bookmarks] = await Promise.all([
+    listFolders(config),
+    listSections(config),
+    listFolderSections(config),
+    listBookmarks(config),
+  ]);
+  return { folders, sections, folderSections, bookmarks };
+}
+
 export function createBookmark(config: ApiConfig, input: BookmarkCreateInput): Promise<BookmarkItem> {
   return request<BookmarkItem>(config, "/api/bookmarks", {
     method: "POST",

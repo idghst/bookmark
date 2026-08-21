@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError, createBookmark, listFolderSections, listFolders } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
+import { loadSnapshotCache } from "@/lib/snapshot-store";
 import type { Folder, FolderSection } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
 
@@ -51,15 +52,26 @@ export default function AddBookmarkScreen() {
     void loadConfig().then((loaded) => {
       setConfig(loaded);
       if (!loaded) return;
-      Promise.all([listFolders(loaded), listFolderSections(loaded)])
-        .then(([nextFolders, nextSections]) => {
+      void (async () => {
+        const cache = await loadSnapshotCache();
+        if (cache) {
+          setFolders(cache.folders);
+          setFolderSections(cache.folderSections);
+        }
+        try {
+          const [nextFolders, nextSections] = await Promise.all([
+            listFolders(loaded),
+            listFolderSections(loaded),
+          ]);
           setFolders(nextFolders);
           setFolderSections(nextSections);
-        })
-        .catch(() => {
-          setFolders([]);
-          setFolderSections([]);
-        });
+        } catch {
+          if (!cache) {
+            setFolders([]);
+            setFolderSections([]);
+          }
+        }
+      })();
     });
   }, []);
 
