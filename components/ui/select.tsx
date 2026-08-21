@@ -69,7 +69,7 @@ function SelectContent({
       <SelectPrimitive.Content
         data-slot="select-content"
         data-align-trigger={position === "item-aligned"}
-        className={cn("relative z-[110] max-h-[min(var(--radix-select-content-available-height),22rem)] max-w-[min(var(--radix-select-content-available-width),calc(100vw-2rem))] min-w-0 origin-[var(--radix-select-content-transform-origin)] overflow-x-hidden overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-popover p-1 text-popover-foreground shadow-xl shadow-slate-950/10 ring-1 ring-foreground/5 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", position ==="popper"&&"data-[side=bottom]:translate-y-1.5 data-[side=left]:-translate-x-1.5 data-[side=right]:translate-x-1.5 data-[side=top]:-translate-y-1.5", className )}
+        className={cn("relative z-[110] max-h-[min(var(--radix-select-content-available-height),22rem)] max-w-[min(var(--radix-select-content-available-width),calc(100vw-2rem))] min-w-[var(--radix-select-trigger-width)] origin-[var(--radix-select-content-transform-origin)] overflow-x-hidden overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-popover p-1 text-popover-foreground shadow-xl shadow-slate-950/10 ring-1 ring-foreground/5 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", position ==="popper"&&"data-[side=bottom]:translate-y-1.5 data-[side=left]:-translate-x-1.5 data-[side=right]:translate-x-1.5 data-[side=top]:-translate-y-1.5", className )}
         position={position}
         align={align}
         {...props}
@@ -78,7 +78,7 @@ function SelectContent({
         <SelectPrimitive.Viewport
           data-position={position}
           className={cn(
-            "data-[position=popper]:w-[var(--radix-select-trigger-width)] data-[position=popper]:min-w-0",
+            "w-auto data-[position=popper]:min-w-[var(--radix-select-trigger-width)]",
             position === "popper" && ""
           )}
         >
@@ -112,7 +112,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex min-h-9 w-full min-w-0 cursor-default items-center gap-2 overflow-hidden rounded-md py-2 pr-9 pl-2.5 text-sm font-medium text-[var(--text-heading)] outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-indigo-50 data-[state=checked]:text-[var(--color-brand)] not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&>[data-slot=select-item-text]]:min-w-0 [&>[data-slot=select-item-text]]:flex-1 [&>[data-slot=select-item-text]]:truncate [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex min-h-9 w-full cursor-default items-center gap-2 rounded-md py-2 pr-9 pl-2.5 text-sm font-medium whitespace-normal break-words text-[var(--text-heading)] outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-indigo-50 data-[state=checked]:text-[var(--color-brand)] not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&>[data-slot=select-item-text]]:min-w-0 [&>[data-slot=select-item-text]]:flex-1 [&>[data-slot=select-item-text]]:whitespace-normal [&>[data-slot=select-item-text]]:break-words [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
