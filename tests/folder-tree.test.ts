@@ -1,52 +1,39 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildFolderTree,
-  flattenFolderTree,
-  flattenFolderResponse,
-  folderDescendantIds
-} from "@/app/lib/bookmarks/folder-tree";
+import { flattenFolderResponse, normalizeFolderPositions } from "@/app/lib/bookmarks/folder-tree";
 import type { Folder } from "@/app/lib/bookmarks/types";
 
-describe("folder tree helpers", () => {
-  it("normalizes flat and nested API folder responses to parentId", () => {
+describe("folder response helpers", () => {
+  it("normalizes section_id in flat folder responses", () => {
     expect(
       flattenFolderResponse([
         {
-          id: "root",
-          name: "루트",
+          id: "work",
+          name: "작업",
           color: null,
-          position: 0,
-          children: [
-            { id: "child", name: "자식", color: null, position: 0 }
-          ]
+          section_id: "business",
+          position: 1
         },
-        { id: "legacy", name: "레거시", color: null, parent_id: "root", position: 1 }
+        { id: "personal", name: "개인", color: null, sectionId: null, position: 0 }
       ])
-    ).toMatchObject([
-      { id: "root", parentId: null, position: 0 },
-      { id: "child", parentId: "root", position: 0 },
-      { id: "legacy", parentId: "root", position: 1 }
+    ).toEqual([
+      { id: "work", name: "작업", color: null, sectionId: "business", position: 0 },
+      { id: "personal", name: "개인", color: null, sectionId: null, position: 0 }
     ]);
   });
 
-  it("renders sibling positions as a nested tree and finds descendants", () => {
+  it("normalizes positions independently within each section", () => {
     const folders: Folder[] = [
-      { id: "root", name: "루트", color: null, parentId: null, position: 1 },
-      { id: "child", name: "자식", color: null, parentId: "root", position: 0 },
-      { id: "grandchild", name: "손자", color: null, parentId: "child", position: 0 },
-      { id: "other", name: "다른 루트", color: null, parentId: null, position: 0 }
+      { id: "a-2", name: "A2", color: null, sectionId: "a", position: 9 },
+      { id: "none", name: "없음", color: null, sectionId: null, position: 4 },
+      { id: "a-1", name: "A1", color: null, sectionId: "a", position: 2 },
+      { id: "b-1", name: "B1", color: null, sectionId: "b", position: 7 }
     ];
 
-    const tree = buildFolderTree(folders);
-    expect(tree.map((node) => node.folder.id)).toEqual(["other", "root"]);
-    expect(tree[1].children[0].folder.id).toBe("child");
-    expect(tree[1].children[0].children[0].depth).toBe(3);
-    expect(flattenFolderTree(folders).map((node) => node.folder.id)).toEqual([
-      "other",
-      "root",
-      "child",
-      "grandchild"
+    expect(normalizeFolderPositions(folders)).toMatchObject([
+      { id: "a-2", position: 1 },
+      { id: "none", position: 0 },
+      { id: "a-1", position: 0 },
+      { id: "b-1", position: 0 }
     ]);
-    expect(folderDescendantIds(folders, "root")).toEqual(new Set(["child", "grandchild"]));
   });
 });

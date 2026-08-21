@@ -1,18 +1,16 @@
 import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 
 export const INITIAL_FOLDERS: Folder[] = [
-  { id: "work", name: "작업", color: "#4f46e5", parentId: null, position: 0 },
-  { id: "docs", name: "문서", color: "#2166d7", parentId: null, position: 1 },
-  { id: "tools", name: "도구", color: "#16a34a", parentId: null, position: 2 },
-  { id: "reference", name: "참고", color: "#797979", parentId: "docs", position: 0 }
+  { id: "work", name: "작업", color: "#4f46e5", sectionId: "business", position: 0 },
+  { id: "operations", name: "운영", color: "#d97706", sectionId: "business", position: 1 },
+  { id: "docs", name: "문서", color: "#2166d7", sectionId: "knowledge", position: 0 },
+  { id: "tools", name: "도구", color: "#16a34a", sectionId: "knowledge", position: 1 },
+  { id: "reference", name: "참고", color: "#797979", sectionId: null, position: 0 }
 ];
 
 export const INITIAL_SECTIONS: Section[] = [
-  { id: "daily", name: "매일 확인", folderId: "work", position: 0 },
-  { id: "deploy", name: "배포/운영", folderId: "work", position: 1 },
-  { id: "frontend", name: "Frontend", folderId: "docs", position: 0 },
-  { id: "backend", name: "Backend", folderId: "docs", position: 1 },
-  { id: "infra", name: "Infrastructure", folderId: "tools", position: 0 }
+  { id: "business", name: "업무", color: "#4f46e5", position: 0 },
+  { id: "knowledge", name: "지식", color: "#2166d7", position: 1 }
 ];
 
 export const INITIAL_BOOKMARKS: BookmarkItem[] = [
@@ -23,7 +21,6 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     description: "관리자 화면 저장소",
     isFavorite: true,
     folderId: "work",
-    sectionId: "daily",
     position: 0
   },
   {
@@ -32,9 +29,8 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     url: "https://vercel.com/dashboard",
     description: "배포와 로그 확인",
     isFavorite: true,
-    folderId: "work",
-    sectionId: "deploy",
-    position: 1
+    folderId: "operations",
+    position: 0
   },
   {
     id: "bm-003",
@@ -43,8 +39,7 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     description: "DB, Auth, Storage 관리",
     isFavorite: false,
     folderId: "tools",
-    sectionId: "infra",
-    position: 2
+    position: 0
   },
   {
     id: "bm-004",
@@ -53,8 +48,7 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     description: "App Router 문서",
     isFavorite: false,
     folderId: "docs",
-    sectionId: "frontend",
-    position: 3
+    position: 0
   },
   {
     id: "bm-005",
@@ -63,8 +57,7 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     description: "유틸리티 클래스 참조",
     isFavorite: false,
     folderId: "docs",
-    sectionId: "frontend",
-    position: 4
+    position: 1
   },
   {
     id: "bm-006",
@@ -73,8 +66,7 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     description: "아이콘 검색",
     isFavorite: false,
     folderId: "reference",
-    sectionId: null,
-    position: 5
+    position: 0
   },
   {
     id: "bm-007",
@@ -83,7 +75,6 @@ export const INITIAL_BOOKMARKS: BookmarkItem[] = [
     description: "PostgREST 기반 Data API 문서",
     isFavorite: true,
     folderId: "docs",
-    sectionId: "backend",
-    position: 6
+    position: 2
   }
 ];

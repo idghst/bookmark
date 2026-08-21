@@ -5,7 +5,6 @@ export type BookmarkItem = {
   description: string | null;
   isFavorite: boolean;
   folderId: string | null;
-  sectionId: string | null;
   position: number;
 };
 
@@ -13,7 +12,14 @@ export type Folder = {
   id: string;
   name: string;
   color: string | null;
-  parentId: string | null;
+  sectionId?: string | null;
+  position: number;
+};
+
+export type Section = {
+  id: string;
+  name: string;
+  color: string | null;
   position: number;
 };
 
@@ -23,9 +29,6 @@ export type BookmarkCreateInput = {
   description: string | null;
   isFavorite: boolean;
   folderId: string | null;
-  sectionId: string | null;
 };
 
-export type BookmarkPatch = Partial<Omit<BookmarkCreateInput, "sectionId">> & {
-  sectionId?: string | null;
-};
+export type BookmarkPatch = Partial<BookmarkCreateInput>;

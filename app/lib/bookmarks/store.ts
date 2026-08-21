@@ -88,22 +88,17 @@ export const bookmarkStore = {
     return restRequest<Section[]>("sections");
   },
 
-  async createSection(folderIdValue: unknown, nameValue: unknown, colorValue?: unknown) {
-    const folderId = nonEmptyString(folderIdValue, "Section folderId");
+  async createSection(nameValue: unknown, colorValue?: unknown) {
     const name = nonEmptyString(nameValue, "Section name");
     if (colorValue !== undefined && colorValue !== null && typeof colorValue !== "string") {
       invalid("Section color must be a string or null.");
     }
     const color = colorValue as string | null | undefined;
-    const existing = findSectionByName(
-      await bookmarkStore.listSections(),
-      folderId,
-      name
-    );
+    const existing = findSectionByName(await bookmarkStore.listSections(), name);
     if (existing) return existing;
     return restRequest<Section>("sections", {
       method: "POST",
-      body: { folderId, name, color }
+      body: { name, color }
     });
   },
 

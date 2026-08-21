@@ -16,13 +16,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApiError, listBookmarks, listFolders, updateBookmark } from "@/lib/api";
+import { ApiError, listBookmarks, listFolders, listSections, updateBookmark } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
-import type { BookmarkItem, Folder } from "@/lib/types";
+import type { BookmarkItem, Folder, Section } from "@/lib/types";
 import { APP_THEME } from "@/theme/tokens";
 
 type Status = "loading" | "ready" | "error" | "unconfigured";
 type Filter = "all" | "favorites" | string;
+type Chip = { id: Filter; label: string; color?: string | null };
 
 function hostOf(url: string): string {
   try {
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   const [status, setStatus] = useState<Status>("loading");
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -63,12 +65,14 @@ export default function HomeScreen() {
     }
     if (!hasDataRef.current) setStatus("loading");
     try {
-      const [nextBookmarks, nextFolders] = await Promise.all([
+      const [nextBookmarks, nextFolders, nextSections] = await Promise.all([
         listBookmarks(config),
         listFolders(config),
+        listSections(config),
       ]);
       setBookmarks(nextBookmarks);
       setFolders(nextFolders);
+      setSections(nextSections);
       hasDataRef.current = true;
       setStatus("ready");
     } catch (error) {
@@ -177,14 +181,61 @@ export default function HomeScreen() {
     [colors, folderById, openBookmark, toggleFavorite],
   );
 
-  const chips: Array<{ id: Filter; label: string; color?: string | null }> = useMemo(
-    () => [
-      { id: "all", label: "전체" },
-      { id: "favorites", label: "★ 즐겨찾기" },
-      ...folders.map((folder) => ({ id: folder.id, label: folder.name, color: folder.color })),
-    ],
-    [folders],
-  );
+  const pinnedChips: Chip[] = [
+    { id: "all", label: "전체" },
+    { id: "favorites", label: "★ 즐겨찾기" },
+  ];
+
+  const folderGroups = useMemo(() => {
+    const sectionIds = new Set(sections.map((section) => section.id));
+    const bySection = new Map<string, Folder[]>();
+    const unsectioned: Folder[] = [];
+    for (const folder of folders) {
+      const sectionId = folder.sectionId;
+      if (sectionId && sectionIds.has(sectionId)) {
+        const list = bySection.get(sectionId) ?? [];
+        list.push(folder);
+        bySection.set(sectionId, list);
+      } else {
+        unsectioned.push(folder);
+      }
+    }
+    for (const list of bySection.values()) {
+      list.sort((a, b) => a.position - b.position);
+    }
+    unsectioned.sort((a, b) => a.position - b.position);
+    return {
+      sections: [...sections].sort((a, b) => a.position - b.position),
+      bySection,
+      unsectioned,
+    };
+  }, [folders, sections]);
+
+  const folderToChip = (folder: Folder): Chip => ({
+    id: folder.id,
+    label: folder.name,
+    color: folder.color,
+  });
+
+  const renderChip = (chip: Chip) => {
+    const active = filter === chip.id;
+    return (
+      <Pressable
+        key={chip.id}
+        onPress={() => setFilter(chip.id)}
+        style={[
+          styles.chip,
+          {
+            backgroundColor: active ? colors.primary : colors.surface,
+            borderColor: active ? colors.primary : colors.border,
+          },
+        ]}
+      >
+        {chip.color ? <View style={[styles.chipDot, { backgroundColor: chip.color }]} /> : null}
+        <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>{chip.label}</Text>
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
@@ -252,37 +303,33 @@ export default function HomeScreen() {
               { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
             ]}
           />
-          <View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chips}
-            >
-              {chips.map((chip) => {
-                const active = filter === chip.id;
+          {sections.length === 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+              {[...pinnedChips, ...folders.map(folderToChip)].map(renderChip)}
+            </ScrollView>
+          ) : (
+            <ScrollView style={styles.chipGroupsScroll} contentContainerStyle={styles.chipGroups}>
+              <View style={styles.chipsWrap}>{pinnedChips.map(renderChip)}</View>
+              {folderGroups.sections.map((section) => {
+                const sectionFolders = folderGroups.bySection.get(section.id);
+                if (!sectionFolders?.length) return null;
                 return (
-                  <Pressable
-                    key={chip.id}
-                    onPress={() => setFilter(chip.id)}
-                    style={[
-                      styles.chip,
-                      {
-                        backgroundColor: active ? colors.primary : colors.surface,
-                        borderColor: active ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    {chip.color ? (
-                      <View style={[styles.chipDot, { backgroundColor: chip.color }]} />
-                    ) : null}
-                    <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>
-                      {chip.label}
-                    </Text>
-                  </Pressable>
+                  <View key={section.id} style={styles.chipGroup}>
+                    <Text style={[styles.sectionLabel, { color: colors.muted }]}>{section.name}</Text>
+                    <View style={styles.chipsWrap}>{sectionFolders.map((folder) => renderChip(folderToChip(folder)))}</View>
+                  </View>
                 );
               })}
+              {folderGroups.unsectioned.length > 0 ? (
+                <View style={styles.chipGroup}>
+                  <Text style={[styles.sectionLabel, { color: colors.muted }]}>섹션 없음</Text>
+                  <View style={styles.chipsWrap}>
+                    {folderGroups.unsectioned.map((folder) => renderChip(folderToChip(folder)))}
+                  </View>
+                </View>
+              ) : null}
             </ScrollView>
-          </View>
+          )}
           <FlatList
             data={visibleBookmarks}
             keyExtractor={(item) => item.id}
@@ -363,6 +410,27 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  chipGroupsScroll: {
+    flexGrow: 0,
+    maxHeight: 180,
+  },
+  chipGroups: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  chipGroup: {
+    gap: 6,
+  },
+  chipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   chip: {
     flexDirection: "row",

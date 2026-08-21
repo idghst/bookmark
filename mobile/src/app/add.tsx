@@ -80,7 +80,6 @@ export default function AddBookmarkScreen() {
         description: null,
         isFavorite: false,
         folderId,
-        sectionId: null,
       });
       router.back();
     } catch (caught) {

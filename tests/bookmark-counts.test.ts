@@ -4,11 +4,11 @@ import { findSectionByName } from "@/app/lib/bookmarks/sections";
 import type { BookmarkItem } from "@/app/lib/bookmarks/types";
 
 const bookmarks: BookmarkItem[] = [
-  { id: "b1", title: "BNK mail", url: "https://outlook.office.com/mail", description: null, isFavorite: true, folderId: "bnk", sectionId: null, position: 0 },
-  { id: "b2", title: "BNK guide", url: "https://bookmark.idghst.co.kr", description: null, isFavorite: false, folderId: "bnk", sectionId: null, position: 1 },
-  { id: "r1", title: "RPA", url: "https://example.com/rpa", description: "자동화", isFavorite: true, folderId: "rpa", sectionId: null, position: 2 },
-  { id: "n1", title: "IDGHST", url: "https://www.notion.so/idghst", description: null, isFavorite: false, folderId: "notion", sectionId: null, position: 3 },
-  { id: "n2", title: "캘린더", url: "https://calendar.notion.so", description: null, isFavorite: false, folderId: "notion", sectionId: null, position: 4 }
+  { id: "b1", title: "BNK mail", url: "https://outlook.office.com/mail", description: null, isFavorite: true, folderId: "bnk", position: 0 },
+  { id: "b2", title: "BNK guide", url: "https://bookmark.idghst.co.kr", description: null, isFavorite: false, folderId: "bnk", position: 1 },
+  { id: "r1", title: "RPA", url: "https://example.com/rpa", description: "자동화", isFavorite: true, folderId: "rpa", position: 2 },
+  { id: "n1", title: "IDGHST", url: "https://www.notion.so/idghst", description: null, isFavorite: false, folderId: "notion", position: 3 },
+  { id: "n2", title: "캘린더", url: "https://calendar.notion.so", description: null, isFavorite: false, folderId: "notion", position: 4 }
 ];
 
 describe("bookmark count filters", () => {
@@ -34,11 +34,11 @@ describe("bookmark count filters", () => {
   });
 });
 
-it("finds a section by trimmed case-insensitive name in the same folder", () => {
+it("finds a section by trimmed case-insensitive global name", () => {
   const sections = [
-    { id: "s1", name: "Frontend", folderId: "docs", position: 0 },
-    { id: "s2", name: "Frontend", folderId: "work", position: 0 }
+    { id: "s1", name: "Frontend", position: 0 },
+    { id: "s2", name: "Backend", position: 1 }
   ];
 
-  expect(findSectionByName(sections, "docs", " frontend ")?.id).toBe("s1");
+  expect(findSectionByName(sections, " frontend ")?.id).toBe("s1");
 });

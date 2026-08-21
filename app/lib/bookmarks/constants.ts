@@ -1,6 +1,5 @@
-export const STORAGE_KEY = "bookmark-cache";
+export const STORAGE_KEY = "bookmark-cache-v3";
 export const NO_SECTION = "__none__";
-export const ROOT_FOLDER = "__root__";
 export const COLOR_OPTIONS = ["#4f46e5", "#2166d7", "#16a34a", "#d97706", "#db2777", "#797979"];
 export const COLOR_FALLBACK = "#797979";
 export const BOOKMARK_APP_HEADER_CLASS = "min-h-[var(--dashboard-header-height)] lg:h-[var(--dashboard-header-height)]";
