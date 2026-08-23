@@ -820,6 +820,36 @@ export default function BookmarksPage() {
     clearBookmarkDrag();
   }
 
+  function duplicateBookmark(bookmark: BookmarkItem) {
+    const payload = {
+      title: `${bookmark.title} copy`,
+      url: bookmark.url,
+      description: bookmark.description,
+      folderId: bookmark.folderId,
+      folderSectionId: bookmarkFolderSectionId(bookmark),
+      isFavorite: bookmark.isFavorite
+    };
+    const tempId = createId("bm");
+    const optimistic = {
+      id: tempId,
+      ...payload,
+      position: bookmarks.filter((item) => (
+        item.folderId === payload.folderId
+        && bookmarkFolderSectionId(item) === payload.folderSectionId
+      )).length
+    };
+    persistOptimisticMutation(
+      `duplicate:${bookmark.id}:${tempId}`,
+      () => setBookmarks((current) => [...current, optimistic]),
+      () => setBookmarks((current) => current.filter((item) => item.id !== tempId)),
+      async () => {
+        const created = await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) });
+        setBookmarks((current) => current.map((item) => item.id === tempId ? created : item));
+      },
+      "북마크 복제에 실패했습니다."
+    );
+  }
+
   function toggleFavorite(id: string) {
     const bookmark = bookmarks.find((item) => item.id === id);
     if (!bookmark) return;
@@ -1035,6 +1065,7 @@ export default function BookmarksPage() {
                       }}
                       onDrop={dropBookmark}
                       onEdit={openBookmarkDialog}
+                      onDuplicate={duplicateBookmark}
                       onDelete={(item) => setDeleteTarget({ type: "bookmark", id: item.id })}
                       onToggleFavorite={toggleFavorite}
                     />

@@ -17,6 +17,7 @@ export function BookmarkCard({
   onDragOver,
   onDrop,
   onEdit,
+  onDuplicate,
   onDelete,
   onToggleFavorite
 }: {
@@ -29,6 +30,7 @@ export function BookmarkCard({
   onDragOver: (bookmarkId: string) => void;
   onDrop: (bookmarkId: string) => void;
   onEdit: (bookmark: BookmarkItem) => void;
+  onDuplicate: (bookmark: BookmarkItem) => void;
   onDelete: (bookmark: BookmarkItem) => void;
   onToggleFavorite: (id: string) => void;
 }) {
@@ -78,6 +80,7 @@ export function BookmarkCard({
             bookmark={bookmark}
             mutationsDisabled={mutationsDisabled}
             onEdit={onEdit}
+            onDuplicate={onDuplicate}
             onDelete={onDelete}
           />
         </div>

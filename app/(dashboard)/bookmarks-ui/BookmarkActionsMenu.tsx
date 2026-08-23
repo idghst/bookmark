@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { BookmarkItem } from "@/app/lib/bookmarks/types";
 
@@ -6,11 +6,13 @@ export function BookmarkActionsMenu({
   bookmark,
   mutationsDisabled,
   onEdit,
+  onDuplicate,
   onDelete
 }: {
   bookmark: BookmarkItem;
   mutationsDisabled: boolean;
   onEdit: (bookmark: BookmarkItem) => void;
+  onDuplicate: (bookmark: BookmarkItem) => void;
   onDelete: (bookmark: BookmarkItem) => void;
 }) {
   return (
@@ -44,6 +46,13 @@ export function BookmarkActionsMenu({
             >
               <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
               편집
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => onDuplicate(bookmark)}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-[var(--text-heading)] outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]"
+            >
+              <Copy className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+              복제
             </DropdownMenu.Item>
             <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
             <DropdownMenu.Item

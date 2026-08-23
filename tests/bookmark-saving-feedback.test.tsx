@@ -58,6 +58,24 @@ function installCache(
 
 function applyMutationToSnapshot(path: string, method: string, bodyText: string | undefined) {
   if (!bodyText) return;
+  if (method === "POST" && path === "/api/bookmarks") {
+    const body = JSON.parse(bodyText) as Omit<BookmarkItem, "id" | "position">;
+    snapshot = {
+      ...snapshot,
+      bookmarks: [
+        ...snapshot.bookmarks,
+        {
+          id: `created-${snapshot.bookmarks.length}`,
+          position: snapshot.bookmarks.filter((item) => (
+            item.folderId === body.folderId
+            && (item.folderSectionId ?? null) === (body.folderSectionId ?? null)
+          )).length,
+          ...body
+        }
+      ]
+    };
+    return;
+  }
   if (method === "POST" && path.endsWith("/reorder")) {
     const body = JSON.parse(bodyText) as Array<{ id: string; position: number }>;
     const collection = path.includes("/folder-sections/")
@@ -483,7 +501,54 @@ describe("section-first bookmark UI", () => {
     fireEvent.keyDown(trigger, { key: "Enter" });
     const menu = screen.getByRole("menu", { name: "프로젝트 A 메뉴" });
     expect(within(menu).getByRole("menuitem", { name: "편집" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "복제" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: "삭제" })).toBeInTheDocument();
+  });
+
+  it("duplicates a bookmark into the same folder and section with copy in the title", async () => {
+    const source: BookmarkItem = {
+      id: "p1",
+      title: "프로젝트 A",
+      url: "https://p1.example.com",
+      description: "설명",
+      isFavorite: true,
+      folderId: "projects",
+      folderSectionId: "fs1",
+      position: 0
+    };
+    const created: BookmarkItem = {
+      ...source,
+      id: "p1-copy",
+      title: "프로젝트 A copy",
+      position: 1
+    };
+    const data = {
+      folders,
+      sections,
+      folderSections: [{ id: "fs1", name: "진행중", folderId: "projects", position: 0, color: null }],
+      bookmarks: [source]
+    };
+    const { fetchMock } = setup(data, async (input, init) => {
+      expect(String(input)).toBe("/api/bookmarks");
+      expect(init).toMatchObject({ method: "POST" });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        title: "프로젝트 A copy",
+        url: "https://p1.example.com",
+        description: "설명",
+        folderId: "projects",
+        folderSectionId: "fs1",
+        isFavorite: true
+      });
+      return new Response(JSON.stringify(created), {
+        status: 201,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+
+    const menu = await openMenu("프로젝트 A");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "복제" }));
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(await screen.findByRole("link", { name: /프로젝트 A copy/ })).toBeInTheDocument();
   });
 
   it("groups sidebar folder actions in an ellipsis menu", async () => {
