@@ -64,7 +64,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
     <aside
       id={props.id}
       className={cn(
-        "flex w-[20rem] max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[#F7F8FB] text-[var(--text-primary)] xl:w-[22rem]",
+        "flex w-[20rem] max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-soft)] text-[var(--text-primary)] xl:w-[22rem]",
         props.className
       )}
       aria-label="북마크 콘솔 사이드바"
@@ -74,21 +74,24 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           <Link
             href="/"
             aria-label={`${BRAND.appName} 홈으로 이동`}
-            className="min-w-0 truncate rounded text-xl font-extrabold tracking-[-0.04em] text-[var(--color-brand)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+            className="flex min-w-0 items-center gap-2 rounded text-xl font-medium tracking-[-0.04em] text-[var(--color-brand)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
           >
-            {BRAND.appName}
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0 rotate-45 text-[var(--text-heading)]" aria-hidden="true">
+              <path fill="currentColor" d="M7.15 1.2h1.7v13.6h-1.7zM1.2 7.15h13.6v1.7H1.2z" />
+            </svg>
+            <span className="truncate">{BRAND.appName}</span>
           </Link>
           <button
             type="button"
             onClick={props.onRefresh}
             disabled={props.refreshing}
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-50"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-canvas)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-50"
             aria-label="북마크 새로고침"
           >
             <RefreshCcw className={cn("h-4 w-4", props.refreshing && "animate-spin")} aria-hidden="true" />
           </button>
         </div>
-        <span className="mt-1 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">BOOKMARK CONSOLE</span>
+        <span className="mt-1 text-[10px] font-medium tracking-[0.12em] text-[var(--text-muted-soft)]">BOOKMARK CONSOLE</span>
       </div>
 
       <nav
@@ -135,7 +138,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   <div
                     className={cn(
                       "group/section flex min-h-9 items-center rounded-md",
-                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
+                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-[var(--surface-card)] ring-2 ring-[var(--color-brand)]/25"
                     )}
                     draggable={!props.mutationsDisabled}
                     onDragStart={(event) => {
@@ -166,8 +169,8 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       aria-current={sectionActive ? "page" : undefined}
                       onClick={() => props.onSelectSection(group.section?.id ?? "")}
                       className={cn(
-                        "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-xs font-extrabold uppercase tracking-[0.06em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
-                        sectionActive ? "bg-white text-[var(--color-brand)]" : "text-[var(--text-muted)] hover:bg-white"
+                        "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-xs font-medium uppercase tracking-[0.08em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
+                        sectionActive ? "bg-[var(--surface-canvas)] text-[var(--text-heading)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-canvas)]"
                       )}
                     >
                       <span
@@ -187,8 +190,8 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                 ) : (
                   <div
                     className={cn(
-                      "flex min-h-9 items-center rounded-md px-2 text-xs font-extrabold uppercase tracking-[0.06em] text-[var(--text-muted)]",
-                      props.draggingFolderId && props.dragOverSectionId === "__none__" && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
+                      "flex min-h-9 items-center rounded-md px-2 text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]",
+                      props.draggingFolderId && props.dragOverSectionId === "__none__" && "bg-[var(--surface-card)] ring-2 ring-[var(--color-brand)]/25"
                     )}
                     onDragOver={(event) => {
                       if (!props.draggingFolderId) return;
@@ -204,7 +207,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                     섹션 없음
                   </div>
                 )}
-                <ul className="mt-1 space-y-0.5 border-l border-[#E5E7EB] pl-2" aria-label={`${group.section?.name ?? "섹션 없음"} 폴더`}>
+                <ul className="mt-1 space-y-0.5 border-l border-[var(--border-subtle)] pl-2" aria-label={`${group.section?.name ?? "섹션 없음"} 폴더`}>
                   {group.folders.map((folder) => {
                     const active = props.selection?.kind === "folder" && props.selection.id === folder.id;
                     const count = countBookmarks(props.bookmarks, { folderId: folder.id, favoriteOnly: props.favoriteOnly });
@@ -218,7 +221,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                           props.draggingFolderId === folder.id && "opacity-60",
                           insert === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
                           insert === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]",
-                          dropInto && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
+                          dropInto && "bg-[var(--surface-card)] ring-2 ring-[var(--color-brand)]/25"
                         )}
                         data-drop-edge={insert ?? undefined}
                         draggable={!props.mutationsDisabled}
@@ -259,10 +262,10 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                           aria-current={active ? "page" : undefined}
                           onClick={() => props.onSelectFolder(folder.id)}
                           className={cn(
-                            "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
+                            "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
                             active
-                              ? "bg-white text-[var(--color-brand)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                              : "text-[var(--text-secondary)] hover:bg-white hover:text-[var(--text-heading)]"
+                              ? "bg-[var(--surface-canvas)] text-[var(--text-heading)]"
+                              : "text-[var(--text-secondary)] hover:bg-[var(--surface-canvas)] hover:text-[var(--text-heading)]"
                           )}
                         >
                           <FolderIcon
@@ -294,7 +297,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           type="button"
           disabled={props.mutationsDisabled}
           onClick={props.onAddSection}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--border-subtle)] bg-white px-3 text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--color-brand)] disabled:opacity-40"
+          className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--color-brand)] disabled:opacity-40"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />새 섹션
         </button>
@@ -302,7 +305,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           type="button"
           disabled={props.mutationsDisabled}
           onClick={props.onAddFolder}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--border-subtle)] bg-white px-3 text-sm font-bold text-[var(--text-secondary)] hover:text-[var(--color-brand)] disabled:opacity-40"
+          className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--color-brand)] disabled:opacity-40"
         >
           <FolderPlus className="h-4 w-4" aria-hidden="true" />새 폴더
         </button>
@@ -329,7 +332,7 @@ function ActionsMenu({
           type="button"
           disabled={mutationsDisabled}
           aria-label={`${label} 메뉴`}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-white hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-canvas)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -340,9 +343,9 @@ function ActionsMenu({
           side="bottom"
           align="end"
           sideOffset={6}
-          className="z-[80] min-w-36 rounded-lg border border-[var(--border-subtle)] bg-white p-1 shadow-lg outline-none"
+          className="z-[80] min-w-36 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1 shadow-lg outline-none"
         >
-          <DropdownMenu.Item onSelect={onEdit} className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium outline-none hover:bg-[#F8FAFC] focus:bg-[#F8FAFC]">
+          <DropdownMenu.Item onSelect={onEdit} className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
             <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />편집
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />

@@ -91,9 +91,9 @@ export function clearToastHistory() {
 }
 
 const STYLES: Record<ToastType, { bg: string; border: string; text: string; icon: typeof CheckCircle2; iconColor: string }> = {
-  success: { bg: "#0E2A1A", border: "#1F5138", text: "#86EFAC", icon: CheckCircle2, iconColor: "#34D399" },
-  error: { bg: "#2A1011", border: "#5A2326", text: "#FCA5A5", icon: AlertCircle, iconColor: "#F87171" },
-  info: { bg: "#0F2233", border: "#23415C", text: "#93C5FD", icon: Info, iconColor: "#60A5FA" }
+  success: { bg: "#181715", border: "#252320", text: "#faf9f5", icon: CheckCircle2, iconColor: "#5db872" },
+  error: { bg: "#181715", border: "#252320", text: "#faf9f5", icon: AlertCircle, iconColor: "#c64545" },
+  info: { bg: "#181715", border: "#252320", text: "#faf9f5", icon: Info, iconColor: "#cc785c" }
 };
 
 function ToastCard({ item }: { item: ToastItem }) {
@@ -106,7 +106,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       style={{ backgroundColor: s.bg, border: `1px solid ${s.border}` }}
     >
       <Icon className="h-4 w-4 shrink-0" style={{ color: s.iconColor }} />
-      <p className="min-w-0 flex-1 truncate text-xs font-bold" style={{ color: s.text }}>
+      <p className="min-w-0 flex-1 truncate text-xs font-medium" style={{ color: s.text }}>
         {item.message}
       </p>
       <button

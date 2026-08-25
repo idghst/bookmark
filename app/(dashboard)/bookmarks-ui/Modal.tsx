@@ -49,12 +49,12 @@ export function Modal({
       aria-modal="true"
       aria-labelledby={titleId}
     >
-      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg sm:p-5">
+      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl sm:p-5">
         <div className="mb-4 flex items-center gap-3">
-          <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--text-heading)]">
+          <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-medium tracking-[-0.02em] text-[var(--text-heading)]">
             {title}
           </h2>
-          <button type="button" disabled={closeDisabled} className="rounded p-1 text-[var(--text-muted)] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-40" onClick={onClose}>
+          <button type="button" disabled={closeDisabled} className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" onClick={onClose}>
             <X className="h-5 w-5" />
             <span className="sr-only">닫기</span>
           </button>

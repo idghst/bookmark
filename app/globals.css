@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Pretendard Variable (셀프호스팅, public/fonts) — 한글 지원용 범용 폰트 */
+/* Pretendard Variable (셀프호스팅, public/fonts) — 한글 본문·UI */
 @font-face {
   font-family: "Pretendard Variable";
   src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
@@ -14,48 +14,55 @@
 :root {
   color-scheme: light;
 
-  /* 브랜드 색상(템플릿 기본: indigo). 새 서비스에 맞게 이 두 값만 바꾸면 된다. */
-  --color-brand: #4f46e5;
-  --color-brand-dark: #4338ca;
+  /* Claude / Anthropic 마케팅 토큰을 operate 콘솔에 매핑 */
+  --color-brand: #cc785c;
+  --color-brand-dark: #a9583e;
+  --color-brand-disabled: #e6dfd8;
+  --color-accent-teal: #5db8a6;
+  --color-accent-amber: #e8a55a;
 
-  /* 표면/텍스트 토큰 */
-  --surface-canvas: #ffffff;
-  --surface-soft: #f5f6f8;
-  --surface-muted: #f1f5f9;
-  --text-primary: #0f172a;
-  --text-heading: #111827;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --border-subtle: #e2e8f0;
+  --surface-canvas: #faf9f5;
+  --surface-soft: #f5f0e8;
+  --surface-card: #efe9de;
+  --surface-muted: #e8e0d2;
+  --surface-dark: #181715;
+  --text-primary: #141413;
+  --text-heading: #141413;
+  --text-secondary: #3d3d3a;
+  --text-muted: #6c6a64;
+  --text-muted-soft: #8e8b82;
+  --border-subtle: #e6dfd8;
+  --border-soft: #ebe6df;
 
   --radius: 0.5rem;
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
   --dashboard-header-height: 88px;
 
   --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
   --font-serif: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* shadcn/ui 디자인 토큰(HSL) — tailwind.config.ts 가 hsl(var(--token)) 으로 매핑한다 */
-  --background: 0 0% 100%;
-  --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --primary: 243 75% 59%;
+  /* shadcn/ui — hsl(var(--token)) */
+  --background: 48 33% 97%;
+  --foreground: 60 3% 8%;
+  --card: 48 33% 97%;
+  --card-foreground: 60 3% 8%;
+  --popover: 48 33% 97%;
+  --popover-foreground: 60 3% 8%;
+  --primary: 15 52% 58%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 222 47% 11%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
-  --accent: 243 75% 96%;
-  --accent-foreground: 243 58% 41%;
-  --destructive: 0 72% 51%;
+  --secondary: 40 32% 90%;
+  --secondary-foreground: 60 3% 8%;
+  --muted: 40 32% 90%;
+  --muted-foreground: 45 5% 41%;
+  --accent: 40 32% 90%;
+  --accent-foreground: 15 46% 45%;
+  --destructive: 0 53% 52%;
   --destructive-foreground: 0 0% 100%;
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --ring: 243 75% 59%;
+  --border: 30 20% 87%;
+  --input: 30 20% 87%;
+  --ring: 15 52% 58%;
 }
 
 * {
@@ -73,6 +80,7 @@ body {
   background: var(--surface-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  caret-color: var(--color-brand);
   overscroll-behavior: none;
 }
 
@@ -88,6 +96,7 @@ h4,
 h5,
 h6 {
   font-family: var(--font-serif);
+  letter-spacing: -0.02em;
 }
 
 button,
@@ -98,7 +107,7 @@ select {
 }
 
 ::selection {
-  background: rgba(79, 70, 229, 0.16);
+  background: rgba(204, 120, 92, 0.16);
 }
 
 /* 스크롤바 숨김 유틸 */

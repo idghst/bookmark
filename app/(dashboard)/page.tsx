@@ -1063,7 +1063,7 @@ export default function BookmarksPage() {
   };
 
   return (
-    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white" aria-busy={!hasHydratedData}>
+    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-[var(--surface-canvas)]" aria-busy={!hasHydratedData}>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{dragStatus}</div>
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
@@ -1074,7 +1074,7 @@ export default function BookmarksPage() {
       ) : null}
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-[var(--border-subtle)] bg-white px-3 py-2 lg:hidden">
+        <header className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 py-2 lg:hidden">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)} aria-controls="mobile-console-sidebar">
               <Menu className="h-5 w-5" /><span className="sr-only">폴더 메뉴 열기</span>
@@ -1084,7 +1084,7 @@ export default function BookmarksPage() {
           </div>
           <SearchBox query={query} setQuery={setQuery} className="mt-2" />
         </header>
-        <header className={cn("hidden shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-white px-5 lg:grid", BOOKMARK_APP_HEADER_CLASS)}>
+        <header className={cn("hidden shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-5 lg:grid", BOOKMARK_APP_HEADER_CLASS)}>
           <PageTitle name={activeName} color={activeColor} count={currentCount} />
           <SearchBox query={query} setQuery={setQuery} />
           <div className="flex items-center gap-2">
@@ -1103,7 +1103,7 @@ export default function BookmarksPage() {
         <main
           id="bookmark-content"
           tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]"
+          className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-canvas)]"
           onDragOver={(event) => {
             if (!draggingBookmarkId && !draggingFolderSectionId) return;
             scrollFromPointer(event.currentTarget, event.clientY);
@@ -1112,9 +1112,9 @@ export default function BookmarksPage() {
           <div className="mx-auto w-full max-w-[1480px] space-y-4 p-[clamp(0.75rem,2vw,2rem)]">
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
-              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-white px-6 text-center">
+              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-6 text-center">
                 <div className="mb-3 h-1.5 w-12 rounded-full bg-[var(--color-brand)]" />
-                <p className="font-bold text-[var(--text-heading)]">{query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다."}</p>
+                <p className="font-medium text-[var(--text-heading)]">{query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다."}</p>
               </div>
             ) : groups.map((group) => (
               <section key={group.key} className="space-y-3">
@@ -1165,8 +1165,8 @@ export default function BookmarksPage() {
                   }}
                 >
                   <span data-folder-color={group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK} className="h-6 w-1 rounded-full" style={{ backgroundColor: group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
-                  <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--text-heading)]">{group.label}</h2>
-                  <span className="rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{group.items.length}</span>
+                  <h2 className="min-w-0 flex-1 truncate text-lg font-medium tracking-[-0.02em] text-[var(--text-heading)]">{group.label}</h2>
+                  <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{group.items.length}</span>
                   {group.folderSection ? (
                     <FolderSectionActionsMenu
                       folderSection={group.folderSection}
@@ -1277,7 +1277,7 @@ export default function BookmarksPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={bookmarkDraft.isFavorite} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, isFavorite: event.target.checked }))} />즐겨찾기</label>
+            <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookmarkDraft.isFavorite} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, isFavorite: event.target.checked }))} />즐겨찾기</label>
             <FormFooter saving={saving} error={formError} onCancel={() => setBookmarkDialog(null)} />
           </form>
         </Modal>
@@ -1336,8 +1336,8 @@ export default function BookmarksPage() {
           {deleting ? <div className="mt-4"><DatabaseProgressStatus title="데이터베이스에서 삭제 중" /></div> : null}
           {deleteError ? <p className="mt-4 text-sm font-bold text-destructive">{deleteError}</p> : null}
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>취소</Button>
-            <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
+            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)} className="h-10 px-5">취소</Button>
+            <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()} className="h-10 px-5">
               {deleting ? <LoaderCircle className="animate-spin" /> : null}
               {deleting ? "삭제 중..." : "삭제"}
             </Button>
@@ -1352,8 +1352,8 @@ function PageTitle({ name, color, count }: { name: string; color: string; count:
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <span className="h-5 w-1 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-      <h1 className="truncate text-lg font-bold text-[var(--text-heading)]">{name}</h1>
-      <span className="rounded border border-[var(--border-subtle)] bg-[#F8FAFC] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{count}</span>
+      <h1 className="truncate text-lg font-medium tracking-[-0.02em] text-[var(--text-heading)]">{name}</h1>
+      <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{count}</span>
     </div>
   );
 }
@@ -1362,7 +1362,7 @@ function SearchBox({ query, setQuery, className }: { query: string; setQuery: (v
   return (
     <label className={cn("relative min-w-0", className)}>
       <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[#F8FAFC] pl-11 pr-11 text-sm outline-none focus:border-[var(--color-brand)]" />
+      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] pl-11 pr-11 text-sm outline-none focus:border-[var(--color-brand)] focus:ring-[3px] focus:ring-[var(--color-brand)]/15" />
       {query ? <button type="button" aria-label="검색어 지우기" onClick={() => setQuery("")} className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center"><X className="h-4 w-4" /></button> : null}
     </label>
   );
@@ -1381,7 +1381,7 @@ function ColorPicker({ color, onChange, allowDefault = false }: { color: string 
     <Field label="색상">
       <div className="flex flex-wrap gap-2">
         {allowDefault ? <button type="button" onClick={() => onChange(null)} className={cn("h-8 rounded border px-2 text-xs", color === null && "ring-2 ring-[var(--color-brand)]")}>기본</button> : null}
-        {COLOR_OPTIONS.map((option) => <button key={option} type="button" aria-label={`색상 ${option}`} onClick={() => onChange(option)} className={cn("h-8 w-8 rounded border", color === option && "ring-2 ring-[var(--color-brand)] ring-offset-2")} style={{ backgroundColor: option }} />)}
+        {COLOR_OPTIONS.map((option) => <button key={option} type="button" aria-label={`색상 ${option}`} onClick={() => onChange(option)} className={cn("h-8 w-8 rounded-md border", color === option && "ring-2 ring-[var(--color-brand)] ring-offset-2 ring-offset-[var(--surface-canvas)]")} style={{ backgroundColor: option }} />)}
       </div>
     </Field>
   );
@@ -1393,8 +1393,8 @@ function FormFooter({ saving, error, onCancel }: { saving: boolean; error: strin
       {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
       {error ? <p className="text-sm font-bold text-destructive">{error}</p> : null}
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>취소</Button>
-        <Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? "저장 중..." : "저장"}</Button>
+        <Button type="button" variant="outline" disabled={saving} onClick={onCancel} className="h-10 px-5">취소</Button>
+        <Button type="submit" disabled={saving} className="h-10 px-5">{saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? "저장 중..." : "저장"}</Button>
       </div>
     </>
   );
