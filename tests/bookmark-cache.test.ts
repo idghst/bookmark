@@ -109,6 +109,20 @@ describe("bookmark cache snapshot", () => {
     expect(readBookmarkCache()).toBeNull();
   });
 
+  it("does not throw when localStorage quota is exceeded", () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => {
+          throw new DOMException("quota", "QuotaExceededError");
+        },
+        removeItem: () => undefined
+      }
+    });
+    expect(() => writeBookmarkCache(snapshot())).not.toThrow();
+  });
+
   it("returns null and no-ops when window is missing", () => {
     const saved = snapshot();
     const previous = globalThis.window;

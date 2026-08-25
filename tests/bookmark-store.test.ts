@@ -249,6 +249,17 @@ describe("bookmarkStore REST transport", () => {
     });
   });
 
+  it("rejects path segments that would escape the REST /api root", async () => {
+    configureRest();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.deleteBookmark("..")).rejects.toMatchObject({ status: 400 });
+    await expect(bookmarkStore.deleteBookmark(".")).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed reorder data before forwarding", async () => {
     configureRest();
     const fetchMock = vi.fn();

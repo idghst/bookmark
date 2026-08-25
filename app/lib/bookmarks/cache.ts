@@ -56,12 +56,16 @@ export function writeBookmarkCache(snapshot: BookmarkCacheSnapshot) {
   const storage = browserStorage();
   if (!storage) return;
 
-  storage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      ...snapshot,
-      folderSections: snapshot.folderSections ?? [],
-      version: CACHE_VERSION
-    })
-  );
+  try {
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...snapshot,
+        folderSections: snapshot.folderSections ?? [],
+        version: CACHE_VERSION
+      })
+    );
+  } catch {
+    // ponytail: quota/private mode; keep the in-memory screen working
+  }
 }

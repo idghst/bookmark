@@ -58,6 +58,32 @@ function errorMessage(payload: unknown, response: Response) {
   return response.statusText || "REST request failed.";
 }
 
+function resolveRestUrl(base: URL, path: string) {
+  const trimmed = path.replace(/^\/+/, "");
+  const queryIndex = trimmed.indexOf("?");
+  const pathname = queryIndex === -1 ? trimmed : trimmed.slice(0, queryIndex);
+  const search = queryIndex === -1 ? "" : trimmed.slice(queryIndex + 1);
+  const segments = pathname.split("/");
+  if (
+    segments.length === 0
+    || segments.some((segment) => {
+      try {
+        const decoded = decodeURIComponent(segment);
+        return !decoded || decoded === "." || decoded === "..";
+      } catch {
+        return true;
+      }
+    })
+  ) {
+    throw new StoreError("REST path is invalid.", 400);
+  }
+
+  const url = new URL(base);
+  url.pathname = `${base.pathname.replace(/\/+$/, "")}/${segments.join("/")}`;
+  url.search = search;
+  return url;
+}
+
 export async function restRequest<T>(
   path: string,
   options: RestRequestOptions = {}
@@ -69,7 +95,7 @@ export async function restRequest<T>(
   });
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(new URL(path.replace(/^\/+/, ""), config.url), {
+  const response = await fetch(resolveRestUrl(config.url, path), {
     method: options.method ?? "GET",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
