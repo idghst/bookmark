@@ -236,7 +236,6 @@ export default function BookmarksPage() {
       ]);
       if (isCancelled()) return false;
       const flatFolders = flattenFolderResponse(remoteFolders);
-      if (!flatFolders.length) throw new Error("폴더 데이터가 없습니다.");
       const stale = !reapplyOptimistic && (
         pendingOptimistic.current.size > 0 || mutationEpoch.current !== epochAtStart
       );
@@ -248,7 +247,11 @@ export default function BookmarksPage() {
         setSelection((current) => {
           if (current?.kind === "folder" && flatFolders.some((folder) => folder.id === current.id)) return current;
           if (current?.kind === "section" && remoteSections.some((section) => section.id === current.id)) return current;
-          return { kind: "folder", id: flatFolders[0].id };
+          return flatFolders[0]
+            ? { kind: "folder", id: flatFolders[0].id }
+            : remoteSections[0]
+              ? { kind: "section", id: remoteSections[0].id }
+              : null;
         });
       }
       pendingOptimistic.current.forEach((apply) => apply());

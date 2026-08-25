@@ -614,6 +614,39 @@ describe("section-first bookmark UI", () => {
     });
   });
 
+  it("keeps an empty live API instead of seeding sample bookmarks", async () => {
+    const setItem = vi.fn();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: vi.fn(() => null),
+        setItem,
+        removeItem: vi.fn()
+      }
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (
+        path === "/api/folders"
+        || path === "/api/sections"
+        || path === "/api/folder-sections"
+        || path === "/api/bookmarks"
+      ) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      return new Response(null, { status: 204 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BookmarksPage />);
+
+    expect(await screen.findByText("북마크가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /IDGHST Admin/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
+      expect(saved).toMatchObject({ apiBacked: true, folders: [], bookmarks: [] });
+    });
+  });
+
   it("keeps cache on remote failure and does not trust cached apiBacked", async () => {
     const cached = { ...bookmarks[0], id: "cached", title: "Cached" };
     const data = { folders, sections, bookmarks: [cached] };
