@@ -13,13 +13,31 @@ export function moveById<T extends { id: string; position: number }>(items: T[],
   return moveToIndex(items, activeId, from < to ? to + 1 : to);
 }
 
+export function insertEdgeFromPointer(
+  clientY: number,
+  rect: { top: number; height: number } | null | undefined
+): "before" | "after" {
+  if (!rect || rect.height <= 0) return "after";
+  return clientY < rect.top + rect.height / 2 ? "before" : "after";
+}
+
 export function insertIndexFromPointer(
   clientY: number,
   rect: { top: number; height: number } | null | undefined,
   targetIndex: number
 ) {
-  if (!rect || rect.height <= 0) return targetIndex + 1;
-  return clientY < rect.top + rect.height / 2 ? targetIndex : targetIndex + 1;
+  return insertEdgeFromPointer(clientY, rect) === "before" ? targetIndex : targetIndex + 1;
+}
+
+export function scrollFromPointer(
+  element: { getBoundingClientRect: () => { top: number; bottom: number }; scrollTop: number },
+  clientY: number,
+  edge = 48,
+  step = 18
+) {
+  const rect = element.getBoundingClientRect();
+  if (clientY < rect.top + edge) element.scrollTop -= step;
+  else if (clientY > rect.bottom - edge) element.scrollTop += step;
 }
 
 export function moveToIndex<T extends { id: string; position: number }>(

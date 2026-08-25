@@ -1,3 +1,4 @@
+import type { DragEvent } from "react";
 import { ExternalLink, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -7,10 +8,13 @@ import type { BookmarkItem } from "@/app/lib/bookmarks/types";
 import { bookmarkHost } from "@/app/lib/bookmarks/url";
 import { cn } from "@/lib/utils";
 
+type InsertEdge = "before" | "after";
+
 export function BookmarkCard({
   bookmark,
   dragging,
-  dragOver,
+  dropEdge,
+  canDrop,
   mutationsDisabled,
   onDragStart,
   onDragEnd,
@@ -23,12 +27,13 @@ export function BookmarkCard({
 }: {
   bookmark: BookmarkItem;
   dragging: boolean;
-  dragOver: boolean;
+  dropEdge: InsertEdge | null;
+  canDrop: boolean;
   mutationsDisabled: boolean;
   onDragStart: (bookmarkId: string) => void;
   onDragEnd: () => void;
-  onDragOver: (bookmarkId: string) => void;
-  onDrop: (bookmarkId: string) => void;
+  onDragOver: (bookmarkId: string, event: DragEvent<HTMLElement>) => void;
+  onDrop: (bookmarkId: string, event: DragEvent<HTMLElement>) => void;
   onEdit: (bookmark: BookmarkItem) => void;
   onDuplicate: (bookmark: BookmarkItem) => void;
   onDelete: (bookmark: BookmarkItem) => void;
@@ -41,25 +46,32 @@ export function BookmarkCard({
       className={cn(
         "group relative min-h-[120px] rounded-lg border border-[var(--border-subtle)] bg-white py-3 shadow-none transition",
         dragging ? "cursor-grabbing opacity-60" : "cursor-grab hover:border-[var(--color-brand)] hover:bg-white",
-        dragOver && "border-[var(--color-brand)] bg-indigo-50/60 ring-2 ring-[var(--color-brand)]/25"
+        dropEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
+        dropEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
       )}
+      data-drop-edge={dropEdge ?? undefined}
       draggable={!mutationsDisabled}
       role="link"
       tabIndex={0}
       onClick={openBookmark}
       onDragStart={(event) => {
         event.stopPropagation();
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
         onDragStart(bookmark.id);
       }}
       onDragEnd={onDragEnd}
       onDragOver={(event) => {
-        event.preventDefault();
-        onDragOver(bookmark.id);
-      }}
-      onDrop={(event) => {
+        if (!canDrop) return;
         event.preventDefault();
         event.stopPropagation();
-        onDrop(bookmark.id);
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        onDragOver(bookmark.id, event);
+      }}
+      onDrop={(event) => {
+        if (!canDrop) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onDrop(bookmark.id, event);
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") openBookmark();

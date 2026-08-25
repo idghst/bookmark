@@ -14,6 +14,7 @@ import {
 import { DropdownMenu } from "radix-ui";
 import { countBookmarks } from "@/app/lib/bookmarks/counts";
 import { buildSidebarGroups } from "@/app/lib/bookmarks/groups";
+import { insertEdgeFromPointer, scrollFromPointer } from "@/app/lib/bookmarks/positions";
 import { BRAND } from "@/app/lib/config/brand";
 import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 import { cn } from "@/lib/utils";
@@ -29,8 +30,10 @@ export type ConsoleSidebarProps = {
   selection: Selection | null;
   draggingFolderId: string | null;
   draggingSectionId: string | null;
+  draggingBookmarkId: string | null;
   dragOverFolderId: string | null;
   dragOverSectionId: string | null;
+  folderInsert: { id: string; edge: InsertEdge } | null;
   sectionInsertEdge: InsertEdge | null;
   onSelectFolder: (id: string) => void;
   onSelectSection: (id: string) => void;
@@ -45,10 +48,11 @@ export type ConsoleSidebarProps = {
   mutationsDisabled: boolean;
   onDragFolder: (folderId: string | null) => void;
   onDragSection: (sectionId: string | null) => void;
-  onDragOverFolder: (folderId: string | null) => void;
+  onDragOverFolder: (folderId: string | null, edge?: InsertEdge) => void;
   onDragOverSection: (sectionId: string | null, edge?: InsertEdge) => void;
-  onDropFolder: (folderId: string) => void;
+  onDropFolder: (folderId: string, event: DragEvent<HTMLElement>) => void;
   onDropFolderOnSection: (sectionId: string | null) => void;
+  onDropBookmarkOnFolder: (folderId: string) => void;
   onDropSection: (sectionId: string, event: DragEvent<HTMLElement>) => void;
   className?: string;
   id?: string;
@@ -87,7 +91,14 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
         <span className="mt-1 text-[10px] font-extrabold tracking-[0.08em] text-[#9CA3AF]">BOOKMARK CONSOLE</span>
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="북마크 폴더">
+      <nav
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4"
+        aria-label="북마크 폴더"
+        onDragOver={(event) => {
+          if (!props.draggingFolderId && !props.draggingSectionId && !props.draggingBookmarkId) return;
+          scrollFromPointer(event.currentTarget, event.clientY);
+        }}
+      >
         <div className="space-y-4">
           {groups.map((group) => {
             const sectionId = group.section?.id ?? null;
@@ -106,6 +117,8 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                 onDragOver={(event) => {
                   if (!props.draggingSectionId || !group.section) return;
                   event.preventDefault();
+                  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                  scrollFromPointer(event.currentTarget.closest("nav") ?? event.currentTarget, event.clientY);
                   const rect = event.currentTarget.getBoundingClientRect();
                   props.onDragOverSection(
                     group.section.id,
@@ -126,6 +139,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                     )}
                     draggable={!props.mutationsDisabled}
                     onDragStart={(event) => {
+                      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                       props.onDragSection(group.section?.id ?? null);
                       const groupEl = event.currentTarget.closest("section");
                       if (!groupEl) return;
@@ -137,6 +151,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       if (!props.draggingFolderId) return;
                       event.preventDefault();
                       event.stopPropagation();
+                      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
                       props.onDragOverSection(group.section?.id ?? null);
                     }}
                     onDrop={(event) => {
@@ -178,6 +193,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                     onDragOver={(event) => {
                       if (!props.draggingFolderId) return;
                       event.preventDefault();
+                      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
                       props.onDragOverSection("__none__");
                     }}
                     onDrop={(event) => {
@@ -192,36 +208,50 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   {group.folders.map((folder) => {
                     const active = props.selection?.kind === "folder" && props.selection.id === folder.id;
                     const count = countBookmarks(props.bookmarks, { folderId: folder.id, favoriteOnly: props.favoriteOnly });
-                    const sourceFolder = props.folders.find((item) => item.id === props.draggingFolderId);
-                    const sameSectionDrop = Boolean(
-                      sourceFolder && (sourceFolder.sectionId ?? null) === (folder.sectionId ?? null)
-                    );
+                    const insert = props.folderInsert?.id === folder.id ? props.folderInsert.edge : null;
+                    const dropInto = Boolean(props.draggingBookmarkId && props.dragOverFolderId === folder.id);
                     return (
                       <li
                         key={folder.id}
                         className={cn(
                           "group/folder flex min-h-9 items-center rounded-md",
                           props.draggingFolderId === folder.id && "opacity-60",
-                          sameSectionDrop && props.dragOverFolderId === folder.id && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
+                          insert === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
+                          insert === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]",
+                          dropInto && "bg-indigo-50/70 ring-2 ring-[var(--color-brand)]/25"
                         )}
+                        data-drop-edge={insert ?? undefined}
                         draggable={!props.mutationsDisabled}
-                        onDragStart={() => props.onDragFolder(folder.id)}
+                        onDragStart={(event) => {
+                          if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+                          props.onDragFolder(folder.id);
+                        }}
                         onDragEnd={() => props.onDragFolder(null)}
                         onDragOver={(event) => {
-                          if (!props.draggingFolderId) return;
-                          if (!sameSectionDrop) {
-                            props.onDragOverFolder(null);
+                          const nav = event.currentTarget.closest("nav");
+                          if (nav) scrollFromPointer(nav, event.clientY);
+                          if (props.draggingBookmarkId) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                            props.onDragOverFolder(folder.id);
                             return;
                           }
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onDragOverFolder(folder.id);
-                        }}
-                        onDrop={(event) => {
                           if (!props.draggingFolderId) return;
                           event.preventDefault();
                           event.stopPropagation();
-                          props.onDropFolder(folder.id);
+                          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          props.onDragOverFolder(folder.id, insertEdgeFromPointer(event.clientY, rect));
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (props.draggingBookmarkId) {
+                            props.onDropBookmarkOnFolder(folder.id);
+                            return;
+                          }
+                          if (props.draggingFolderId) props.onDropFolder(folder.id, event);
                         }}
                       >
                         <button

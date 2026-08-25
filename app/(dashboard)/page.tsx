@@ -30,10 +30,11 @@ import {
   applyPositions,
   createId,
   getPositionChanges,
+  insertEdgeFromPointer,
   insertIndexFromPointer,
-  moveById,
   moveToIndex,
   normalizePositions,
+  scrollFromPointer,
   updateMatchingPositions
 } from "@/app/lib/bookmarks/positions";
 import { INITIAL_BOOKMARKS, INITIAL_FOLDERS, INITIAL_SECTIONS } from "@/app/lib/bookmarks/sample-data";
@@ -103,8 +104,10 @@ export default function BookmarksPage() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverSectionId, setDragOverSectionId] = useState<string | null>(null);
   const [sectionInsertEdge, setSectionInsertEdge] = useState<"before" | "after" | null>(null);
+  const [folderInsert, setFolderInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
   const [folderSectionInsert, setFolderSectionInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
-  const [dragOverBookmarkId, setDragOverBookmarkId] = useState<string | null>(null);
+  const [bookmarkInsert, setBookmarkInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
+  const [dragStatus, setDragStatus] = useState("");
   const mutationQueues = useRef(new Map<string, Promise<void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
   const mutationEpoch = useRef(0);
@@ -113,6 +116,17 @@ export default function BookmarksPage() {
   persistRemoteRef.current = apiBacked || refreshing;
   const hasHydratedData = hydrated;
   const mutationsDisabled = !hasHydratedData;
+  const isDragging = Boolean(draggingFolderId || draggingSectionId || draggingFolderSectionId || draggingBookmarkId);
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-dragging", isDragging);
+    if (!isDragging) setDragStatus("");
+    return () => document.documentElement.removeAttribute("data-dragging");
+  }, [isDragging]);
+
+  function announceDrop(message: string) {
+    setDragStatus((current) => (current === message ? current : message));
+  }
 
   function noteMutation() {
     mutationEpoch.current += 1;
@@ -698,24 +712,55 @@ export default function BookmarksPage() {
     clearFolderDrag();
   }
 
-  function dropFolder(targetId: string) {
+  function dropFolder(targetId: string, event: { clientY: number; currentTarget: EventTarget }) {
     if (!draggingFolderId) return;
     const source = folders.find((folder) => folder.id === draggingFolderId);
     const target = folders.find((folder) => folder.id === targetId);
-    if (!source || !target || folderSectionId(source) !== folderSectionId(target)) return clearFolderDrag();
-    const scoped = folders.filter((folder) => folderSectionId(folder) === folderSectionId(source)).sort((a, b) => a.position - b.position);
-    const moved = moveById(scoped, source.id, target.id);
-    const changes = getPositionChanges(scoped, moved);
-    if (changes.length) {
-      persistOptimisticMutation(
-        `reorder:folders:${folderSectionId(source) ?? NO_SECTION}`,
-        () => setFolders((current) => applyPositions(current, moved)),
-        () => setFolders((current) => updateMatchingPositions(current, changes, "rollback")),
-        () => apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
-        "폴더 순서 저장에 실패했습니다.",
-        true
-      );
+    if (!source || !target || source.id === target.id) return clearFolderDrag();
+    const destSectionId = folderSectionId(target);
+    const destScoped = folders
+      .filter((folder) => folderSectionId(folder) === destSectionId)
+      .sort((a, b) => a.position - b.position);
+    const targetIndex = destScoped.findIndex((folder) => folder.id === targetId);
+    const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
+    const insertIndex = folderInsert?.id === targetId
+      ? (folderInsert.edge === "before" ? targetIndex : targetIndex + 1)
+      : insertIndexFromPointer(event.clientY, rect, targetIndex);
+    if (folderSectionId(source) === destSectionId) {
+      const moved = moveToIndex(destScoped, source.id, insertIndex);
+      const changes = getPositionChanges(destScoped, moved);
+      if (changes.length) {
+        persistOptimisticMutation(
+          `reorder:folders:${destSectionId ?? NO_SECTION}`,
+          () => setFolders((current) => applyPositions(current, moved)),
+          () => setFolders((current) => updateMatchingPositions(current, changes, "rollback")),
+          () => apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+          "폴더 순서 저장에 실패했습니다.",
+          true
+        );
+      }
+      clearFolderDrag();
+      return;
     }
+    const destWithout = destScoped.filter((folder) => folder.id !== source.id);
+    const nextDest = [...destWithout];
+    nextDest.splice(Math.max(0, Math.min(insertIndex, nextDest.length)), 0, { ...source, sectionId: destSectionId });
+    const destMoved = normalizePositions(nextDest);
+    const previousFolders = folders;
+    persistOptimisticMutation(
+      `move:folder:${source.id}`,
+      () => setFolders((current) => normalizeFolderPositions(applyPositions(
+        current.map((folder) => folder.id === source.id ? { ...folder, sectionId: destSectionId } : folder),
+        destMoved
+      ))),
+      () => setFolders(previousFolders),
+      async () => {
+        await apiRequest<Folder>(`/api/folders/${source.id}`, { method: "PATCH", body: JSON.stringify({ sectionId: destSectionId }) });
+        await apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(destMoved.map(({ id, position }) => ({ id, position }))) });
+      },
+      "폴더 이동에 실패했습니다.",
+      true
+    );
     clearFolderDrag();
   }
 
@@ -770,57 +815,104 @@ export default function BookmarksPage() {
     clearFolderSectionDrag();
   }
 
-  function dropBookmark(targetId: string) {
+  function dropBookmark(targetId: string, event: { clientY: number; currentTarget: EventTarget }) {
     if (!draggingBookmarkId) return;
     const source = bookmarks.find((bookmark) => bookmark.id === draggingBookmarkId);
     const target = bookmarks.find((bookmark) => bookmark.id === targetId);
-    if (!source || !target || source.folderId !== target.folderId) return clearBookmarkDrag();
-    const sourceSectionId = bookmarkFolderSectionId(source);
-    const targetSectionId = bookmarkFolderSectionId(target);
-    if (sourceSectionId !== targetSectionId) return clearBookmarkDrag();
-    const scoped = bookmarks
-      .filter((bookmark) => bookmark.folderId === source.folderId && bookmarkFolderSectionId(bookmark) === sourceSectionId)
+    if (!source || !target || source.id === target.id || !target.folderId) return clearBookmarkDrag();
+    const destFolderId = target.folderId;
+    const destSectionId = bookmarkFolderSectionId(target);
+    const destScoped = bookmarks
+      .filter((bookmark) => bookmark.folderId === destFolderId && bookmarkFolderSectionId(bookmark) === destSectionId)
       .sort((a, b) => a.position - b.position);
-    const moved = moveById(scoped, source.id, target.id);
-    const changes = getPositionChanges(scoped, moved);
-    if (changes.length) {
-      persistOptimisticMutation(
-        `reorder:bookmarks:${source.folderId}:${sourceSectionId ?? NO_SECTION}`,
-        () => setBookmarks((current) => applyPositions(current, moved)),
-        () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
-        () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
-        "북마크 순서 저장에 실패했습니다.",
-        true
-      );
-    }
-    clearBookmarkDrag();
-  }
-
-  function moveBookmarkToSection(source: BookmarkItem, folderSectionId: string | null, position?: number) {
-    if (source.folderId === null || bookmarkFolderSectionId(source) === folderSectionId) {
+    const targetIndex = destScoped.findIndex((bookmark) => bookmark.id === targetId);
+    const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
+    const insertIndex = bookmarkInsert?.id === targetId
+      ? (bookmarkInsert.edge === "before" ? targetIndex : targetIndex + 1)
+      : insertIndexFromPointer(event.clientY, rect, targetIndex);
+    if (source.folderId === destFolderId && bookmarkFolderSectionId(source) === destSectionId) {
+      const moved = moveToIndex(destScoped, source.id, insertIndex);
+      const changes = getPositionChanges(destScoped, moved);
+      if (changes.length) {
+        persistOptimisticMutation(
+          `reorder:bookmarks:${source.folderId}:${destSectionId ?? NO_SECTION}`,
+          () => setBookmarks((current) => applyPositions(current, moved)),
+          () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
+          () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+          "북마크 순서 저장에 실패했습니다.",
+          true
+        );
+      }
       clearBookmarkDrag();
       return;
     }
-    const nextPosition = position ?? bookmarks.filter((bookmark) => (
-      bookmark.folderId === source.folderId && bookmarkFolderSectionId(bookmark) === folderSectionId
-    )).length;
+    relocateBookmark(source, destFolderId, destSectionId, insertIndex);
+  }
+
+  function dropBookmarkOnFolder(folderId: string) {
+    if (!draggingBookmarkId) return;
+    const source = bookmarks.find((bookmark) => bookmark.id === draggingBookmarkId);
+    if (!source) return clearBookmarkDrag();
+    if (source.folderId === folderId && bookmarkFolderSectionId(source) === null) return clearBookmarkDrag();
+    relocateBookmark(source, folderId, null);
+  }
+
+  function relocateBookmark(
+    source: BookmarkItem,
+    folderId: string,
+    nextFolderSectionId: string | null,
+    insertIndex?: number
+  ) {
+    if (source.folderId === folderId && bookmarkFolderSectionId(source) === nextFolderSectionId && insertIndex === undefined) {
+      clearBookmarkDrag();
+      return;
+    }
+    const destWithout = bookmarks
+      .filter((bookmark) => (
+        bookmark.id !== source.id
+        && bookmark.folderId === folderId
+        && bookmarkFolderSectionId(bookmark) === nextFolderSectionId
+      ))
+      .sort((a, b) => a.position - b.position);
+    const nextDest = [...destWithout];
+    nextDest.splice(Math.max(0, Math.min(insertIndex ?? nextDest.length, nextDest.length)), 0, {
+      ...source,
+      folderId,
+      folderSectionId: nextFolderSectionId
+    });
+    const destMoved = normalizePositions(nextDest);
+    const body = source.folderId === folderId
+      ? { folderSectionId: nextFolderSectionId }
+      : { folderId, folderSectionId: nextFolderSectionId };
+    const previousBookmarks = bookmarks;
     persistOptimisticMutation(
       `move:bookmark:${source.id}`,
-      () => setBookmarks((current) => current.map((bookmark) => (
-        bookmark.id === source.id ? { ...bookmark, folderSectionId, position: nextPosition } : bookmark
-      ))),
-      () => setBookmarks((current) => current.map((bookmark) => (
-        bookmark.id === source.id
-          ? { ...bookmark, folderSectionId: bookmarkFolderSectionId(source), position: source.position }
-          : bookmark
-      ))),
-      () => apiRequest<BookmarkItem>(`/api/bookmarks/${source.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ folderSectionId })
-      }),
-      "북마크 이동에 실패했습니다."
+      () => setBookmarks((current) => applyPositions(
+        current.map((bookmark) => bookmark.id === source.id ? { ...bookmark, folderId, folderSectionId: nextFolderSectionId } : bookmark),
+        destMoved
+      )),
+      () => setBookmarks(previousBookmarks),
+      async () => {
+        await apiRequest<BookmarkItem>(`/api/bookmarks/${source.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        if (insertIndex !== undefined && destMoved.length > 1) {
+          await apiRequest<void>("/api/bookmarks/reorder", {
+            method: "POST",
+            body: JSON.stringify(destMoved.map(({ id, position }) => ({ id, position })))
+          });
+        }
+      },
+      "북마크 이동에 실패했습니다.",
+      true
     );
     clearBookmarkDrag();
+  }
+
+  function moveBookmarkToSection(source: BookmarkItem, nextFolderSectionId: string | null) {
+    if (source.folderId === null) {
+      clearBookmarkDrag();
+      return;
+    }
+    relocateBookmark(source, source.folderId, nextFolderSectionId);
   }
 
   function duplicateBookmark(bookmark: BookmarkItem) {
@@ -871,16 +963,21 @@ export default function BookmarksPage() {
     setDragOverFolderId(null);
     setDragOverSectionId(null);
     setSectionInsertEdge(null);
+    setFolderInsert(null);
+    setDragStatus("");
   }
 
   function clearFolderSectionDrag() {
     setDraggingFolderSectionId(null);
     setFolderSectionInsert(null);
+    setDragStatus("");
   }
 
   function clearBookmarkDrag() {
     setDraggingBookmarkId(null);
-    setDragOverBookmarkId(null);
+    setBookmarkInsert(null);
+    setDragOverFolderId(null);
+    setDragStatus("");
   }
 
   if (!hasHydratedData) return <BookmarksLoading />;
@@ -893,8 +990,10 @@ export default function BookmarksPage() {
     selection,
     draggingFolderId,
     draggingSectionId,
+    draggingBookmarkId,
     dragOverFolderId,
     dragOverSectionId,
+    folderInsert,
     sectionInsertEdge,
     onSelectFolder: selectFolder,
     onSelectSection: selectSection,
@@ -920,25 +1019,52 @@ export default function BookmarksPage() {
         setDragOverFolderId(null);
       }
     },
-    onDragOverFolder: (id: string | null) => {
+    onDragOverFolder: (id: string | null, edge?: "before" | "after") => {
       setDragOverFolderId(id);
-      if (id) {
+      if (!id) {
+        setFolderInsert(null);
+        return;
+      }
+      const folder = folders.find((item) => item.id === id);
+      if (draggingBookmarkId) {
+        setFolderInsert(null);
         setDragOverSectionId(null);
         setSectionInsertEdge(null);
+        if (folder) announceDrop(`${folder.name}으로 이동합니다.`);
+        return;
+      }
+      if (edge) {
+        setFolderInsert({ id, edge });
+        setDragOverSectionId(null);
+        setSectionInsertEdge(null);
+        if (folder) announceDrop(`${folder.name} ${edge === "before" ? "앞" : "뒤"}에 놓습니다.`);
       }
     },
     onDragOverSection: (id: string | null, edge?: "before" | "after") => {
       setDragOverSectionId(id);
       setSectionInsertEdge(edge ?? null);
-      if (id) setDragOverFolderId(null);
+      if (id) {
+        setDragOverFolderId(null);
+        setFolderInsert(null);
+      }
+      if (draggingFolderId && id && !edge) {
+        const name = id === "__none__" ? "섹션 없음" : sections.find((section) => section.id === id)?.name;
+        if (name) announceDrop(`${name}으로 이동합니다.`);
+      }
+      if (draggingSectionId && id && edge) {
+        const name = sections.find((section) => section.id === id)?.name;
+        if (name) announceDrop(`${name} ${edge === "before" ? "앞" : "뒤"}에 놓습니다.`);
+      }
     },
     onDropFolder: dropFolder,
     onDropFolderOnSection: moveFolderToSection,
+    onDropBookmarkOnFolder: dropBookmarkOnFolder,
     onDropSection: dropSection
   };
 
   return (
     <div className="fade-in flex h-full min-h-0 overflow-hidden bg-white" aria-busy={!hasHydratedData}>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{dragStatus}</div>
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="북마크 메뉴">
@@ -974,7 +1100,15 @@ export default function BookmarksPage() {
           </div>
         </header>
 
-        <main id="bookmark-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]">
+        <main
+          id="bookmark-content"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto bg-[#F8FAFC]"
+          onDragOver={(event) => {
+            if (!draggingBookmarkId && !draggingFolderSectionId) return;
+            scrollFromPointer(event.currentTarget, event.clientY);
+          }}
+        >
           <div className="mx-auto w-full max-w-[1480px] space-y-4 p-[clamp(0.75rem,2vw,2rem)]">
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
@@ -1003,15 +1137,17 @@ export default function BookmarksPage() {
                   onDragOver={(event) => {
                     if (draggingFolderSectionId && group.folderSection) {
                       event.preventDefault();
+                      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
                       const rect = event.currentTarget.getBoundingClientRect();
-                      setFolderSectionInsert({
-                        id: group.folderSection.id,
-                        edge: event.clientY < rect.top + rect.height / 2 ? "before" : "after"
-                      });
+                      const edge = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                      setFolderSectionInsert({ id: group.folderSection.id, edge });
+                      announceDrop(`${group.label} ${edge === "before" ? "앞" : "뒤"}에 놓습니다.`);
                       return;
                     }
                     if (!draggingBookmarkId) return;
                     event.preventDefault();
+                    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                    announceDrop(`${group.label}으로 이동합니다.`);
                   }}
                   onDrop={(event) => {
                     event.preventDefault();
@@ -1020,7 +1156,11 @@ export default function BookmarksPage() {
                       return;
                     }
                     const source = bookmarks.find((item) => item.id === draggingBookmarkId);
-                    if (!source || source.folderId !== group.folder.id) return clearBookmarkDrag();
+                    if (!source || !group.folder.id) return clearBookmarkDrag();
+                    if (source.folderId !== group.folder.id) {
+                      relocateBookmark(source, group.folder.id, group.folderSection?.id ?? null);
+                      return;
+                    }
                     moveBookmarkToSection(source, group.folderSection?.id ?? null);
                   }}
                 >
@@ -1045,26 +1185,62 @@ export default function BookmarksPage() {
                     />
                   )}
                 </div>
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4" aria-label={`${group.label} 북마크, 드래그해서 위치 변경`}>
+                <div
+                  className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4"
+                  aria-label={`${group.label} 북마크, 드래그해서 위치 변경`}
+                  onDragOver={(event) => {
+                    if (!draggingBookmarkId) return;
+                    event.preventDefault();
+                    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                    setBookmarkInsert(null);
+                    announceDrop(`${group.label}으로 이동합니다.`);
+                  }}
+                  onDrop={(event) => {
+                    if (!draggingBookmarkId) return;
+                    event.preventDefault();
+                    const source = bookmarks.find((item) => item.id === draggingBookmarkId);
+                    if (!source) return clearBookmarkDrag();
+                    if (
+                      source.folderId === group.folder.id
+                      && bookmarkFolderSectionId(source) === (group.folderSection?.id ?? null)
+                    ) {
+                      const scoped = bookmarks
+                        .filter((item) => item.folderId === source.folderId && bookmarkFolderSectionId(item) === bookmarkFolderSectionId(source))
+                        .sort((a, b) => a.position - b.position);
+                      const moved = moveToIndex(scoped, source.id, scoped.length);
+                      const changes = getPositionChanges(scoped, moved);
+                      if (changes.length) {
+                        persistOptimisticMutation(
+                          `reorder:bookmarks:${source.folderId}:${bookmarkFolderSectionId(source) ?? NO_SECTION}`,
+                          () => setBookmarks((current) => applyPositions(current, moved)),
+                          () => setBookmarks((current) => updateMatchingPositions(current, changes, "rollback")),
+                          () => apiRequest<void>("/api/bookmarks/reorder", { method: "POST", body: JSON.stringify(moved.map(({ id, position }) => ({ id, position }))) }),
+                          "북마크 순서 저장에 실패했습니다.",
+                          true
+                        );
+                      }
+                      clearBookmarkDrag();
+                      return;
+                    }
+                    relocateBookmark(source, group.folder.id, group.folderSection?.id ?? null);
+                  }}
+                >
                   {group.items.map((bookmark) => (
                     <BookmarkCard
                       key={bookmark.id}
                       bookmark={bookmark}
                       dragging={draggingBookmarkId === bookmark.id}
-                      dragOver={dragOverBookmarkId === bookmark.id}
+                      dropEdge={bookmarkInsert?.id === bookmark.id ? bookmarkInsert.edge : null}
+                      canDrop={Boolean(draggingBookmarkId && draggingBookmarkId !== bookmark.id)}
                       mutationsDisabled={mutationsDisabled}
                       onDragStart={setDraggingBookmarkId}
                       onDragEnd={clearBookmarkDrag}
-                      onDragOver={(id) => {
-                        const source = bookmarks.find((item) => item.id === draggingBookmarkId);
+                      onDragOver={(id, event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const edge = insertEdgeFromPointer(event.clientY, rect);
+                        setBookmarkInsert({ id, edge });
                         const target = bookmarks.find((item) => item.id === id);
-                        setDragOverBookmarkId(
-                          source && target
-                            && source.folderId === target.folderId
-                            && bookmarkFolderSectionId(source) === bookmarkFolderSectionId(target)
-                            ? id
-                            : null
-                        );
+                        if (target) announceDrop(`${target.title} ${edge === "before" ? "앞" : "뒤"}에 놓습니다.`);
                       }}
                       onDrop={dropBookmark}
                       onEdit={openBookmarkDialog}

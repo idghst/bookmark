@@ -281,7 +281,7 @@ describe("section-first bookmark UI", () => {
     expect(within(nav).queryByText("프로젝트")).not.toBeInTheDocument();
   });
 
-  it("reorders bookmarks only within the same folder", async () => {
+  it("reorders bookmarks within the same folder", async () => {
     const { fetchMock } = setup();
     const first = await screen.findByRole("link", { name: /프로젝트 A/ });
     const second = screen.getByRole("link", { name: /프로젝트 B/ });
@@ -290,15 +290,20 @@ describe("section-first bookmark UI", () => {
     fireEvent.drop(second);
     await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
     expect(mutations(fetchMock)[0][0]).toBe("/api/bookmarks/reorder");
+  });
 
-    fireEvent.dragStart(screen.getByRole("link", { name: /프로젝트 A/ }));
+  it("moves a bookmark to another folder when dropped on that folder's card", async () => {
+    const { fetchMock } = setup();
+    fireEvent.dragStart(await screen.findByRole("link", { name: /프로젝트 A/ }));
     const otherFolder = screen.getByRole("link", { name: /운영 A/ });
     fireEvent.dragOver(otherFolder);
     fireEvent.drop(otherFolder);
-    expect(mutations(fetchMock)).toHaveLength(1);
+    await waitFor(() => expect(mutations(fetchMock).some(([path]) => path === "/api/bookmarks/p1")).toBe(true));
+    const patch = mutations(fetchMock).find(([path]) => path === "/api/bookmarks/p1");
+    expect(JSON.parse(String(patch?.[1]?.body))).toMatchObject({ folderId: "operations" });
   });
 
-  it("moves a bookmark to another section only when dropped on that section header", async () => {
+  it("moves a bookmark to another section when dropped on a card there", async () => {
     const folderSections: FolderSection[] = [
       { id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 },
       { id: "weekly", name: "주간", color: "#16a34a", folderId: "projects", position: 1 }
@@ -315,9 +320,24 @@ describe("section-first bookmark UI", () => {
     fireEvent.dragStart(source);
     fireEvent.dragOver(otherCard);
     fireEvent.drop(otherCard);
-    expect(mutations(fetchMock)).toHaveLength(0);
+    await waitFor(() => expect(mutations(fetchMock).some(([path]) => path === "/api/bookmarks/p1")).toBe(true));
+    const patch = mutations(fetchMock).find(([path]) => path === "/api/bookmarks/p1");
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ folderSectionId: "weekly" });
+  });
 
-    fireEvent.dragStart(screen.getByRole("link", { name: /프로젝트 A/ }));
+  it("still moves a bookmark when dropped on another section header", async () => {
+    const folderSections: FolderSection[] = [
+      { id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 },
+      { id: "weekly", name: "주간", color: "#16a34a", folderId: "projects", position: 1 }
+    ];
+    const scoped: BookmarkItem[] = [
+      { ...bookmarks[0], folderSectionId: "daily", position: 0 },
+      { ...bookmarks[1], folderSectionId: "weekly", position: 0 }
+    ];
+    const { fetchMock } = setup({ folders, sections, bookmarks: scoped, folderSections });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.click(within(nav).getByRole("button", { name: "프로젝트 2" }));
+    fireEvent.dragStart(await screen.findByRole("link", { name: /프로젝트 A/ }));
     fireEvent.drop(screen.getByRole("heading", { name: "주간" }));
     await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
     expect(mutations(fetchMock)[0][0]).toBe("/api/bookmarks/p1");
@@ -344,12 +364,102 @@ describe("section-first bookmark UI", () => {
     ]);
   });
 
-  it("does not highlight a folder in another section as a drop target", async () => {
+  it("shows an insert line when a folder is dragged over a folder in another section", async () => {
     setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const target = within(nav).getByRole("button", { name: "프로젝트 2" });
+    mockRect(100, 40);
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
+    firePointerDrag(target, "dragover", 110);
+    expect(target.closest("li")).toHaveAttribute("data-drop-edge", "before");
+  });
+
+  it("moves a folder into another section when dropped on a folder there", async () => {
+    const { fetchMock } = setup();
     const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
     fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
     fireEvent.dragOver(within(nav).getByRole("button", { name: "프로젝트 2" }));
-    expect(within(nav).getByRole("button", { name: "프로젝트 2" }).closest("li")).not.toHaveClass("ring-2");
+    fireEvent.drop(within(nav).getByRole("button", { name: "프로젝트 2" }));
+    await waitFor(() => expect(mutations(fetchMock).some(([path]) => path === "/api/folders/loose")).toBe(true));
+    expect(JSON.parse(String(mutations(fetchMock).find(([path]) => path === "/api/folders/loose")?.[1]?.body))).toEqual({
+      sectionId: "work"
+    });
+    expect(within(within(nav).getByRole("region", { name: "업무" })).getByText("미분류")).toBeInTheDocument();
+    expect(folderNamesInSection("업무")).toEqual(["프로젝트", "미분류", "운영"]);
+  });
+
+  it("unsections a bookmark when dropped on its own sidebar folder", async () => {
+    const folderSections: FolderSection[] = [
+      { id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 }
+    ];
+    const scoped: BookmarkItem[] = [{ ...bookmarks[0], folderSectionId: "daily", position: 0 }];
+    const { fetchMock } = setup({ folders, sections, bookmarks: scoped, folderSections });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.click(within(nav).getByRole("button", { name: "프로젝트 1" }));
+    fireEvent.dragStart(await screen.findByRole("link", { name: /프로젝트 A/ }));
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "프로젝트 1" }));
+    fireEvent.drop(within(nav).getByRole("button", { name: "프로젝트 1" }));
+    await waitFor(() => expect(mutations(fetchMock).some(([path]) => path === "/api/bookmarks/p1")).toBe(true));
+    expect(JSON.parse(String(mutations(fetchMock).find(([path]) => path === "/api/bookmarks/p1")?.[1]?.body))).toEqual({
+      folderSectionId: null
+    });
+  });
+
+  it("moves a bookmark to a sidebar folder when dropped on that folder", async () => {
+    const { fetchMock } = setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragStart(await screen.findByRole("link", { name: /프로젝트 A/ }));
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "운영 1" }));
+    fireEvent.drop(within(nav).getByRole("button", { name: "운영 1" }));
+    await waitFor(() => expect(mutations(fetchMock).some(([path]) => path === "/api/bookmarks/p1")).toBe(true));
+    expect(JSON.parse(String(mutations(fetchMock).find(([path]) => path === "/api/bookmarks/p1")?.[1]?.body))).toEqual({
+      folderId: "operations",
+      folderSectionId: null
+    });
+    expect(within(nav).getByRole("button", { name: "운영 2" })).toBeInTheDocument();
+  });
+
+  it("shows an insert line when dragging a bookmark over another card", async () => {
+    setup();
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    const target = screen.getByRole("link", { name: /프로젝트 B/ });
+    mockRect(100, 40);
+    fireEvent.dragStart(source);
+    firePointerDrag(target, "dragover", 110);
+    expect(target).toHaveAttribute("data-drop-edge", "before");
+  });
+
+  it("announces the drop position while dragging", async () => {
+    setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const target = within(nav).getByRole("button", { name: "프로젝트 2" });
+    mockRect(100, 40);
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
+    firePointerDrag(target, "dragover", 110);
+    expect(screen.getByText("프로젝트 앞에 놓습니다.")).toBeInTheDocument();
+  });
+
+  it("reorders folders by drop position instead of swapping onto the target", async () => {
+    const extra: Folder[] = [
+      { id: "a", name: "폴더A", color: "#4f46e5", sectionId: "work", position: 0 },
+      { id: "b", name: "폴더B", color: "#d97706", sectionId: "work", position: 1 },
+      { id: "c", name: "폴더C", color: "#2166d7", sectionId: "work", position: 2 }
+    ];
+    const { fetchMock } = setup({ folders: extra, sections: [sections[0]], bookmarks: [] });
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    const source = within(nav).getByRole("button", { name: "폴더A 0" });
+    const target = within(nav).getByRole("button", { name: "폴더C 0" });
+    mockRect(100, 40);
+    fireEvent.dragStart(source);
+    firePointerDrag(target, "dragover", 110);
+    firePointerDrag(target, "drop", 110);
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(mutations(fetchMock)[0][0]).toBe("/api/folders/reorder");
+    expect(JSON.parse(String(mutations(fetchMock)[0][1]?.body))).toEqual([
+      { id: "b", position: 0 },
+      { id: "a", position: 1 },
+      { id: "c", position: 2 }
+    ]);
   });
 
   it("does not highlight a folder while a sidebar section is being dragged", async () => {

@@ -76,6 +76,11 @@ body {
   overscroll-behavior: none;
 }
 
+html[data-dragging],
+html[data-dragging] * {
+  cursor: grabbing !important;
+}
+
 h1,
 h2,
 h3,

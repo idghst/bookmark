@@ -6,6 +6,7 @@ import {
   moveById,
   moveToIndex,
   normalizePositions,
+  scrollFromPointer,
   updateMatchingPositions
 } from "@/app/lib/bookmarks/positions";
 
@@ -35,6 +36,16 @@ describe("bookmark positions", () => {
     expect(insertIndexFromPointer(110, rect, 2)).toBe(2);
     expect(insertIndexFromPointer(130, rect, 2)).toBe(3);
     expect(insertIndexFromPointer(0, { top: 0, height: 0 }, 1)).toBe(2);
+  });
+
+  it("scrolls a container when the pointer sits on an edge", () => {
+    const box = { getBoundingClientRect: () => ({ top: 0, bottom: 200 }), scrollTop: 80 };
+    scrollFromPointer(box, 10);
+    expect(box.scrollTop).toBe(62);
+    scrollFromPointer(box, 190);
+    expect(box.scrollTop).toBe(80);
+    scrollFromPointer(box, 100);
+    expect(box.scrollTop).toBe(80);
   });
 
   it("moves an item to an insert index without swapping past the intended gap", () => {
