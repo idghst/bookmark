@@ -262,20 +262,23 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                           aria-current={active ? "page" : undefined}
                           onClick={() => props.onSelectFolder(folder.id)}
                           className={cn(
-                            "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
+                            "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
                             active
-                              ? "bg-[var(--surface-canvas)] text-[var(--text-heading)]"
-                              : "text-[var(--text-secondary)] hover:bg-[var(--surface-canvas)] hover:text-[var(--text-heading)]"
+                              ? "bg-[var(--surface-canvas)] font-semibold text-[var(--text-heading)] shadow-[0_1px_2px_rgba(20,20,19,0.04)]"
+                              : "text-[var(--text-secondary)] hover:bg-[var(--surface-canvas)]/70 hover:text-[var(--text-heading)]"
                           )}
                         >
                           <FolderIcon
                             data-folder-color={folder.color ?? "#797979"}
-                            className="h-4 w-4 shrink-0"
+                            className="h-4 w-4 shrink-0 transition-transform group-hover/folder:scale-105"
                             style={{ color: folder.color ?? "#797979" }}
                             aria-hidden="true"
                           />
                           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-                          <span className="text-xs font-medium tabular-nums text-[var(--text-muted)]">{count}</span>
+                          <span className={cn(
+                            "rounded px-1.5 py-0.5 text-xs font-medium tabular-nums transition-colors",
+                            active ? "bg-[var(--surface-soft)] text-[var(--text-heading)] font-semibold" : "text-[var(--text-muted)]"
+                          )}>{count}</span>
                         </button>
                         <ActionsMenu
                           label={folder.name}
@@ -297,7 +300,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           type="button"
           disabled={props.mutationsDisabled}
           onClick={props.onAddSection}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--color-brand)] disabled:opacity-40"
+          className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)] hover:text-[var(--color-brand)] active:scale-[0.99] disabled:opacity-40"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />새 섹션
         </button>
@@ -305,7 +308,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           type="button"
           disabled={props.mutationsDisabled}
           onClick={props.onAddFolder}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--color-brand)] disabled:opacity-40"
+          className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)] hover:text-[var(--color-brand)] active:scale-[0.99] disabled:opacity-40"
         >
           <FolderPlus className="h-4 w-4" aria-hidden="true" />새 폴더
         </button>
@@ -332,7 +335,7 @@ function ActionsMenu({
           type="button"
           disabled={mutationsDisabled}
           aria-label={`${label} 메뉴`}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-canvas)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] opacity-60 transition hover:opacity-100 hover:bg-[var(--surface-canvas)] hover:text-[var(--color-brand)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -343,13 +346,13 @@ function ActionsMenu({
           side="bottom"
           align="end"
           sideOffset={6}
-          className="z-[80] min-w-36 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1 shadow-lg outline-none"
+          className="z-[80] min-w-36 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1.5 shadow-[0_8px_24px_rgba(20,20,19,0.08)] outline-none"
         >
-          <DropdownMenu.Item onSelect={onEdit} className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
+          <DropdownMenu.Item onSelect={onEdit} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
             <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />편집
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-          <DropdownMenu.Item onSelect={onDelete} className="flex h-9 cursor-pointer items-center gap-2 rounded px-3 text-sm font-medium text-destructive outline-none hover:bg-red-50 focus:bg-red-50">
+          <DropdownMenu.Item onSelect={onDelete} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-destructive transition-colors outline-none hover:bg-red-50 focus:bg-red-50">
             <Trash2 className="h-4 w-4" aria-hidden="true" />삭제
           </DropdownMenu.Item>
         </DropdownMenu.Content>

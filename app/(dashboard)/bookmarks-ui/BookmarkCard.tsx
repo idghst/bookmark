@@ -44,8 +44,8 @@ export function BookmarkCard({
   return (
     <Card
       className={cn(
-        "group relative min-h-[120px] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] py-3 shadow-none ring-0 transition",
-        dragging ? "cursor-grabbing opacity-60" : "cursor-grab hover:border-[var(--color-brand)]",
+        "group relative min-h-[120px] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] py-3 shadow-none ring-0 transition duration-150",
+        dragging ? "cursor-grabbing opacity-60" : "cursor-grab hover:-translate-y-[1px] hover:border-[var(--color-brand)] hover:shadow-[0_4px_12px_rgba(20,20,19,0.05)]",
         dropEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
         dropEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
       )}
@@ -79,11 +79,11 @@ export function BookmarkCard({
     >
       <CardHeader className="px-4 pb-0">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-soft)]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] shadow-sm">
             <Favicon url={bookmark.url} />
           </div>
           <div className="min-w-0 w-0 flex-1 space-y-1">
-            <span className="block truncate text-base font-medium tracking-[-0.02em] text-[var(--text-heading)]">{bookmark.title}</span>
+            <span className="block truncate text-base font-medium tracking-[-0.02em] text-[var(--text-heading)] transition-colors group-hover:text-[var(--color-brand-dark)]">{bookmark.title}</span>
             <p aria-label={bookmark.url} className="line-clamp-1 break-all text-xs leading-5 text-[var(--text-muted)]">
               <span aria-hidden="true">{bookmarkHost(bookmark.url)}</span>
             </p>
@@ -105,7 +105,7 @@ export function BookmarkCard({
               variant="ghost"
               size="icon-xs"
               disabled={mutationsDisabled}
-              className="h-10 w-10 border border-[var(--border-subtle)] bg-[var(--surface-soft)]"
+              className="h-10 w-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)]"
               onClick={() => onToggleFavorite(bookmark.id)}
             >
               <Star className={cn("h-4 w-4", bookmark.isFavorite ? "fill-[var(--color-brand)] text-[var(--color-brand)]" : "text-[var(--text-muted)]")} />
@@ -114,7 +114,7 @@ export function BookmarkCard({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="h-10 w-10 border border-[var(--border-subtle)] bg-[var(--surface-soft)]"
+              className="h-10 w-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)]"
               onClick={openBookmark}
             >
               <ExternalLink className="h-4 w-4" />
