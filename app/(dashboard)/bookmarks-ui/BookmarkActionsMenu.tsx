@@ -1,5 +1,6 @@
 import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { BookmarkItem } from "@/app/lib/bookmarks/types";
 
 export function BookmarkActionsMenu({
@@ -21,50 +22,34 @@ export function BookmarkActionsMenu({
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             disabled={mutationsDisabled}
             aria-label={`${bookmark.title} 메뉴`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            aria-label={`${bookmark.title} 메뉴`}
-            side="bottom"
-            align="end"
-            sideOffset={6}
-            className="z-[80] min-w-32 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1.5 shadow-[0_8px_24px_rgba(20,20,19,0.08)] outline-none"
-          >
-            <DropdownMenu.Item
-              onSelect={() => onEdit(bookmark)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]"
-            >
-              <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-              편집
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={() => onDuplicate(bookmark)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]"
-            >
-              <Copy className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-              복제
-            </DropdownMenu.Item>
-            <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-            <DropdownMenu.Item
-              onSelect={() => onDelete(bookmark)}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-destructive transition-colors outline-none hover:bg-red-50 focus:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              삭제
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
+            <MoreHorizontal aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent aria-label={`${bookmark.title} 메뉴`} align="end">
+          <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={() => onEdit(bookmark)}>
+              <Pencil aria-hidden="true" />편집
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onDuplicate(bookmark)}>
+              <Copy aria-hidden="true" />복제
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={() => onDelete(bookmark)} variant="destructive">
+              <Trash2 aria-hidden="true" />삭제
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

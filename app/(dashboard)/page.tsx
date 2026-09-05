@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Menu, Plus, Search, Star, X } from "lucide-react";
+import { Bookmark, LoaderCircle, Menu, Plus, Search, Star, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ConsoleSidebar } from "@/app/(dashboard)/ConsoleSidebar";
 import { BookmarkCard } from "@/app/(dashboard)/bookmarks-ui/BookmarkCard";
@@ -1063,7 +1064,7 @@ export default function BookmarksPage() {
   };
 
   return (
-    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-[var(--surface-canvas)]" aria-busy={!hasHydratedData}>
+    <div className="flex h-full min-h-0 overflow-hidden bg-background" aria-busy={!hasHydratedData}>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{dragStatus}</div>
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
@@ -1074,7 +1075,7 @@ export default function BookmarksPage() {
       ) : null}
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 py-2 lg:hidden">
+        <header className="shrink-0 border-b border-border bg-background px-3 py-2 lg:hidden">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)} aria-controls="mobile-console-sidebar">
               <Menu className="h-5 w-5" /><span className="sr-only">폴더 메뉴 열기</span>
@@ -1084,18 +1085,18 @@ export default function BookmarksPage() {
           </div>
           <SearchBox query={query} setQuery={setQuery} className="mt-2" />
         </header>
-        <header className={cn("hidden shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-5 lg:grid", BOOKMARK_APP_HEADER_CLASS)}>
+        <header className={cn("hidden shrink-0 grid-cols-[minmax(0,1fr)_minmax(10rem,1.5fr)_auto] items-center gap-3 border-b border-border bg-background px-5 lg:grid", BOOKMARK_APP_HEADER_CLASS)}>
           <PageTitle name={activeName} color={activeColor} count={currentCount} />
           <SearchBox query={query} setQuery={setQuery} />
           <div className="flex items-center gap-2">
             <FavoriteButton count={favoriteCount} active={favoriteOnly} onClick={() => setFavoriteOnly((value) => !value)} />
             {selectedFolder ? (
-              <Button size="sm" variant="outline" disabled={mutationsDisabled} onClick={() => openFolderSectionDialog(undefined, selectedFolder.id)} className="h-10 px-3 text-sm">
-                <Plus className="h-4 w-4" />섹션 추가
+              <Button variant="outline" disabled={mutationsDisabled} onClick={() => openFolderSectionDialog(undefined, selectedFolder.id)}>
+                <Plus data-icon="inline-start" />섹션 추가
               </Button>
             ) : null}
-            <Button size="sm" disabled={mutationsDisabled || !visibleFolders.length} onClick={() => openBookmarkDialog()} className="h-10 px-3 text-sm">
-              <Plus className="h-4 w-4" />북마크 추가
+            <Button disabled={mutationsDisabled || !visibleFolders.length} onClick={() => openBookmarkDialog()}>
+              <Plus data-icon="inline-start" />북마크 추가
             </Button>
           </div>
         </header>
@@ -1103,28 +1104,28 @@ export default function BookmarksPage() {
         <main
           id="bookmark-content"
           tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-canvas)]"
+          className="min-h-0 flex-1 overflow-y-auto bg-background"
           onDragOver={(event) => {
             if (!draggingBookmarkId && !draggingFolderSectionId) return;
             scrollFromPointer(event.currentTarget, event.clientY);
           }}
         >
-          <div className="mx-auto w-full max-w-[1480px] space-y-4 p-[clamp(0.75rem,2vw,2rem)]">
-            {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
+          <div className="mx-auto w-full max-w-[1480px] flex flex-col gap-6 p-[clamp(0.75rem,2vw,2rem)]">
+            {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
-              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-6 text-center">
-                <div className="mb-3 h-1.5 w-12 rounded-full bg-[var(--color-brand)]" />
-                <p className="font-medium text-[var(--text-heading)]">{query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다."}</p>
+              <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 text-center">
+                <Bookmark className="size-8 text-muted-foreground" aria-hidden="true" />
+                <p className="font-medium text-foreground">{query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다."}</p>
               </div>
             ) : groups.map((group) => (
-              <section key={group.key} className="space-y-3">
+              <section key={group.key} className="flex flex-col gap-3">
                 <div
                   className={cn(
                     BOOKMARK_SECTION_HEADER_CLASS,
                     draggingFolderSectionId === group.folderSection?.id && "opacity-60",
-                    draggingBookmarkId && "ring-1 ring-transparent hover:ring-[var(--color-brand)]/30",
-                    folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
-                    folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
+                    draggingBookmarkId && "ring-1 ring-transparent hover:ring-ring/30",
+                    folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
+                    folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
                   )}
                   draggable={Boolean(group.folderSection) && !mutationsDisabled}
                   onDragStart={(event) => {
@@ -1165,8 +1166,8 @@ export default function BookmarksPage() {
                   }}
                 >
                   <span data-folder-color={group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK} className="h-6 w-1 rounded-full" style={{ backgroundColor: group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
-                  <h2 className="min-w-0 flex-1 truncate text-lg font-medium tracking-[-0.02em] text-[var(--text-heading)]">{group.label}</h2>
-                  <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{group.items.length}</span>
+                  <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{group.label}</h2>
+                  <Badge variant="secondary" className="tabular-nums">{group.items.length}</Badge>
                   {group.folderSection ? (
                     <FolderSectionActionsMenu
                       folderSection={group.folderSection}
@@ -1258,23 +1259,23 @@ export default function BookmarksPage() {
 
       {bookmarkDialog ? (
         <Modal title={bookmarkDialog.mode === "edit" ? "북마크 편집" : "북마크 추가"} onClose={() => setBookmarkDialog(null)} closeDisabled={saving}>
-          <form className="space-y-4" onSubmit={saveBookmark}>
+          <form className="flex flex-col gap-4" onSubmit={saveBookmark}>
             <Field label="URL"><Input type="url" value={bookmarkDraft.url} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, url: event.target.value }))} /></Field>
             <Field label="제목"><Input value={bookmarkDraft.title} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, title: event.target.value }))} /></Field>
             <Field label="설명"><Textarea value={bookmarkDraft.description} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, description: event.target.value }))} rows={2} /></Field>
             <Field label="폴더">
               <Select value={bookmarkDraft.folderId} onValueChange={(folderId) => setBookmarkDraft((draft) => ({ ...draft, folderId, folderSectionId: NO_SECTION }))}>
-                <SelectTrigger aria-label="폴더"><SelectValue /></SelectTrigger>
-                <SelectContent>{orderedFolders.map((folder) => <SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="w-full" aria-label="폴더"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectGroup>{orderedFolders.map((folder) => <SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
             </Field>
             <Field label="섹션">
               <Select value={bookmarkDraft.folderSectionId} onValueChange={(folderSectionId) => setBookmarkDraft((draft) => ({ ...draft, folderSectionId }))}>
-                <SelectTrigger aria-label="섹션"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className="w-full" aria-label="섹션"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectGroup>
                   <SelectItem value={NO_SECTION}>섹션 없음</SelectItem>
                   {folderSectionsForDraft.map((section) => <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>)}
-                </SelectContent>
+                </SelectGroup></SelectContent>
               </Select>
             </Field>
             <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookmarkDraft.isFavorite} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, isFavorite: event.target.checked }))} />즐겨찾기</label>
@@ -1285,15 +1286,15 @@ export default function BookmarksPage() {
 
       {folderDialog ? (
         <Modal title={folderDialog.mode === "edit" ? "폴더 편집" : "새 폴더"} onClose={() => setFolderDialog(null)} closeDisabled={saving}>
-          <form className="space-y-4" onSubmit={saveFolder}>
+          <form className="flex flex-col gap-4" onSubmit={saveFolder}>
             <Field label="이름"><Input value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
             <Field label="섹션">
               <Select value={folderDraft.sectionId} onValueChange={(sectionId) => setFolderDraft((draft) => ({ ...draft, sectionId }))}>
-                <SelectTrigger aria-label="섹션"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className="w-full" aria-label="섹션"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectGroup>
                   <SelectItem value={NO_SECTION}>섹션 없음</SelectItem>
                   {orderedSections.map((section) => <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>)}
-                </SelectContent>
+                </SelectGroup></SelectContent>
               </Select>
             </Field>
             <ColorPicker color={folderDraft.color} onChange={(color) => setFolderDraft((draft) => ({ ...draft, color }))} />
@@ -1304,7 +1305,7 @@ export default function BookmarksPage() {
 
       {sectionDialog ? (
         <Modal title={sectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setSectionDialog(null)} closeDisabled={saving}>
-          <form className="space-y-4" onSubmit={saveSection}>
+          <form className="flex flex-col gap-4" onSubmit={saveSection}>
             <Field label="이름"><Input value={sectionDraft.name} onChange={(event) => setSectionDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
             <ColorPicker color={sectionDraft.color} allowDefault onChange={(color) => setSectionDraft((draft) => ({ ...draft, color }))} />
             <FormFooter saving={saving} error={formError} onCancel={() => setSectionDialog(null)} />
@@ -1314,7 +1315,7 @@ export default function BookmarksPage() {
 
       {folderSectionDialog ? (
         <Modal title={folderSectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setFolderSectionDialog(null)} closeDisabled={saving}>
-          <form className="space-y-4" onSubmit={saveFolderSection}>
+          <form className="flex flex-col gap-4" onSubmit={saveFolderSection}>
             <Field label="이름"><Input value={folderSectionDraft.name} onChange={(event) => setFolderSectionDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
             <ColorPicker color={folderSectionDraft.color} allowDefault onChange={(color) => setFolderSectionDraft((draft) => ({ ...draft, color }))} />
             <FormFooter saving={saving} error={formError} onCancel={() => setFolderSectionDialog(null)} />
@@ -1324,7 +1325,7 @@ export default function BookmarksPage() {
 
       {deleteTarget ? (
         <Modal title={`${deleteTarget.type === "bookmark" ? "북마크" : deleteTarget.type === "folder" ? "폴더" : "섹션"} 삭제`} onClose={() => setDeleteTarget(null)} closeDisabled={deleting}>
-          <p className="text-sm text-[var(--text-secondary)]">
+          <p className="text-sm text-muted-foreground">
             {deleteTarget.type === "folderSection"
               ? "이 섹션을 삭제합니다. 북마크는 삭제되지 않고 섹션 없음으로 이동합니다."
               : deleteTarget.type === "section"
@@ -1336,8 +1337,8 @@ export default function BookmarksPage() {
           {deleting ? <div className="mt-4"><DatabaseProgressStatus title="데이터베이스에서 삭제 중" /></div> : null}
           {deleteError ? <p className="mt-4 text-sm font-bold text-destructive">{deleteError}</p> : null}
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)} className="h-10 px-5">취소</Button>
-            <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()} className="h-10 px-5">
+            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>취소</Button>
+            <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
               {deleting ? <LoaderCircle className="animate-spin" /> : null}
               {deleting ? "삭제 중..." : "삭제"}
             </Button>
@@ -1352,26 +1353,26 @@ function PageTitle({ name, color, count }: { name: string; color: string; count:
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <span className="h-5 w-1 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-      <h1 className="truncate text-lg font-medium tracking-[-0.02em] text-[var(--text-heading)]">{name}</h1>
-      <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-soft)] px-2 py-1 text-xs tabular-nums text-[var(--text-muted)]">{count}</span>
+      <h1 className="truncate text-lg font-semibold text-foreground">{name}</h1>
+      <Badge variant="secondary" className="tabular-nums">{count}</Badge>
     </div>
   );
 }
 
 function SearchBox({ query, setQuery, className }: { query: string; setQuery: (value: string) => void; className?: string }) {
   return (
-    <label className={cn("relative min-w-0", className)}>
-      <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
-      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] pl-11 pr-11 text-sm outline-none focus:border-[var(--color-brand)] focus:ring-[3px] focus:ring-[var(--color-brand)]/15" />
-      {query ? <button type="button" aria-label="검색어 지우기" onClick={() => setQuery("")} className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center"><X className="h-4 w-4" /></button> : null}
-    </label>
+    <div className={cn("relative min-w-0", className)}>
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+      <Input aria-label="북마크 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="pl-9 pr-10" />
+      {query ? <Button type="button" variant="ghost" size="icon-xs" aria-label="검색어 지우기" onClick={() => setQuery("")} className="absolute right-1 top-1/2 -translate-y-1/2"><X /></Button> : null}
+    </div>
   );
 }
 
 function FavoriteButton({ count, active, onClick, compact = false }: { count: number; active: boolean; onClick: () => void; compact?: boolean }) {
   return (
-    <Button variant={active ? "default" : "outline"} size={compact ? "icon" : "sm"} aria-pressed={active} aria-label={`즐겨찾기 ${count}개만 보기`} onClick={onClick} className={compact ? BOOKMARK_TOUCH_TARGET_CLASS : "h-10 px-3 text-sm"}>
-      <Star className={cn("h-4 w-4", active && "fill-current")} />{compact ? null : <>즐겨찾기 <span>{count}</span></>}
+    <Button variant={active ? "secondary" : "outline"} size={compact ? "icon" : "default"} aria-pressed={active} aria-label={`즐겨찾기 ${count}개만 보기`} onClick={onClick} className={compact ? BOOKMARK_TOUCH_TARGET_CLASS : undefined}>
+      <Star data-icon="inline-start" className={cn(active && "fill-current")} />{compact ? null : <>즐겨찾기 <span>{count}</span></>}
     </Button>
   );
 }
@@ -1380,8 +1381,8 @@ function ColorPicker({ color, onChange, allowDefault = false }: { color: string 
   return (
     <Field label="색상">
       <div className="flex flex-wrap gap-2">
-        {allowDefault ? <button type="button" onClick={() => onChange(null)} className={cn("h-8 rounded border px-2 text-xs", color === null && "ring-2 ring-[var(--color-brand)]")}>기본</button> : null}
-        {COLOR_OPTIONS.map((option) => <button key={option} type="button" aria-label={`색상 ${option}`} onClick={() => onChange(option)} className={cn("h-8 w-8 rounded-md border", color === option && "ring-2 ring-[var(--color-brand)] ring-offset-2 ring-offset-[var(--surface-canvas)]")} style={{ backgroundColor: option }} />)}
+        {allowDefault ? <Button type="button" variant={color === null ? "secondary" : "outline"} size="sm" aria-pressed={color === null} onClick={() => onChange(null)}>기본</Button> : null}
+        {COLOR_OPTIONS.map((option) => <button key={option} type="button" aria-label={`색상 ${option}`} aria-pressed={color === option} onClick={() => onChange(option)} className={cn("size-8 rounded-md border border-input outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", color === option && "ring-2 ring-ring ring-offset-2 ring-offset-background")} style={{ backgroundColor: option }} />)}
       </div>
     </Field>
   );
@@ -1393,8 +1394,8 @@ function FormFooter({ saving, error, onCancel }: { saving: boolean; error: strin
       {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
       {error ? <p className="text-sm font-bold text-destructive">{error}</p> : null}
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" disabled={saving} onClick={onCancel} className="h-10 px-5">취소</Button>
-        <Button type="submit" disabled={saving} className="h-10 px-5">{saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? "저장 중..." : "저장"}</Button>
+        <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>취소</Button>
+        <Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? "저장 중..." : "저장"}</Button>
       </div>
     </>
   );

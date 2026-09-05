@@ -1,6 +1,7 @@
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function Modal({
   title,
@@ -49,15 +50,15 @@ export function Modal({
       aria-modal="true"
       aria-labelledby={titleId}
     >
-      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl sm:p-5">
+      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-background p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-lg sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg">
         <div className="mb-4 flex items-center gap-3">
-          <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-medium tracking-[-0.02em] text-[var(--text-heading)]">
+          <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
             {title}
           </h2>
-          <button type="button" disabled={closeDisabled} className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" onClick={onClose}>
-            <X className="h-5 w-5" />
+          <Button type="button" variant="ghost" size="icon-sm" disabled={closeDisabled} onClick={onClose}>
+            <X />
             <span className="sr-only">닫기</span>
-          </button>
+          </Button>
         </div>
         {children}
       </div>

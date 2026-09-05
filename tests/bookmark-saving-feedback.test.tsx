@@ -778,7 +778,7 @@ describe("section-first bookmark UI", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Cached 즐겨찾기" }));
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(screen.getByRole("button", { name: "Cached 즐겨찾기" }).querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
+    expect(screen.getByRole("button", { name: "Cached 즐겨찾기" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens folder choices above the bookmark modal and lets Escape close the choices first", async () => {
@@ -817,7 +817,7 @@ describe("section-first bookmark UI", () => {
     screen.getAllByRole("button", { name: "북마크 추가" }).forEach((button) => expect(button).toBeEnabled());
     fireEvent.click(favorite);
     await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
-    expect(favorite.querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
+    expect(favorite).toHaveAttribute("aria-pressed", "true");
   });
 
   it("does not show mutation buttons before the first hydrate", async () => {
@@ -990,7 +990,7 @@ describe("section-first bookmark UI", () => {
     });
     fireEvent.click(favorite);
     expect(mutations(fetchMock)).toHaveLength(0);
-    expect(favorite.querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
+    expect(favorite).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved.bookmarks[0]).toMatchObject({ id: "fallback", isFavorite: true });
@@ -1060,7 +1060,7 @@ describe("section-first bookmark UI", () => {
     const favorite = await screen.findByRole("button", { name: "Favorite Fail 즐겨찾기" });
     fireEvent.click(favorite);
     expect(await screen.findByRole("alert")).toHaveTextContent("즐겨찾기 저장에 실패했습니다.");
-    expect(favorite.querySelector("svg")).not.toHaveClass("fill-[var(--color-brand)]");
+    expect(favorite).toHaveAttribute("aria-pressed", "false");
     await waitFor(() => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved.bookmarks[0]).toMatchObject({ id: "favorite-fail", isFavorite: false });
@@ -1091,7 +1091,7 @@ describe("section-first bookmark UI", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
     fireEvent.click(screen.getByRole("button", { name: "First 즐겨찾기" }));
     fireEvent.click(screen.getByRole("button", { name: "Second 즐겨찾기" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Second 즐겨찾기" }).querySelector("svg")).toHaveClass("fill-[var(--color-brand)]"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Second 즐겨찾기" })).toHaveAttribute("aria-pressed", "true"));
     await act(async () => {
       failFirst(new Response(JSON.stringify({ detail: "첫 즐겨찾기 저장에 실패했습니다." }), {
         status: 500,
@@ -1100,8 +1100,8 @@ describe("section-first bookmark UI", () => {
       await firstRequest;
     });
     expect(await screen.findByRole("alert")).toHaveTextContent("첫 즐겨찾기 저장에 실패했습니다.");
-    expect(screen.getByRole("button", { name: "First 즐겨찾기" }).querySelector("svg")).not.toHaveClass("fill-[var(--color-brand)]");
-    expect(screen.getByRole("button", { name: "Second 즐겨찾기" }).querySelector("svg")).toHaveClass("fill-[var(--color-brand)]");
+    expect(screen.getByRole("button", { name: "First 즐겨찾기" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Second 즐겨찾기" })).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved.bookmarks).toMatchObject([
@@ -1138,7 +1138,7 @@ describe("section-first bookmark UI", () => {
       { isFavorite: true },
       { isFavorite: false }
     ]);
-    await waitFor(() => expect(favorite.querySelector("svg")).not.toHaveClass("fill-[var(--color-brand)]"));
+    await waitFor(() => expect(favorite).toHaveAttribute("aria-pressed", "false"));
   });
 
   it("refreshes canonical remote data after reorder failure", async () => {

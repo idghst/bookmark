@@ -14,59 +14,40 @@
 :root {
   color-scheme: light;
 
-  /* Claude / Anthropic 마케팅 토큰을 operate 콘솔에 매핑 */
-  --color-brand: #cc785c;
-  --color-brand-dark: #a9583e;
-  --color-brand-disabled: #e6dfd8;
-  --color-accent-teal: #5db8a6;
-  --color-accent-amber: #e8a55a;
-
-  --surface-canvas: #faf9f5;
-  --surface-soft: #f5f0e8;
-  --surface-card: #efe9de;
-  --surface-muted: #e8e0d2;
-  --surface-dark: #181715;
-  --text-primary: #141413;
-  --text-heading: #141413;
-  --text-secondary: #3d3d3a;
-  --text-muted: #6c6a64;
-  --text-muted-soft: #8e8b82;
-  --border-subtle: #e6dfd8;
-  --border-soft: #ebe6df;
-
   --radius: 0.5rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
   --dashboard-header-height: 88px;
 
   --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
-  --font-serif: var(--font-sans);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* shadcn/ui — hsl(var(--token)) */
-  --background: 48 33% 97%;
-  --foreground: 60 3% 8%;
-  --card: 48 33% 97%;
-  --card-foreground: 60 3% 8%;
-  --popover: 48 33% 97%;
-  --popover-foreground: 60 3% 8%;
-  --primary: 15 52% 58%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 40 32% 90%;
-  --secondary-foreground: 60 3% 8%;
-  --muted: 40 32% 90%;
-  --muted-foreground: 45 5% 41%;
-  --accent: 40 32% 90%;
-  --accent-foreground: 15 46% 45%;
-  --destructive: 0 53% 52%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 30 20% 87%;
-  --input: 30 20% 87%;
-  --ring: 15 52% 58%;
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 3.9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 96.1%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --accent: 0 0% 96.1%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+  --ring: 0 0% 3.9%;
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
 html,
@@ -77,37 +58,13 @@ body {
 
 body {
   margin: 0;
-  background: var(--surface-canvas);
-  color: var(--text-primary);
   font-family: var(--font-sans);
-  caret-color: var(--color-brand);
   overscroll-behavior: none;
 }
 
 html[data-dragging],
 html[data-dragging] * {
   cursor: grabbing !important;
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-serif);
-  letter-spacing: -0.02em;
-}
-
-button,
-textarea,
-input,
-select {
-  font: inherit;
-}
-
-::selection {
-  background: rgba(204, 120, 92, 0.16);
 }
 
 /* 스크롤바 숨김 유틸 */
@@ -117,38 +74,4 @@ select {
 }
 .scrollbar-hidden::-webkit-scrollbar {
   display: none;
-}
-
-/* 화면 전환·팝업 진입 애니메이션. 모션 최소화 선호 시 비활성. */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes pop-in {
-  from {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.fade-in {
-  animation: fade-in 0.18s ease-out both;
-}
-.pop-in {
-  animation: pop-in 0.16s ease-out both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fade-in,
-  .pop-in {
-    animation: none;
-  }
 }

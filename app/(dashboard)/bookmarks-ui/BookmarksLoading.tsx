@@ -1,44 +1,43 @@
-import { BOOKMARK_APP_HEADER_CLASS, BOOKMARK_SECTION_HEADER_CLASS } from "@/app/lib/bookmarks/constants";
+import { BOOKMARK_APP_HEADER_CLASS } from "@/app/lib/bookmarks/constants";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export function BookmarksLoading() {
   return (
-    <div className="fade-in flex h-full min-h-0 overflow-hidden bg-[var(--surface-canvas)]">
-      <aside className="hidden w-[20rem] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-soft)] xl:w-[22rem] lg:flex">
-        <div className={cn("flex shrink-0 flex-col justify-center border-b border-[var(--border-subtle)] px-4 py-3", BOOKMARK_APP_HEADER_CLASS)}>
-          <div className="h-5 w-24 rounded bg-[var(--surface-card)]" />
-          <div className="mt-2 h-4 w-32 rounded bg-[var(--surface-muted)]" />
+    <div role="status" aria-label="북마크 불러오는 중" className="flex h-full min-h-0 overflow-hidden bg-background">
+      <aside aria-hidden="true" className="hidden w-64 shrink-0 flex-col border-r border-border bg-muted/40 lg:flex">
+        <div className={cn("flex shrink-0 flex-col justify-center border-b border-border px-4 py-3", BOOKMARK_APP_HEADER_CLASS)}>
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="mt-2 h-4 w-32" />
         </div>
-        <div className="space-y-2 p-3">
+        <div className="flex flex-col gap-2 p-3">
           {Array.from({ length: 10 }).map((_, index) => (
-            <div key={index} className="h-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-canvas)]" />
+            <Skeleton key={index} className="h-8" />
           ))}
         </div>
-        <div className="mt-auto border-t border-[var(--border-subtle)] p-4">
-          <div className="h-12 rounded-lg bg-[var(--surface-muted)]" />
+        <div className="mt-auto border-t border-border p-4">
+          <Skeleton className="h-8" />
         </div>
       </aside>
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <section aria-hidden="true" className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header
           className={cn(
-            "grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-4 md:px-5",
+            "grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border bg-background px-4 md:px-5",
             BOOKMARK_APP_HEADER_CLASS
           )}
         >
-          <div className="hidden h-5 w-28 rounded bg-[var(--surface-card)] md:block" />
-          <div className="h-9 min-w-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)]" />
-          <div className="h-7 w-24 rounded bg-[var(--surface-muted)]" />
+          <Skeleton className="hidden h-5 w-28 md:block" />
+          <Skeleton className="h-8 min-w-0" />
+          <Skeleton className="h-8 w-24" />
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-canvas)]">
-          <div className="mx-auto w-full max-w-[1480px] space-y-5 p-4 md:p-6 lg:p-8">
-            <div className={BOOKMARK_SECTION_HEADER_CLASS}>
-              <span className="h-7 w-1 bg-[var(--color-brand)]" />
-              <div className="h-7 w-32 rounded bg-[var(--surface-muted)]" />
-              <div className="ml-auto h-7 w-8 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-soft)]" />
+        <main className="min-h-0 flex-1 overflow-y-auto bg-background">
+          <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-3 p-[clamp(0.75rem,2vw,2rem)]">
+            <Skeleton className="h-12" />
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <Skeleton key={index} className="h-40 rounded-xl" />
+              ))}
             </div>
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="h-[104px] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)]" />
-            ))}
           </div>
         </main>
       </section>

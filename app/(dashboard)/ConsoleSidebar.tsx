@@ -11,7 +11,8 @@ import {
   RefreshCcw,
   Trash2
 } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { countBookmarks } from "@/app/lib/bookmarks/counts";
 import { buildSidebarGroups } from "@/app/lib/bookmarks/groups";
 import { insertEdgeFromPointer, scrollFromPointer } from "@/app/lib/bookmarks/positions";
@@ -64,34 +65,36 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
     <aside
       id={props.id}
       className={cn(
-        "flex w-[20rem] max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-soft)] text-[var(--text-primary)] xl:w-[22rem]",
+        "flex w-64 max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-border bg-background text-foreground lg:bg-muted/40",
         props.className
       )}
       aria-label="북마크 콘솔 사이드바"
     >
-      <div className="flex min-h-[var(--dashboard-header-height)] shrink-0 flex-col justify-center border-b border-[var(--border-subtle)] px-5 py-4">
+      <div className="flex min-h-[var(--dashboard-header-height)] shrink-0 flex-col justify-center border-b border-border px-5 py-4">
         <div className="flex min-w-0 items-center gap-2">
           <Link
             href="/"
             aria-label={`${BRAND.appName} 홈으로 이동`}
-            className="flex min-w-0 items-center gap-2 rounded text-xl font-medium tracking-[-0.04em] text-[var(--color-brand)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50"
+            className="flex min-w-0 items-center gap-2 rounded-md text-lg font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0 rotate-45 text-[var(--text-heading)]" aria-hidden="true">
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0 rotate-45 text-foreground" aria-hidden="true">
               <path fill="currentColor" d="M7.15 1.2h1.7v13.6h-1.7zM1.2 7.15h13.6v1.7H1.2z" />
             </svg>
             <span className="truncate">{BRAND.appName}</span>
           </Link>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             type="button"
             onClick={props.onRefresh}
             disabled={props.refreshing}
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--surface-canvas)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-50"
+            className="ml-auto"
             aria-label="북마크 새로고침"
           >
             <RefreshCcw className={cn("h-4 w-4", props.refreshing && "animate-spin")} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
-        <span className="mt-1 text-[10px] font-medium tracking-[0.12em] text-[var(--text-muted-soft)]">BOOKMARK CONSOLE</span>
+        <span className="mt-1 text-xs text-muted-foreground">BOOKMARK CONSOLE</span>
       </div>
 
       <nav
@@ -102,7 +105,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           scrollFromPointer(event.currentTarget, event.clientY);
         }}
       >
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           {groups.map((group) => {
             const sectionId = group.section?.id ?? null;
             const sectionActive = group.section
@@ -114,8 +117,8 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                 aria-label={group.section?.name ?? "섹션 없음"}
                 className={cn(
                   group.section && props.draggingSectionId === group.section.id && "opacity-60",
-                  group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
-                  group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
+                  group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
+                  group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
                 )}
                 onDragOver={(event) => {
                   if (!props.draggingSectionId || !group.section) return;
@@ -138,7 +141,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   <div
                     className={cn(
                       "group/section flex min-h-9 items-center rounded-md",
-                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-[var(--surface-card)] ring-2 ring-[var(--color-brand)]/25"
+                      props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-muted ring-2 ring-ring/25"
                     )}
                     draggable={!props.mutationsDisabled}
                     onDragStart={(event) => {
@@ -164,14 +167,13 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       props.onDropFolderOnSection(group.section?.id ?? null);
                     }}
                   >
-                    <button
+                    <Button
+                      variant={sectionActive ? "secondary" : "ghost"}
+                      size="sm"
                       type="button"
                       aria-current={sectionActive ? "page" : undefined}
                       onClick={() => props.onSelectSection(group.section?.id ?? "")}
-                      className={cn(
-                        "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-xs font-medium uppercase tracking-[0.08em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
-                        sectionActive ? "bg-[var(--surface-canvas)] text-[var(--text-heading)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-canvas)]"
-                      )}
+                      className="min-w-0 flex-1 justify-start"
                     >
                       <span
                         className="h-3 w-1 rounded-full"
@@ -179,7 +181,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                         aria-hidden="true"
                       />
                       <span className="truncate">{group.section.name}</span>
-                    </button>
+                    </Button>
                     <ActionsMenu
                       label={group.section.name}
                       mutationsDisabled={props.mutationsDisabled}
@@ -190,8 +192,8 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                 ) : (
                   <div
                     className={cn(
-                      "flex min-h-9 items-center rounded-md px-2 text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]",
-                      props.draggingFolderId && props.dragOverSectionId === "__none__" && "bg-[var(--surface-card)] ring-2 ring-[var(--color-brand)]/25"
+                      "flex min-h-9 items-center rounded-md px-2 text-xs font-medium text-muted-foreground",
+                      props.draggingFolderId && props.dragOverSectionId === "__none__" && "bg-muted ring-2 ring-ring/25"
                     )}
                     onDragOver={(event) => {
                       if (!props.draggingFolderId) return;
@@ -207,7 +209,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                     섹션 없음
                   </div>
                 )}
-                <ul className="mt-1 space-y-0.5 border-l border-[var(--border-subtle)] pl-2" aria-label={`${group.section?.name ?? "섹션 없음"} 폴더`}>
+                <ul className="mt-1 flex flex-col gap-0.5 pl-2" aria-label={`${group.section?.name ?? "섹션 없음"} 폴더`}>
                   {group.folders.map((folder) => {
                     const active = props.selection?.kind === "folder" && props.selection.id === folder.id;
                     const count = countBookmarks(props.bookmarks, { folderId: folder.id, favoriteOnly: props.favoriteOnly });
@@ -219,9 +221,9 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                         className={cn(
                           "group/folder flex min-h-9 items-center rounded-md",
                           props.draggingFolderId === folder.id && "opacity-60",
-                          insert === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
-                          insert === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]",
-                          dropInto && "bg-[var(--surface-card)] ring-2 ring-[var(--color-brand)]/25"
+                          insert === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
+                          insert === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]",
+                          dropInto && "bg-muted ring-2 ring-ring/25"
                         )}
                         data-drop-edge={insert ?? undefined}
                         draggable={!props.mutationsDisabled}
@@ -257,29 +259,23 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                           if (props.draggingFolderId) props.onDropFolder(folder.id, event);
                         }}
                       >
-                        <button
+                        <Button
+                          variant={active ? "secondary" : "ghost"}
+                          size="sm"
                           type="button"
                           aria-current={active ? "page" : undefined}
                           onClick={() => props.onSelectFolder(folder.id)}
-                          className={cn(
-                            "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50",
-                            active
-                              ? "bg-[var(--surface-canvas)] font-semibold text-[var(--text-heading)] shadow-[0_1px_2px_rgba(20,20,19,0.04)]"
-                              : "text-[var(--text-secondary)] hover:bg-[var(--surface-canvas)]/70 hover:text-[var(--text-heading)]"
-                          )}
+                          className="min-w-0 flex-1 justify-start"
                         >
                           <FolderIcon
                             data-folder-color={folder.color ?? "#797979"}
-                            className="h-4 w-4 shrink-0 transition-transform group-hover/folder:scale-105"
+                            data-icon="inline-start"
                             style={{ color: folder.color ?? "#797979" }}
                             aria-hidden="true"
                           />
-                          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-                          <span className={cn(
-                            "rounded px-1.5 py-0.5 text-xs font-medium tabular-nums transition-colors",
-                            active ? "bg-[var(--surface-soft)] text-[var(--text-heading)] font-semibold" : "text-[var(--text-muted)]"
-                          )}>{count}</span>
-                        </button>
+                          <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
+                          <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+                        </Button>
                         <ActionsMenu
                           label={folder.name}
                           mutationsDisabled={props.mutationsDisabled}
@@ -295,23 +291,23 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
           })}
         </div>
       </nav>
-      <div className="grid grid-cols-2 gap-2 border-t border-[var(--border-subtle)] p-3">
-        <button
+      <div className="grid grid-cols-2 gap-2 border-t border-border p-3">
+        <Button
+          variant="outline"
           type="button"
           disabled={props.mutationsDisabled}
           onClick={props.onAddSection}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)] hover:text-[var(--color-brand)] active:scale-[0.99] disabled:opacity-40"
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />새 섹션
-        </button>
-        <button
+          <Plus data-icon="inline-start" aria-hidden="true" />새 섹션
+        </Button>
+        <Button
+          variant="outline"
           type="button"
           disabled={props.mutationsDisabled}
           onClick={props.onAddFolder}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] px-3 text-sm font-medium text-[var(--text-secondary)] transition-all hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)] hover:text-[var(--color-brand)] active:scale-[0.99] disabled:opacity-40"
         >
-          <FolderPlus className="h-4 w-4" aria-hidden="true" />새 폴더
-        </button>
+          <FolderPlus data-icon="inline-start" aria-hidden="true" />새 폴더
+        </Button>
       </div>
     </aside>
   );
@@ -329,34 +325,30 @@ function ActionsMenu({
   onDelete: () => void;
 }) {
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           disabled={mutationsDisabled}
           aria-label={`${label} 메뉴`}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] opacity-60 transition hover:opacity-100 hover:bg-[var(--surface-canvas)] hover:text-[var(--color-brand)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
         >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          aria-label={`${label} 메뉴`}
-          side="bottom"
-          align="end"
-          sideOffset={6}
-          className="z-[80] min-w-36 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1.5 shadow-[0_8px_24px_rgba(20,20,19,0.08)] outline-none"
-        >
-          <DropdownMenu.Item onSelect={onEdit} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
-            <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />편집
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-          <DropdownMenu.Item onSelect={onDelete} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-destructive transition-colors outline-none hover:bg-red-50 focus:bg-red-50">
-            <Trash2 className="h-4 w-4" aria-hidden="true" />삭제
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent aria-label={`${label} 메뉴`} align="end">
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil aria-hidden="true" />편집
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={onDelete} variant="destructive">
+            <Trash2 aria-hidden="true" />삭제
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

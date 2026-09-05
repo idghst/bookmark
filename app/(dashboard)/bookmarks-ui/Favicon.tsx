@@ -13,12 +13,12 @@ export function Favicon({ url }: { url: string }) {
   }, [url]);
 
   if (!safeUrl(url) || failed) {
-    return <Globe className="h-4 w-4 text-[var(--text-muted)]" />;
+    return <Globe className="h-4 w-4 text-muted-foreground" />;
   }
 
   return (
     <span className="relative flex h-[18px] w-[18px] items-center justify-center">
-      {!loaded ? <Globe className="h-4 w-4 text-[var(--text-muted)]" /> : null}
+      {!loaded ? <Globe className="h-4 w-4 text-muted-foreground" /> : null}
       <img
         src={`/api/favicon?url=${encodeURIComponent(url)}&size=32`}
         alt=""

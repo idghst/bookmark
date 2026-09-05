@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type ToastType = "success" | "error" | "info";
 type ToastItem = { id: number; type: ToastType; message: string };
@@ -90,34 +92,31 @@ export function clearToastHistory() {
   emitHistory();
 }
 
-const STYLES: Record<ToastType, { bg: string; border: string; text: string; icon: typeof CheckCircle2; iconColor: string }> = {
-  success: { bg: "#181715", border: "#252320", text: "#faf9f5", icon: CheckCircle2, iconColor: "#5db872" },
-  error: { bg: "#181715", border: "#252320", text: "#faf9f5", icon: AlertCircle, iconColor: "#c64545" },
-  info: { bg: "#181715", border: "#252320", text: "#faf9f5", icon: Info, iconColor: "#cc785c" }
+const ICONS: Record<ToastType, typeof CheckCircle2> = {
+  success: CheckCircle2,
+  error: AlertCircle,
+  info: Info
 };
 
 function ToastCard({ item }: { item: ToastItem }) {
-  const s = STYLES[item.type];
-  const Icon = s.icon;
+  const Icon = ICONS[item.type];
   return (
     <div
       role="status"
-      className="pop-in pointer-events-auto flex w-full items-center gap-2 rounded-lg px-3 py-2.5 shadow-lg"
-      style={{ backgroundColor: s.bg, border: `1px solid ${s.border}` }}
+      className="pointer-events-auto flex w-full items-center gap-3 rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg"
     >
-      <Icon className="h-4 w-4 shrink-0" style={{ color: s.iconColor }} />
-      <p className="min-w-0 flex-1 truncate text-xs font-medium" style={{ color: s.text }}>
+      <Icon className={cn("size-4 shrink-0", item.type === "error" && "text-destructive")} aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-sm">
         {item.message}
       </p>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={() => dismissToast(item.id)}
         aria-label="알림 닫기"
-        className="shrink-0 rounded p-0.5 opacity-70 transition hover:opacity-100"
-        style={{ color: s.text }}
       >
-        <X className="h-3.5 w-3.5" />
-      </button>
+        <X />
+      </Button>
     </div>
   );
 }
@@ -134,7 +133,7 @@ export function Toaster() {
   }, []);
   if (!list.length) return null;
   return (
-    <div className="pointer-events-none fixed bottom-3 right-3 z-[100] w-[min(280px,calc(100vw-24px))] space-y-2">
+    <div className="pointer-events-none fixed bottom-3 right-3 z-[100] flex w-[min(356px,calc(100vw-24px))] flex-col gap-2">
       {list.map((item) => (
         <ToastCard key={item.id} item={item} />
       ))}

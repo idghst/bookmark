@@ -1,5 +1,6 @@
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Folder, FolderSection } from "@/app/lib/bookmarks/types";
 
 export function FolderActionsMenu({
@@ -16,38 +17,34 @@ export function FolderActionsMenu({
   onDelete: (folder: Folder) => void;
 }) {
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           disabled={mutationsDisabled}
           aria-label={`${folder.name} 폴더 그룹 메뉴`}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
         >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          aria-label={`${folder.name} 폴더 그룹 메뉴`}
-          side="bottom"
-          align="end"
-          sideOffset={6}
-          className="z-[80] min-w-36 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1.5 shadow-[0_8px_24px_rgba(20,20,19,0.08)] outline-none"
-        >
-          <DropdownMenu.Item onSelect={() => onAddBookmark(folder)} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
-            <Plus className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />북마크 추가
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => onEdit(folder)} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
-            <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />편집
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-          <DropdownMenu.Item onSelect={() => onDelete(folder)} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-destructive transition-colors outline-none hover:bg-red-50 focus:bg-red-50">
-            <Trash2 className="h-4 w-4" aria-hidden="true" />삭제
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent aria-label={`${folder.name} 폴더 그룹 메뉴`} align="end">
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => onAddBookmark(folder)}>
+            <Plus aria-hidden="true" />북마크 추가
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onEdit(folder)}>
+            <Pencil aria-hidden="true" />편집
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => onDelete(folder)} variant="destructive">
+            <Trash2 aria-hidden="true" />삭제
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -65,37 +62,33 @@ export function FolderSectionActionsMenu({
   onDelete: (folderSection: FolderSection) => void;
 }) {
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           disabled={mutationsDisabled}
           aria-label={`${folderSection.name} 섹션 메뉴`}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition hover:bg-[var(--surface-soft)] hover:text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/50 disabled:opacity-40"
         >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          aria-label={`${folderSection.name} 섹션 메뉴`}
-          side="bottom"
-          align="end"
-          sideOffset={6}
-          className="z-[80] min-w-36 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] p-1.5 shadow-[0_8px_24px_rgba(20,20,19,0.08)] outline-none"
-        >
-          <DropdownMenu.Item onSelect={() => onAddBookmark(folderSection)} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
-            <Plus className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />북마크 추가
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => onEdit(folderSection)} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-heading)] transition-colors outline-none hover:bg-[var(--surface-soft)] focus:bg-[var(--surface-soft)]">
-            <Pencil className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />편집
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator className="my-1 h-px bg-[var(--border-subtle)]" />
-          <DropdownMenu.Item onSelect={() => onDelete(folderSection)} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium text-destructive transition-colors outline-none hover:bg-red-50 focus:bg-red-50">
-            <Trash2 className="h-4 w-4" aria-hidden="true" />삭제
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent aria-label={`${folderSection.name} 섹션 메뉴`} align="end">
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => onAddBookmark(folderSection)}>
+            <Plus aria-hidden="true" />북마크 추가
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onEdit(folderSection)}>
+            <Pencil aria-hidden="true" />편집
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => onDelete(folderSection)} variant="destructive">
+            <Trash2 aria-hidden="true" />삭제
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

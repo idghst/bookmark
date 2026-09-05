@@ -1,7 +1,7 @@
 import type { DragEvent } from "react";
 import { ExternalLink, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookmarkActionsMenu } from "@/app/(dashboard)/bookmarks-ui/BookmarkActionsMenu";
 import { Favicon } from "@/app/(dashboard)/bookmarks-ui/Favicon";
 import type { BookmarkItem } from "@/app/lib/bookmarks/types";
@@ -44,10 +44,10 @@ export function BookmarkCard({
   return (
     <Card
       className={cn(
-        "group relative min-h-[120px] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-canvas)] py-3 shadow-none ring-0 transition duration-150",
-        dragging ? "cursor-grabbing opacity-60" : "cursor-grab hover:-translate-y-[1px] hover:border-[var(--color-brand)] hover:shadow-[0_4px_12px_rgba(20,20,19,0.05)]",
-        dropEdge === "before" && "shadow-[inset_0_2px_0_0_var(--color-brand)]",
-        dropEdge === "after" && "shadow-[inset_0_-2px_0_0_var(--color-brand)]"
+        "group relative min-h-[120px] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        dragging ? "cursor-grabbing opacity-60" : "cursor-grab",
+        dropEdge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
+        dropEdge === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
       )}
       data-drop-edge={dropEdge ?? undefined}
       draggable={!mutationsDisabled}
@@ -77,14 +77,14 @@ export function BookmarkCard({
         if (event.key === "Enter") openBookmark();
       }}
     >
-      <CardHeader className="px-4 pb-0">
+      <CardHeader>
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] shadow-sm">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
             <Favicon url={bookmark.url} />
           </div>
-          <div className="min-w-0 w-0 flex-1 space-y-1">
-            <span className="block truncate text-base font-medium tracking-[-0.02em] text-[var(--text-heading)] transition-colors group-hover:text-[var(--color-brand-dark)]">{bookmark.title}</span>
-            <p aria-label={bookmark.url} className="line-clamp-1 break-all text-xs leading-5 text-[var(--text-muted)]">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <CardTitle className="truncate">{bookmark.title}</CardTitle>
+            <p aria-label={bookmark.url} className="line-clamp-1 break-all text-xs leading-5 text-muted-foreground">
               <span aria-hidden="true">{bookmarkHost(bookmark.url)}</span>
             </p>
           </div>
@@ -97,27 +97,26 @@ export function BookmarkCard({
           />
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col space-y-2 px-4 pt-1">
-        {bookmark.description ? <p className="line-clamp-1 text-xs leading-5 text-[var(--text-muted)]">{bookmark.description}</p> : null}
+      <CardContent className="flex flex-1 flex-col gap-2">
+        {bookmark.description ? <p className="line-clamp-1 text-xs leading-5 text-muted-foreground">{bookmark.description}</p> : null}
         <div className="mt-auto flex justify-end">
           <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
             <Button
               variant="ghost"
-              size="icon-xs"
+              size="icon"
               disabled={mutationsDisabled}
-              className="h-10 w-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)]"
+              aria-pressed={bookmark.isFavorite}
               onClick={() => onToggleFavorite(bookmark.id)}
             >
-              <Star className={cn("h-4 w-4", bookmark.isFavorite ? "fill-[var(--color-brand)] text-[var(--color-brand)]" : "text-[var(--text-muted)]")} />
+              <Star className={cn(bookmark.isFavorite && "fill-current")} />
               <span className="sr-only">{bookmark.title} 즐겨찾기</span>
             </Button>
             <Button
               variant="ghost"
-              size="icon-xs"
-              className="h-10 w-10 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--color-brand)]/40 hover:bg-[var(--surface-card)]"
+              size="icon"
               onClick={openBookmark}
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink />
               <span className="sr-only">{bookmark.title} 열기</span>
             </Button>
           </div>
