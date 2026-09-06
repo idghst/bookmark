@@ -89,7 +89,7 @@ export default function SettingsScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={[styles.title, { color: colors.text }]}>연결 설정</Text>
           <Text style={[styles.description, { color: colors.muted }]}>
-            북마크 API 주소와 개인 키를 기기에만 저장합니다. 키는 웹 로그인에 사용하는 값과 같습니다.
+            북마크 API 주소와 개인 API 키를 이 기기에 저장합니다. API 요청을 인증하는 키를 입력하세요.
           </Text>
 
           <View style={styles.field}>

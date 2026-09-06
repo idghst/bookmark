@@ -64,12 +64,14 @@ dependency, plugin, app identity, runtime/native config 변경은 OTA가 아니�
 
 ## API 경계
 
-현재 웹의 `BOOKMARK_GRAPHQL_URL`과 `BOOKMARK_API_KEY`는 서버 전용입니다. 특히
-`X-Bookmark-Key`를 Expo 번들 또는 `EXPO_PUBLIC_*`에 넣으면 안 됩니다. 실제 모바일 API는
-공개 HTTPS origin과 인증 방식이 확정된 뒤 추가합니다. 가능한 경계는 Supabase Bearer 인증
-직접 API, 별도 인증 BFF, 또는 로그인 없는 경우 명시적인 VPN·IP allowlist·방화벽입니다.
+모바일은 설정 화면에서 입력한 API origin과 개인 API 키로 FastAPI REST `/api/*`를
+호출합니다. 키는 `X-Bookmark-Key` 헤더로 전송하며, native에서는 SecureStore에 저장합니다.
+웹 실행에서는 브라우저 localStorage를 사용합니다. 운영 API 주소는 HTTPS를 사용하세요.
+웹 BFF의 `BOOKMARK_API_URL`과 `BOOKMARK_API_KEY`는 서버 전용입니다.
+서버 키를 Expo 번들 또는 `EXPO_PUBLIC_*`에 복사하지 않습니다.
+서버 주소나 키를 바꾸거나 연결을 해제하면 이전 연결의 캐시를 비웁니다.
 
 ## 배포 전 남은 결정
 
-EAS project ID, OTA 설정, 실제 모바일 API 인증·배포 경로는 아직 정하지 않았습니다. 이 값이
-확정되거나 native config가 바뀌면 새 native build가 필요합니다.
+EAS project ID와 OTA 설정은 릴리스 환경에 맞게 확인합니다.
+native config가 바뀌면 새 native build가 필요합니다.

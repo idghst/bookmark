@@ -81,7 +81,22 @@ export default function HomeScreen() {
   );
 
   const load = useCallback(async (opts?: { userRefresh?: boolean }) => {
+    const gen = ++fetchGenRef.current;
     const config = await loadConfig();
+    if (gen !== fetchGenRef.current) return;
+    const previous = configRef.current;
+    if (previous?.url !== config?.url || previous?.key !== config?.key) {
+      hasDataRef.current = false;
+      pendingRef.current.clear();
+      pendingEpochRef.current.clear();
+      setBookmarks([]);
+      setFolders([]);
+      setSections([]);
+      setFolderSections([]);
+      setFilter("all");
+      setErrorMessage("");
+      setStatus(config ? "loading" : "unconfigured");
+    }
     configRef.current = config;
     if (!config) {
       hasDataRef.current = false;
@@ -92,6 +107,7 @@ export default function HomeScreen() {
 
     if (!hasDataRef.current) {
       const cache = await loadSnapshotCache();
+      if (gen !== fetchGenRef.current) return;
       if (cache) {
         applySnapshot(cache);
         setStatus("ready");
@@ -105,7 +121,6 @@ export default function HomeScreen() {
       setRefreshing(true);
     }
 
-    const gen = ++fetchGenRef.current;
     try {
       const remote = await fetchSnapshot(config);
       if (gen !== fetchGenRef.current) return;
@@ -139,6 +154,9 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      return () => {
+        ++fetchGenRef.current;
+      };
     }, [load]),
   );
 

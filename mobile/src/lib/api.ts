@@ -24,9 +24,8 @@ async function request<T>(config: ApiConfig, path: string, init?: RequestInit): 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  let response: Response;
   try {
-    response = await fetch(`${config.url}${path}`, {
+    const response = await fetch(`${config.url}${path}`, {
       ...init,
       headers: {
         Accept: "application/json",
@@ -35,8 +34,25 @@ async function request<T>(config: ApiConfig, path: string, init?: RequestInit): 
       },
       signal: controller.signal,
     });
+    if (!response.ok) {
+      let message = `요청이 실패했습니다. (HTTP ${response.status})`;
+      let code: string | null = null;
+      try {
+        const body = (await response.json()) as { message?: string; detail?: string; code?: string };
+        code = body.code ?? null;
+        message = messageForStatus(response.status, body.message ?? body.detail ?? message);
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        message = messageForStatus(response.status, message);
+      }
+      throw new ApiError(message, response.status, code);
+    }
+
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
   } catch (error) {
-    const aborted = error instanceof Error && error.name === "AbortError";
+    if (error instanceof ApiError) throw error;
+    const aborted = controller.signal.aborted;
     throw new ApiError(
       aborted ? "요청 시간이 초과되었습니다." : "서버에 연결할 수 없습니다.",
       0,
@@ -45,22 +61,6 @@ async function request<T>(config: ApiConfig, path: string, init?: RequestInit): 
   } finally {
     clearTimeout(timeout);
   }
-
-  if (!response.ok) {
-    let message = `요청이 실패했습니다. (HTTP ${response.status})`;
-    let code: string | null = null;
-    try {
-      const body = (await response.json()) as { message?: string; detail?: string; code?: string };
-      code = body.code ?? null;
-      message = messageForStatus(response.status, body.message ?? body.detail ?? message);
-    } catch {
-      message = messageForStatus(response.status, message);
-    }
-    throw new ApiError(message, response.status, code);
-  }
-
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
 }
 
 export function listBookmarks(config: ApiConfig): Promise<BookmarkItem[]> {
