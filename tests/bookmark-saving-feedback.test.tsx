@@ -776,6 +776,8 @@ describe("section-first bookmark UI", () => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved).toMatchObject({ apiBacked: false, bookmarks: [{ id: "cached" }] });
     });
+    expect(screen.getByRole("status")).toHaveTextContent("기기에만 저장됩니다");
+    expect(screen.getByRole("status")).toHaveTextContent("서버 데이터로 교체됩니다");
     fireEvent.click(screen.getByRole("button", { name: "Cached 즐겨찾기" }));
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(screen.getByRole("button", { name: "Cached 즐겨찾기" })).toHaveAttribute("aria-pressed", "true");

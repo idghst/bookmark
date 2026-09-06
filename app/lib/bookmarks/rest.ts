@@ -95,27 +95,42 @@ export async function restRequest<T>(
   });
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(resolveRestUrl(config.url, path), {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    cache: "no-store"
-  });
-
-  if (response.status === 204) return undefined as T;
-
-  let payload: unknown;
+  const url = resolveRestUrl(config.url, path);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    payload = await response.json();
-  } catch {
-    throw new StoreError(
-      response.statusText || "REST response is not valid JSON.",
-      response.ok ? 502 : response.status
-    );
-  }
+    const response = await fetch(url, {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      cache: "no-store",
+      signal: controller.signal
+    });
 
-  if (!response.ok) {
-    throw new StoreError(errorMessage(payload, response), response.status);
+    if (response.status === 204) return undefined as T;
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      if (controller.signal.aborted) throw error;
+      throw new StoreError(
+        response.statusText || "REST response is not valid JSON.",
+        response.ok ? 502 : response.status
+      );
+    }
+
+    if (!response.ok) {
+      throw new StoreError(errorMessage(payload, response), response.status);
+    }
+    return payload as T;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new StoreError("Bookmark API request timed out.", 504);
+    }
+    if (error instanceof StoreError) throw error;
+    throw new StoreError("Bookmark API is unavailable.", 503);
+  } finally {
+    clearTimeout(timeout);
   }
-  return payload as T;
 }

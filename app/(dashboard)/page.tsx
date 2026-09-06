@@ -273,7 +273,8 @@ export default function BookmarksPage() {
       setApiBacked(true);
       return true;
     } catch {
-      if (fallbackToInitial && !isCancelled()) {
+      if (isCancelled()) return false;
+      if (fallbackToInitial) {
         setFolders(INITIAL_FOLDERS);
         setSections(INITIAL_SECTIONS);
         setFolderSections([]);
@@ -1111,6 +1112,12 @@ export default function BookmarksPage() {
           }}
         >
           <div className="mx-auto w-full max-w-[1480px] flex flex-col gap-6 p-[clamp(0.75rem,2vw,2rem)]">
+            {hydrated && !apiBacked && !refreshing ? (
+              <div role="status" className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+                서버에 연결하지 못했습니다. 변경 사항은 이 기기에만 저장됩니다.
+                다시 연결하면 로컬 변경은 서버 데이터로 교체됩니다.
+              </div>
+            ) : null}
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
               <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 text-center">

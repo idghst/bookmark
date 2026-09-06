@@ -12,9 +12,36 @@ function jsonResponse(data: unknown, status = 200) {
 
 describe("bookmarkStore REST transport", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.resetModules();
+  });
+
+  it("maps connection failures without leaking upstream details", async () => {
+    configureRest();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("private upstream address")));
+    const { restRequest } = await import("@/app/lib/bookmarks/rest");
+    await expect(restRequest("bookmarks")).rejects.toMatchObject({
+      status: 503,
+      message: "Bookmark API is unavailable."
+    });
+  });
+
+  it("times out a response whose JSON body never finishes", async () => {
+    configureRest();
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => ({
+      status: 200,
+      ok: true,
+      json: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      })
+    })));
+    const { restRequest } = await import("@/app/lib/bookmarks/rest");
+    const result = restRequest("bookmarks").catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await result).toMatchObject({ status: 504, message: "Bookmark API request timed out." });
   });
 
   it("reads bookmarks through REST with the server key", async () => {
