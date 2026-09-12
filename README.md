@@ -9,8 +9,8 @@ Next.js 기반 개인 북마크 관리 앱입니다.
 - 북마크와 폴더/섹션 정렬
 - REST 저장 및 localStorage fallback
 
-웹 → same-origin `/api/*` BFF → FastAPI REST → PostgreSQL `bookmark` 스키마로 연결됩니다.
-DB 접속 정보는 API 서버에만 둡니다. MCP는 개발·점검용이며 앱의 DB 연결을 대신하지 않습니다.
+웹 → same-origin `/api/*` BFF → FastAPI REST → Supabase의 `bookmark` 스키마로 연결됩니다.
+Supabase URL과 비밀 키는 API 서버에만 둡니다. MCP는 개발·점검용이며 앱의 DB 연결을 대신하지 않습니다.
 서버 연결 실패 시 화면에 로컬 저장 상태가 표시됩니다. 로컬 변경은 자동 동기화되지 않으며,
 재연결하면 서버 데이터로 교체됩니다.
 
@@ -28,11 +28,15 @@ pnpm dev
 `.env.example`을 `.env.local`로 복사하고 REST URL과 서버 간 공유 키를
 설정합니다. 브라우저에는 두 값이 노출되지 않습니다.
 
+로컬에서는 웹 `.env.local`의 `BOOKMARK_API_URL=http://127.0.0.1:8000`으로
+로컬 API를 사용합니다. API는 자신의 `.env.local`에서 Supabase 설정을 읽습니다.
+운영 값은 각 Vercel 프로젝트의 환경 변수에 등록합니다.
+
 ## 운영 접근 제어
 
 웹은 첫 입장부터 계정 입력 없이 열립니다. REST URL과 `BOOKMARK_API_KEY`는
 서버 환경 변수로만 두고 브라우저에 노출하지 않습니다.
-API 서버에는 `DATABASE_URL`과 동일한 `BOOKMARK_API_KEY`를 설정합니다.
+API 서버에는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 웹과 동일한 `BOOKMARK_API_KEY`를 설정합니다.
 빈 DB 또는 여러 소유자가 있는 DB는 API 서버의 `BOOKMARK_USER_ID`도 지정합니다.
 기존 `BOOKMARK_GRAPHQL_URL`은 설정 호환용으로만 읽으며 요청은 REST로 전송합니다.
 

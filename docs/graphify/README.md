@@ -3,7 +3,7 @@
 이 저장소는 [Graphify](https://github.com/Graphify-Labs/graphify)로 코드 구조 그래프를 유지한다.
 질의 가능한 산출물은 `graphify-out/`에 있다. AST 캐시(`graphify-out/cache/`)는 커밋하지 않는다.
 
-2026-09-07 PostgreSQL 전환 연동·모바일 연결 상태 리팩토링 후 기존 그래프는 최신 코드와 다릅니다.
+2026-09-13 Supabase 연결 정리 및 이전 모바일 연결 상태 리팩토링으로 기존 그래프는 최신 코드와 다릅니다.
 작업 환경에 `graphify` CLI가 없어 갱신하지 못했습니다. CLI 설치 환경에서 `graphify update .`를 실행하세요.
 
 추출 기준 커밋은 `graphify-out/GRAPH_REPORT.md`의 Graph Freshness를 본다.
