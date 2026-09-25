@@ -74,7 +74,7 @@ export function BookmarkCard({
         onDrop(bookmark.id, event);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter") openBookmark();
+        if (event.key === "Enter" && event.target === event.currentTarget) openBookmark();
       }}
     >
       <CardHeader>
