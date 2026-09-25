@@ -200,6 +200,21 @@ describe("section-first bookmark UI", () => {
     expect(screen.queryByRole("heading", { name: "문서" })).not.toBeInTheDocument();
   });
 
+  it("lets users clear search and favorite filters from an empty result", async () => {
+    setup({ folders, sections, bookmarks: [{ ...bookmarks[0], isFavorite: true }, ...bookmarks.slice(1)] });
+    expect(await screen.findByRole("link", { name: /프로젝트 A/ })).toBeInTheDocument();
+
+    fireEvent.change(screen.getAllByRole("textbox", { name: "북마크 검색" })[0], { target: { value: "없는 검색어" } });
+    fireEvent.click(screen.getAllByRole("button", { name: /즐겨찾기 1개만 보기/ })[0]);
+
+    expect(screen.getByText("검색어와 즐겨찾기 조건에 맞는 북마크가 없습니다.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "필터 초기화" }));
+
+    expect(screen.getAllByRole("textbox", { name: "북마크 검색" })[0]).toHaveValue("");
+    expect(screen.getAllByRole("button", { name: /즐겨찾기 1개만 보기/ })[0]).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("link", { name: /프로젝트 A/ })).toBeInTheDocument();
+  });
+
   it("shows only the clicked folder", async () => {
     setup();
     const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });

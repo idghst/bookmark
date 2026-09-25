@@ -1122,7 +1122,20 @@ export default function BookmarksPage() {
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
               <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 text-center">
                 <Bookmark className="size-8 text-muted-foreground" aria-hidden="true" />
-                <p className="font-medium text-foreground">{query ? "검색 결과가 없습니다." : favoriteOnly ? "즐겨찾기한 북마크가 없습니다." : "북마크가 없습니다."}</p>
+                <p className="font-medium text-foreground">
+                  {query.trim() && favoriteOnly
+                    ? "검색어와 즐겨찾기 조건에 맞는 북마크가 없습니다."
+                    : query.trim()
+                      ? "검색 결과가 없습니다."
+                      : favoriteOnly
+                        ? "즐겨찾기한 북마크가 없습니다."
+                        : "북마크가 없습니다."}
+                </p>
+                {hasActiveFilter ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setQuery(""); setFavoriteOnly(false); }}>
+                    필터 초기화
+                  </Button>
+                ) : null}
               </div>
             ) : groups.map((group) => (
               <section key={group.key} className="flex flex-col gap-3">
