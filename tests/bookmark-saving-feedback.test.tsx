@@ -798,6 +798,21 @@ describe("section-first bookmark UI", () => {
     expect(screen.getByRole("button", { name: "Cached 즐겨찾기" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("warns that offline changes are temporary when browser storage is blocked", async () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Storage access is blocked", "SecurityError");
+      }
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    render(<BookmarksPage />);
+
+    expect(await screen.findByRole("link", { name: /IDGHST Admin/ })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("현재 화면에만 유지됩니다");
+    expect(screen.getByRole("status")).toHaveTextContent("새로고침하거나 창을 닫으면 사라집니다");
+  });
+
   it("opens folder choices above the bookmark modal and lets Escape close the choices first", async () => {
     setup();
     fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);

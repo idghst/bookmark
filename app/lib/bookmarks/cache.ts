@@ -18,7 +18,11 @@ const CACHE_VERSION = 4;
 
 function browserStorage() {
   if (typeof window === "undefined") return null;
-  return window.localStorage;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export function readBookmarkCache(): BookmarkCacheSnapshot | null {
@@ -54,7 +58,7 @@ export function readBookmarkCache(): BookmarkCacheSnapshot | null {
 
 export function writeBookmarkCache(snapshot: BookmarkCacheSnapshot) {
   const storage = browserStorage();
-  if (!storage) return;
+  if (!storage) return false;
 
   try {
     storage.setItem(
@@ -65,7 +69,9 @@ export function writeBookmarkCache(snapshot: BookmarkCacheSnapshot) {
         version: CACHE_VERSION
       })
     );
+    return true;
   } catch {
-    // ponytail: quota/private mode; keep the in-memory screen working
+    // Keep the in-memory screen working when storage is blocked or full.
+    return false;
   }
 }

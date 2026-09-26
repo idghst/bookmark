@@ -120,7 +120,19 @@ describe("bookmark cache snapshot", () => {
         removeItem: () => undefined
       }
     });
-    expect(() => writeBookmarkCache(snapshot())).not.toThrow();
+    expect(writeBookmarkCache(snapshot())).toBe(false);
+  });
+
+  it("ignores localStorage when the browser blocks access to it", () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Storage access is blocked", "SecurityError");
+      }
+    });
+
+    expect(readBookmarkCache()).toBeNull();
+    expect(writeBookmarkCache(snapshot())).toBe(false);
   });
 
   it("returns null and no-ops when window is missing", () => {
