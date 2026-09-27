@@ -685,6 +685,25 @@ describe("section-first bookmark UI", () => {
     expect(within(menu).getByRole("menuitem", { name: "삭제" })).toBeInTheDocument();
   });
 
+  it("accepts a URL without a scheme and saves it with https", async () => {
+    const created = { ...bookmarks[0], id: "normalized-url", title: "도메인 주소", url: "https://example.com/docs" };
+    const { fetchMock } = setup({ folders, sections, bookmarks }, async () =>
+      new Response(JSON.stringify(created), { status: 201 })
+    );
+    fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    const url = within(dialog).getByLabelText("URL");
+    fireEvent.change(url, { target: { value: "example.com/docs" } });
+    fireEvent.change(within(dialog).getByLabelText("제목"), { target: { value: created.title } });
+
+    expect(url).toBeValid();
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(JSON.parse(String(mutations(fetchMock)[0][1]?.body))).toMatchObject({ url: created.url });
+    expect(await screen.findByRole("link", { name: /도메인 주소/ })).toBeInTheDocument();
+  });
+
   it("portals the modal overlay to the viewport layer", async () => {
     setup();
     fireEvent.click((await screen.findAllByRole("button", { name: "북마크 추가" }))[0]);

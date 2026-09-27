@@ -1282,7 +1282,7 @@ export default function BookmarksPage() {
       {bookmarkDialog ? (
         <Modal title={bookmarkDialog.mode === "edit" ? "북마크 편집" : "북마크 추가"} onClose={() => setBookmarkDialog(null)} closeDisabled={saving}>
           <form className="flex flex-col gap-4" onSubmit={saveBookmark}>
-            <Field label="URL"><Input type="url" value={bookmarkDraft.url} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, url: event.target.value }))} /></Field>
+            <Field label="URL"><Input type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={bookmarkDraft.url} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, url: event.target.value }))} /></Field>
             <Field label="제목"><Input value={bookmarkDraft.title} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, title: event.target.value }))} /></Field>
             <Field label="설명"><Textarea value={bookmarkDraft.description} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, description: event.target.value }))} rows={2} /></Field>
             <Field label="폴더">
