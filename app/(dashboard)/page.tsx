@@ -1084,6 +1084,9 @@ export default function BookmarksPage() {
             </Button>
             <PageTitle name={activeName} color={activeColor} count={currentCount} />
             <FavoriteButton compact count={favoriteCount} active={favoriteOnly} onClick={() => setFavoriteOnly((value) => !value)} />
+            <Button size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} disabled={mutationsDisabled || !visibleFolders.length} onClick={() => openBookmarkDialog()} aria-label="새 북마크 추가">
+              <Plus className="h-5 w-5" aria-hidden="true" />
+            </Button>
           </div>
           <SearchBox query={query} setQuery={setQuery} className="mt-2" />
         </header>

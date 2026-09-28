@@ -200,6 +200,17 @@ describe("section-first bookmark UI", () => {
     expect(screen.queryByRole("heading", { name: "문서" })).not.toBeInTheDocument();
   });
 
+  it("opens bookmark creation directly from the compact header", async () => {
+    setup();
+    const addButton = await screen.findByRole("button", { name: "새 북마크 추가" });
+    expect(addButton).toBeEnabled();
+
+    fireEvent.click(addButton);
+
+    const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    expect(within(dialog).getByRole("combobox", { name: "폴더" })).toHaveTextContent("프로젝트");
+  });
+
   it("lets users clear search and favorite filters from an empty result", async () => {
     setup({ folders, sections, bookmarks: [{ ...bookmarks[0], isFavorite: true }, ...bookmarks.slice(1)] });
     expect(await screen.findByRole("link", { name: /프로젝트 A/ })).toBeInTheDocument();
