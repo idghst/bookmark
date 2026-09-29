@@ -306,7 +306,10 @@ export default function BookmarksPage() {
     setMutationError("");
     noteMutation();
     const epoch = mutationEpoch.current;
-    latestMutationEpoch.current.set(key, epoch);
+    // A local-only edit needs an epoch only while an older request for this key is still in flight.
+    if (persistRemoteRef.current || mutationQueues.current.has(key)) {
+      latestMutationEpoch.current.set(key, epoch);
+    }
     apply();
     if (!persistRemoteRef.current) return;
     const token = Symbol(key);
@@ -343,7 +346,10 @@ export default function BookmarksPage() {
     });
     mutationQueues.current.set(key, queued);
     void queued.finally(() => {
-      if (mutationQueues.current.get(key) === queued) mutationQueues.current.delete(key);
+      if (mutationQueues.current.get(key) === queued) {
+        mutationQueues.current.delete(key);
+        latestMutationEpoch.current.delete(key);
+      }
     });
   }
 
