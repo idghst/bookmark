@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, LoaderCircle, Menu, Plus, Search, Star, X } from "lucide-react";
+import { Bookmark, FolderPlus, LoaderCircle, Menu, Plus, Search, Star, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -169,6 +169,13 @@ export default function BookmarksPage() {
     [bookmarks, favoriteOnly, query, visibleFolderIds]
   );
   const hasActiveFilter = favoriteOnly || Boolean(query.trim());
+  const showFolderEmptyState = visibleFolders.length === 0 && !hasActiveFilter;
+  const folderEmptyMessage = folders.length === 0
+    ? "폴더를 먼저 만들어 보세요."
+    : selectedSection ? "이 섹션에 폴더가 없습니다." : "표시할 폴더가 없습니다.";
+  const folderCreateLabel = folders.length === 0
+    ? "첫 폴더 만들기"
+    : selectedSection ? "이 섹션에 폴더 만들기" : "폴더 만들기";
   const groups = useMemo(
     () => buildBookmarkGroups(filtered, visibleFolders, folderSections, hasActiveFilter, Boolean(selectedFolder)),
     [filtered, folderSections, hasActiveFilter, selectedFolder, visibleFolders]
@@ -218,6 +225,7 @@ export default function BookmarksPage() {
   }, [apiBacked, bookmarks, folderSections, folders, hydrated, sections, selection]);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (
       (selection?.kind === "folder" && folders.some((folder) => folder.id === selection.id)) ||
       (selection?.kind === "section" && sections.some((section) => section.id === selection.id))
@@ -228,7 +236,7 @@ export default function BookmarksPage() {
       : folders[0]
         ? { kind: "folder", id: folders[0].id }
         : null);
-  }, [folders, orderedSections, sections, selection]);
+  }, [folders, hydrated, orderedSections, sections, selection]);
 
   async function refreshBookmarks({
     fallbackToInitial = false,
@@ -404,7 +412,7 @@ export default function BookmarksPage() {
     setFolderDraft({
       name: folder?.name ?? "",
       color: folder?.color ?? COLOR_OPTIONS[folders.length % COLOR_OPTIONS.length],
-      sectionId: folderSectionId(folder ?? {}) ?? NO_SECTION
+      sectionId: folder ? folderSectionId(folder) ?? NO_SECTION : selectedSection?.id ?? NO_SECTION
     });
     setFolderDialog(folder ? { mode: "edit", folderId: folder.id } : { mode: "create" });
   }
@@ -1132,9 +1140,13 @@ export default function BookmarksPage() {
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
               <div className="dot-empty flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 text-center">
-                <Bookmark className="size-8 text-muted-foreground" aria-hidden="true" />
+                {showFolderEmptyState
+                  ? <FolderPlus className="size-8 text-muted-foreground" aria-hidden="true" />
+                  : <Bookmark className="size-8 text-muted-foreground" aria-hidden="true" />}
                 <p className="font-medium text-foreground">
-                  {query.trim() && favoriteOnly
+                  {showFolderEmptyState
+                    ? folderEmptyMessage
+                    : query.trim() && favoriteOnly
                     ? "검색어와 즐겨찾기 조건에 맞는 북마크가 없습니다."
                     : query.trim()
                       ? "검색 결과가 없습니다."
@@ -1142,7 +1154,12 @@ export default function BookmarksPage() {
                         ? "즐겨찾기한 북마크가 없습니다."
                         : "북마크가 없습니다."}
                 </p>
-                {hasActiveFilter ? (
+                {showFolderEmptyState ? (
+                  <Button type="button" disabled={mutationsDisabled} onClick={() => openFolderDialog()}>
+                    <Plus data-icon="inline-start" aria-hidden="true" />
+                    {folderCreateLabel}
+                  </Button>
+                ) : hasActiveFilter ? (
                   <Button type="button" variant="outline" size="sm" onClick={() => { setQuery(""); setFavoriteOnly(false); }}>
                     필터 초기화
                   </Button>

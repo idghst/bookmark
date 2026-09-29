@@ -794,12 +794,24 @@ describe("section-first bookmark UI", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<BookmarksPage />);
 
-    expect(await screen.findByText("북마크가 없습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("폴더를 먼저 만들어 보세요.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /IDGHST Admin/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "첫 폴더 만들기" }));
+    expect(screen.getByRole("dialog", { name: "새 폴더" })).toBeInTheDocument();
     await waitFor(() => {
       const saved = JSON.parse(String(setItem.mock.calls.at(-1)?.[1]));
       expect(saved).toMatchObject({ apiBacked: true, folders: [], bookmarks: [] });
     });
+  });
+
+  it("defaults a new folder to the empty selected section", async () => {
+    setup({ folders: [folders[2]], sections, bookmarks: [] });
+    expect(await screen.findByText("이 섹션에 폴더가 없습니다.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "이 섹션에 폴더 만들기" }));
+
+    const dialog = screen.getByRole("dialog", { name: "새 폴더" });
+    expect(within(dialog).getByRole("combobox", { name: "섹션" })).toHaveTextContent("업무");
   });
 
   it("keeps cache on remote failure and does not trust cached apiBacked", async () => {
