@@ -65,7 +65,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
     <aside
       id={props.id}
       className={cn(
-        "flex w-64 max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-border bg-background text-foreground lg:bg-muted/40",
+        "dot-sidebar flex w-64 max-w-[calc(100vw-1rem)] shrink-0 flex-col border-r border-border text-foreground",
         props.className
       )}
       aria-label="북마크 콘솔 사이드바"
@@ -77,9 +77,9 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
             aria-label={`${BRAND.appName} 홈으로 이동`}
             className="flex min-w-0 items-center gap-2 rounded-md text-lg font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0 rotate-45 text-foreground" aria-hidden="true">
-              <path fill="currentColor" d="M7.15 1.2h1.7v13.6h-1.7zM1.2 7.15h13.6v1.7H1.2z" />
-            </svg>
+            <span className="dot-logo" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, index) => <span key={index} />)}
+            </span>
             <span className="truncate">{BRAND.appName}</span>
           </Link>
           <Button
@@ -94,7 +94,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
             <RefreshCcw className={cn("h-4 w-4", props.refreshing && "animate-spin")} aria-hidden="true" />
           </Button>
         </div>
-        <span className="mt-1 text-xs text-muted-foreground">BOOKMARK CONSOLE</span>
+        <span className="mt-1 text-[10px] font-semibold tracking-[.22em] text-muted-foreground">YOUR LINK SPACE</span>
       </div>
 
       <nav
@@ -176,7 +176,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       className="min-w-0 flex-1 justify-start"
                     >
                       <span
-                        className="h-3 w-1 rounded-full"
+                        className="dot-marker !size-2"
                         style={{ backgroundColor: group.section.color ?? "#797979" }}
                         aria-hidden="true"
                       />

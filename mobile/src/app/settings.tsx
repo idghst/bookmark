@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DotMark, DotReveal } from "@/components/DotMotion";
 import { ApiError, listBookmarks } from "@/lib/api";
 import { clearConfig, DEFAULT_API_URL, loadConfig, normalizeApiUrl, saveConfig } from "@/lib/config";
 import { clearSnapshotCache } from "@/lib/snapshot-store";
@@ -87,44 +88,56 @@ export default function SettingsScreen() {
         style={styles.flex}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.title, { color: colors.text }]}>연결 설정</Text>
-          <Text style={[styles.description, { color: colors.muted }]}>
-            북마크 API 주소와 개인 API 키를 이 기기에 저장합니다. API 요청을 인증하는 키를 입력하세요.
-          </Text>
+          <DotReveal>
+            <View style={styles.intro}>
+              <View style={styles.eyebrowLine}>
+                <DotMark color={colors.primary} />
+                <Text style={[styles.eyebrow, { color: colors.primary }]}>PREFERENCES · 03</Text>
+              </View>
+              <Text style={[styles.title, { color: colors.text }]}>연결 설정</Text>
+              <Text style={[styles.description, { color: colors.muted }]}>
+                북마크 API 주소와 개인 API 키를 이 기기에 저장합니다. API 요청을 인증하는 키를 입력하세요.
+              </Text>
+            </View>
+          </DotReveal>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>API 주소</Text>
-            <TextInput
-              value={url}
-              onChangeText={setUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder={DEFAULT_API_URL}
-              placeholderTextColor={colors.muted}
-              style={[
-                styles.input,
-                { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
-              ]}
-            />
-          </View>
+          <DotReveal delay={100}>
+            <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>API 주소</Text>
+                <TextInput
+                  value={url}
+                  onChangeText={setUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder={DEFAULT_API_URL}
+                  placeholderTextColor={colors.muted}
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+                  ]}
+                />
+              </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>개인 키</Text>
-            <TextInput
-              value={key}
-              onChangeText={setKey}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-              placeholder="BOOKMARK_API_KEY"
-              placeholderTextColor={colors.muted}
-              style={[
-                styles.input,
-                { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
-              ]}
-            />
-          </View>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>개인 키</Text>
+                <TextInput
+                  value={key}
+                  onChangeText={setKey}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry
+                  placeholder="BOOKMARK_API_KEY"
+                  placeholderTextColor={colors.muted}
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+                  ]}
+                />
+              </View>
+            </View>
+          </DotReveal>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -137,9 +150,9 @@ export default function SettingsScreen() {
             ]}
           >
             {busy ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color={colors.onPrimary} />
             ) : (
-              <Text style={styles.primaryButtonText}>연결 확인 후 저장</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>연결 확인 후 저장</Text>
             )}
           </Pressable>
 
@@ -167,26 +180,48 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
-    gap: 16,
+    gap: 18,
+  },
+  intro: {
+    gap: 9,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  eyebrowLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "800",
+    letterSpacing: -0.7,
   },
   description: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  formCard: {
+    gap: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderRadius: 20,
   },
   field: {
     gap: 8,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
   input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderRadius: 13,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
@@ -196,7 +231,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   primaryButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
   },

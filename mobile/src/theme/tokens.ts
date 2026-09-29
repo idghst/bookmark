@@ -1,18 +1,24 @@
 export const APP_THEME = {
   light: {
-    background: "#ffffff",
-    surface: "#f5f4ff",
-    text: "#17171c",
-    muted: "#5b5b66",
-    primary: "#4f46e5",
-    border: "#e5e4eb"
+    background: "#f8f7fc",
+    surface: "#ffffff",
+    text: "#242139",
+    muted: "#746f86",
+    primary: "#5b4ce6",
+    onPrimary: "#ffffff",
+    border: "#e8e5f1",
+    softAccent: "#eeeaff",
+    dot: "#bcb5e7"
   },
   dark: {
-    background: "#111827",
-    surface: "#1f2937",
-    text: "#f9fafb",
-    muted: "#b8bac4",
-    primary: "#4f46e5",
-    border: "#374151"
+    background: "#171521",
+    surface: "#242131",
+    text: "#f5f2ff",
+    muted: "#b7b1c8",
+    primary: "#8f82ff",
+    onPrimary: "#171521",
+    border: "#383448",
+    softAccent: "#302a4b",
+    dot: "#77709c"
   }
 } as const;

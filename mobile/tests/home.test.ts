@@ -21,6 +21,10 @@ vi.mock("react-native", () => {
   };
 });
 vi.mock("react-native-safe-area-context", () => ({ SafeAreaView: ({ children }: { children?: React.ReactNode }) => React.createElement("div", null, children) }));
+vi.mock("@/components/DotMotion", () => ({
+  DotMark: () => React.createElement("span"),
+  DotReveal: ({ children }: { children?: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+}));
 vi.mock("@/lib/config", () => ({ loadConfig: mocks.loadConfig }));
 vi.mock("@/lib/api", () => ({ ApiError: Error, fetchSnapshot: mocks.fetchSnapshot, updateBookmark: mocks.updateBookmark }));
 vi.mock("@/lib/snapshot-store", () => ({ loadSnapshotCache: async () => null, saveSnapshotCache: mocks.save }));

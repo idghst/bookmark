@@ -1066,7 +1066,7 @@ export default function BookmarksPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden bg-background" aria-busy={!hasHydratedData}>
+    <div className="dot-shell flex h-full min-h-0 overflow-hidden" aria-busy={!hasHydratedData}>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{dragStatus}</div>
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
@@ -1077,7 +1077,7 @@ export default function BookmarksPage() {
       ) : null}
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-border bg-background px-3 py-2 lg:hidden">
+        <header className="dot-header shrink-0 border-b border-border px-3 py-2 lg:hidden">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)} aria-controls="mobile-console-sidebar">
               <Menu className="h-5 w-5" /><span className="sr-only">폴더 메뉴 열기</span>
@@ -1090,7 +1090,7 @@ export default function BookmarksPage() {
           </div>
           <SearchBox query={query} setQuery={setQuery} className="mt-2" />
         </header>
-        <header className={cn("hidden shrink-0 grid-cols-[minmax(0,1fr)_minmax(10rem,1.5fr)_auto] items-center gap-3 border-b border-border bg-background px-5 lg:grid", BOOKMARK_APP_HEADER_CLASS)}>
+        <header className={cn("dot-header hidden shrink-0 grid-cols-[minmax(0,1fr)_minmax(10rem,1.5fr)_auto] items-center gap-3 border-b border-border px-5 lg:grid", BOOKMARK_APP_HEADER_CLASS)}>
           <PageTitle name={activeName} color={activeColor} count={currentCount} />
           <SearchBox query={query} setQuery={setQuery} />
           <div className="flex items-center gap-2">
@@ -1109,7 +1109,7 @@ export default function BookmarksPage() {
         <main
           id="bookmark-content"
           tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto bg-background"
+          className="dot-stage min-h-0 flex-1 overflow-y-auto"
           onDragOver={(event) => {
             if (!draggingBookmarkId && !draggingFolderSectionId) return;
             scrollFromPointer(event.currentTarget, event.clientY);
@@ -1125,7 +1125,7 @@ export default function BookmarksPage() {
             ) : null}
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
-              <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 text-center">
+              <div className="dot-empty flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 text-center">
                 <Bookmark className="size-8 text-muted-foreground" aria-hidden="true" />
                 <p className="font-medium text-foreground">
                   {query.trim() && favoriteOnly
@@ -1147,6 +1147,7 @@ export default function BookmarksPage() {
                 <div
                   className={cn(
                     BOOKMARK_SECTION_HEADER_CLASS,
+                    "dot-section-header",
                     draggingFolderSectionId === group.folderSection?.id && "opacity-60",
                     draggingBookmarkId && "ring-1 ring-transparent hover:ring-ring/30",
                     folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
@@ -1190,7 +1191,7 @@ export default function BookmarksPage() {
                     moveBookmarkToSection(source, group.folderSection?.id ?? null);
                   }}
                 >
-                  <span data-folder-color={group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK} className="h-6 w-1 rounded-full" style={{ backgroundColor: group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
+                  <span data-folder-color={group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK} className="dot-marker" style={{ backgroundColor: group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
                   <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{group.label}</h2>
                   <Badge variant="secondary" className="tabular-nums">{group.items.length}</Badge>
                   {group.folderSection ? (
@@ -1377,8 +1378,8 @@ export default function BookmarksPage() {
 function PageTitle({ name, color, count }: { name: string; color: string; count: number }) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
-      <span className="h-5 w-1 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-      <h1 className="truncate text-lg font-semibold text-foreground">{name}</h1>
+      <span className="dot-marker" style={{ backgroundColor: color }} aria-hidden="true" />
+      <h1 className="truncate text-lg font-bold tracking-tight text-foreground">{name}</h1>
       <Badge variant="secondary" className="tabular-nums">{count}</Badge>
     </div>
   );

@@ -14,30 +14,30 @@
 :root {
   color-scheme: light;
 
-  --radius: 0.5rem;
+  --radius: 0.75rem;
   --dashboard-header-height: 88px;
 
   --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
 
-  --background: 0 0% 100%;
-  --foreground: 0 0% 3.9%;
+  --background: 250 36% 98%;
+  --foreground: 236 29% 17%;
   --card: 0 0% 100%;
-  --card-foreground: 0 0% 3.9%;
+  --card-foreground: 236 29% 17%;
   --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 3.9%;
-  --primary: 0 0% 9%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 0 0% 96.1%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 96.1%;
-  --muted-foreground: 0 0% 45.1%;
-  --accent: 0 0% 96.1%;
-  --accent-foreground: 0 0% 9%;
+  --popover-foreground: 236 29% 17%;
+  --primary: 247 74% 56%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 250 52% 94%;
+  --secondary-foreground: 247 55% 34%;
+  --muted: 249 35% 95%;
+  --muted-foreground: 240 11% 42%;
+  --accent: 250 52% 94%;
+  --accent-foreground: 247 55% 34%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 89.8%;
-  --input: 0 0% 89.8%;
-  --ring: 0 0% 3.9%;
+  --border: 246 23% 88%;
+  --input: 246 23% 88%;
+  --ring: 247 74% 56%;
 }
 
 @layer base {
@@ -74,4 +74,183 @@ html[data-dragging] * {
 }
 .scrollbar-hidden::-webkit-scrollbar {
   display: none;
+}
+
+/* A quiet field of moving dots ties the dashboard surfaces together. */
+.dot-shell {
+  background: hsl(var(--background));
+}
+
+.dot-sidebar {
+  background-color: #f2f0fb;
+  background-image: radial-gradient(circle, rgba(91, 76, 230, .13) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  background-position: 10px 10px;
+}
+
+.dot-sidebar nav,
+.dot-sidebar > div:last-child {
+  background: rgba(248, 247, 253, .82);
+}
+
+.dot-sidebar [aria-current="page"] {
+  background: #fff;
+  color: hsl(var(--primary));
+  box-shadow: 0 3px 14px rgba(54, 42, 124, .09);
+}
+
+.dot-logo {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  gap: 3px;
+  flex: none;
+  transform: rotate(-12deg);
+}
+
+.dot-logo span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  animation: dot-breathe 2.4s ease-in-out infinite;
+}
+
+.dot-logo span:nth-child(3n + 2) { animation-delay: .18s; }
+.dot-logo span:nth-child(3n) { animation-delay: .36s; }
+.dot-logo span:nth-child(n + 4) { animation-delay: .54s; }
+.dot-logo span:nth-child(n + 7) { animation-delay: .72s; }
+
+.dot-header {
+  background: rgba(255, 255, 255, .88);
+  box-shadow: 0 1px 16px rgba(43, 34, 104, .04);
+  backdrop-filter: blur(14px);
+}
+
+.dot-stage {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(circle, rgba(91, 76, 230, .13) .8px, transparent 1.2px),
+    radial-gradient(ellipse at 80% 0%, rgba(192, 181, 255, .18), transparent 52%);
+  background-size: 24px 24px, 100% 100%;
+  animation: dot-drift 28s linear infinite;
+}
+
+.dot-section-header {
+  border: 1px solid hsl(var(--border));
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 4px 18px rgba(56, 42, 116, .04);
+}
+
+.dot-marker {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(91, 76, 230, .09);
+}
+
+.dot-card {
+  position: relative;
+  border: 1px solid rgba(105, 89, 169, .16);
+  box-shadow: 0 10px 24px rgba(39, 28, 91, .055);
+  transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease;
+  animation: dot-rise .5s backwards;
+}
+
+.dot-card::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  bottom: 12px;
+  left: 14px;
+  width: 56px;
+  height: 28px;
+  background: radial-gradient(circle, rgba(91, 76, 230, .21) 1px, transparent 1.5px) 0 0 / 10px 10px;
+  mask-image: linear-gradient(to right, #000, transparent);
+}
+
+.dot-card:nth-child(4n + 2) { animation-delay: .06s; }
+.dot-card:nth-child(4n + 3) { animation-delay: .12s; }
+.dot-card:nth-child(4n + 4) { animation-delay: .18s; }
+
+.dot-card:hover,
+.dot-card:focus-within {
+  transform: translateY(-3px);
+  border-color: rgba(91, 76, 230, .36);
+  box-shadow: 0 16px 30px rgba(39, 28, 91, .11);
+}
+
+html[data-dragging] .dot-card {
+  transform: none;
+}
+
+.dot-shell [data-slot="button"] {
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+
+.dot-shell [data-slot="button"]:active:not(:disabled) {
+  transform: scale(.97);
+}
+
+.dot-shell [data-slot="input"] {
+  background: rgba(255, 255, 255, .9);
+}
+
+.dot-empty {
+  background: rgba(255, 255, 255, .8);
+  background-image: radial-gradient(circle, rgba(91, 76, 230, .14) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+.dot-loading {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.dot-loading span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  animation: dot-breathe 1.2s ease-in-out infinite;
+}
+
+.dot-loading span:nth-child(2) { animation-delay: .15s; }
+.dot-loading span:nth-child(3) { animation-delay: .3s; }
+
+.dot-modal {
+  box-shadow: 0 24px 70px rgba(23, 18, 57, .2);
+  background-image: radial-gradient(circle, rgba(91, 76, 230, .1) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+  background-position: right 10px top 10px;
+}
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: .42; transform: scale(.72); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes dot-drift {
+  from { background-position: 0 0, center top; }
+  to { background-position: 24px 24px, center top; }
+}
+
+@keyframes dot-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-logo span,
+  .dot-loading span,
+  .dot-stage,
+  .dot-card {
+    animation: none;
+  }
+
+  .dot-card,
+  .dot-shell [data-slot="button"] {
+    transition: none;
+  }
 }

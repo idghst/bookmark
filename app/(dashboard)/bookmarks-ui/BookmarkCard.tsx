@@ -44,7 +44,7 @@ export function BookmarkCard({
   return (
     <Card
       className={cn(
-        "group relative min-h-[120px] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "dot-card group relative min-h-[136px] rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring",
         dragging ? "cursor-grabbing opacity-60" : "cursor-grab",
         dropEdge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
         dropEdge === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
@@ -79,11 +79,11 @@ export function BookmarkCard({
     >
       <CardHeader>
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary">
             <Favicon url={bookmark.url} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <CardTitle className="truncate">{bookmark.title}</CardTitle>
+            <CardTitle className="truncate font-semibold tracking-tight">{bookmark.title}</CardTitle>
             <p aria-label={bookmark.url} className="line-clamp-1 break-all text-xs leading-5 text-muted-foreground">
               <span aria-hidden="true">{bookmarkHost(bookmark.url)}</span>
             </p>
@@ -108,7 +108,7 @@ export function BookmarkCard({
               aria-pressed={bookmark.isFavorite}
               onClick={() => onToggleFavorite(bookmark.id)}
             >
-              <Star className={cn(bookmark.isFavorite && "fill-current")} />
+              <Star className={cn(bookmark.isFavorite && "fill-current text-primary")} />
               <span className="sr-only">{bookmark.title} 즐겨찾기</span>
             </Button>
             <Button

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DotMark, DotReveal } from "@/components/DotMotion";
 import { ApiError, createBookmark, listFolderSections, listFolders } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
 import { loadSnapshotCache } from "@/lib/snapshot-store";
@@ -117,113 +118,79 @@ export default function AddBookmarkScreen() {
         style={styles.flex}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.title, { color: colors.text }]}>북마크 추가</Text>
+          <DotReveal>
+            <View style={styles.intro}>
+              <View style={styles.eyebrowLine}>
+                <DotMark color={colors.primary} />
+                <Text style={[styles.eyebrow, { color: colors.primary }]}>NEW ENTRY · 02</Text>
+              </View>
+              <Text style={[styles.title, { color: colors.text }]}>북마크 추가</Text>
+              <Text style={[styles.description, { color: colors.muted }]}>다시 찾고 싶은 링크를 저장하세요.</Text>
+            </View>
+          </DotReveal>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>제목</Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="예: Expo 공식 문서"
-              placeholderTextColor={colors.muted}
-              style={[
-                styles.input,
-                { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
-              ]}
-            />
-          </View>
+          <DotReveal delay={100}>
+            <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>제목</Text>
+                <TextInput
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="예: Expo 공식 문서"
+                  placeholderTextColor={colors.muted}
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+                  ]}
+                />
+              </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>URL</Text>
-            <TextInput
-              value={url}
-              onChangeText={setUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="https://"
-              placeholderTextColor={colors.muted}
-              style={[
-                styles.input,
-                { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
-              ]}
-            />
-          </View>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>URL</Text>
+                <TextInput
+                  value={url}
+                  onChangeText={setUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="https://"
+                  placeholderTextColor={colors.muted}
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+                  ]}
+                />
+              </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>폴더</Text>
-            <View style={styles.chips}>
-              <Pressable
-                onPress={() => {
-                  setFolderId(null);
-                  setFolderSectionId(null);
-                }}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: folderId === null ? colors.primary : colors.surface,
-                    borderColor: folderId === null ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text style={[styles.chipText, { color: folderId === null ? "#ffffff" : colors.text }]}>
-                  미분류
-                </Text>
-              </Pressable>
-              {folders.map((folder) => {
-                const active = folderId === folder.id;
-                return (
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>폴더</Text>
+                <View style={styles.chips}>
                   <Pressable
-                    key={folder.id}
                     onPress={() => {
-                      setFolderId(folder.id);
+                      setFolderId(null);
                       setFolderSectionId(null);
                     }}
                     style={[
                       styles.chip,
                       {
-                        backgroundColor: active ? colors.primary : colors.surface,
-                        borderColor: active ? colors.primary : colors.border,
+                        backgroundColor: folderId === null ? colors.primary : colors.surface,
+                        borderColor: folderId === null ? colors.primary : colors.border,
                       },
                     ]}
                   >
-                    {folder.color ? <View style={[styles.chipDot, { backgroundColor: folder.color }]} /> : null}
-                    <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>
-                      {folder.name}
+                    <Text style={[styles.chipText, { color: folderId === null ? colors.onPrimary : colors.text }]}>
+                      미분류
                     </Text>
                   </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {folderId ? (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>섹션</Text>
-              <View style={styles.chips}>
-                <Pressable
-                  onPress={() => setFolderSectionId(null)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: folderSectionId === null ? colors.primary : colors.surface,
-                      borderColor: folderSectionId === null ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.chipText, { color: folderSectionId === null ? "#ffffff" : colors.text }]}>
-                    섹션 없음
-                  </Text>
-                </Pressable>
-                {folderSections
-                  .filter((section) => section.folderId === folderId)
-                  .sort((a, b) => a.position - b.position)
-                  .map((section) => {
-                    const active = folderSectionId === section.id;
+                  {folders.map((folder) => {
+                    const active = folderId === folder.id;
                     return (
                       <Pressable
-                        key={section.id}
-                        onPress={() => setFolderSectionId(section.id)}
+                        key={folder.id}
+                        onPress={() => {
+                          setFolderId(folder.id);
+                          setFolderSectionId(null);
+                        }}
                         style={[
                           styles.chip,
                           {
@@ -232,15 +199,62 @@ export default function AddBookmarkScreen() {
                           },
                         ]}
                       >
-                        <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>
-                          {section.name}
+                        {folder.color ? <View style={[styles.chipDot, { backgroundColor: folder.color }]} /> : null}
+                        <Text style={[styles.chipText, { color: active ? colors.onPrimary : colors.text }]}>
+                          {folder.name}
                         </Text>
                       </Pressable>
                     );
                   })}
+                </View>
               </View>
+
+              {folderId ? (
+                <View style={styles.field}>
+                  <Text style={[styles.label, { color: colors.text }]}>섹션</Text>
+                  <View style={styles.chips}>
+                    <Pressable
+                      onPress={() => setFolderSectionId(null)}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: folderSectionId === null ? colors.primary : colors.surface,
+                          borderColor: folderSectionId === null ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.chipText, { color: folderSectionId === null ? colors.onPrimary : colors.text }]}>
+                        섹션 없음
+                      </Text>
+                    </Pressable>
+                    {folderSections
+                      .filter((section) => section.folderId === folderId)
+                      .sort((a, b) => a.position - b.position)
+                      .map((section) => {
+                        const active = folderSectionId === section.id;
+                        return (
+                          <Pressable
+                            key={section.id}
+                            onPress={() => setFolderSectionId(section.id)}
+                            style={[
+                              styles.chip,
+                              {
+                                backgroundColor: active ? colors.primary : colors.surface,
+                                borderColor: active ? colors.primary : colors.border,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.chipText, { color: active ? colors.onPrimary : colors.text }]}>
+                              {section.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                  </View>
+                </View>
+              ) : null}
             </View>
-          ) : null}
+          </DotReveal>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -252,7 +266,7 @@ export default function AddBookmarkScreen() {
               { backgroundColor: colors.primary, opacity: busy || pressed ? 0.7 : 1 },
             ]}
           >
-            {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>저장</Text>}
+            {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>저장</Text>}
           </Pressable>
 
           <Pressable onPress={() => router.back()} disabled={busy} hitSlop={8}>
@@ -273,22 +287,47 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
-    gap: 16,
+    gap: 18,
+  },
+  intro: {
+    gap: 9,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  eyebrowLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "800",
+    letterSpacing: -0.7,
+  },
+  description: {
+    fontSize: 14,
+  },
+  formCard: {
+    gap: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderRadius: 20,
   },
   field: {
     gap: 8,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
   input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderRadius: 13,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
@@ -321,7 +360,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   primaryButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
   },

@@ -76,7 +76,7 @@ export function Modal({
         }
       }}
     >
-      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-background p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-lg sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg">
+      <div className="dot-modal max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-border bg-background p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
         <div className="mb-4 flex items-center gap-3">
           <h2 id={titleId} className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
             {title}

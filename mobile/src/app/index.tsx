@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DotMark, DotReveal } from "@/components/DotMotion";
 import { ApiError, fetchSnapshot, updateBookmark } from "@/lib/api";
 import { loadConfig, type ApiConfig } from "@/lib/config";
 import { applyPendingBookmarks, isCurrentMutation, mutationsDisabled } from "@/lib/snapshot";
@@ -266,9 +267,12 @@ export default function HomeScreen() {
               {subtitle}
             </Text>
             {folder ? (
-              <Text numberOfLines={1} style={[styles.rowFolder, { color: colors.muted }]}>
-                {folderSection ? `${folder.name} · ${folderSection.name}` : `${folder.name} · 섹션 없음`}
-              </Text>
+              <View style={styles.rowFolderLine}>
+                <View style={[styles.rowFolderDot, { backgroundColor: accent }]} />
+                <Text numberOfLines={1} style={[styles.rowFolder, { color: colors.muted }]}>
+                  {folderSection ? `${folder.name} · ${folderSection.name}` : `${folder.name} · 섹션 없음`}
+                </Text>
+              </View>
             ) : null}
           </View>
           <Pressable
@@ -338,31 +342,42 @@ export default function HomeScreen() {
         ]}
       >
         {chip.color ? <View style={[styles.chipDot, { backgroundColor: chip.color }]} /> : null}
-        <Text style={[styles.chipText, { color: active ? "#ffffff" : colors.text }]}>{chip.label}</Text>
+        <Text style={[styles.chipText, { color: active ? colors.onPrimary : colors.text }]}>{chip.label}</Text>
       </Pressable>
     );
   };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <View style={styles.headerTitleGroup}>
-          <Text style={[styles.title, { color: colors.text }]}>Bookmark</Text>
-          {status === "ready" ? (
-            <Text style={[styles.count, { color: colors.muted }]}>{visibleBookmarks.length}개</Text>
-          ) : null}
+      <DotReveal>
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <View style={styles.eyebrowLine}>
+              <DotMark color={colors.primary} />
+              <Text style={[styles.eyebrow, { color: colors.primary }]}>YOUR SPACE · 01</Text>
+            </View>
+            <View style={styles.headerTitleGroup}>
+              <Text style={[styles.title, { color: colors.text }]}>Bookmark</Text>
+              {status === "ready" ? (
+                <Text style={[styles.count, { color: colors.primary, backgroundColor: colors.softAccent }]}>
+                  {visibleBookmarks.length}개
+                </Text>
+              ) : null}
+            </View>
+            <Text style={[styles.headerSubtitle, { color: colors.muted }]}>필요한 링크를, 한눈에.</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push("/settings")}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.settingsButton,
+              { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Text style={[styles.settingsButtonText, { color: colors.muted }]}>설정</Text>
+          </Pressable>
         </View>
-        <Pressable
-          onPress={() => router.push("/settings")}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.settingsButton,
-            { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
-          ]}
-        >
-          <Text style={[styles.settingsButtonText, { color: colors.muted }]}>설정</Text>
-        </Pressable>
-      </View>
+      </DotReveal>
 
       {status === "loading" ? (
         <View style={styles.centered}>
@@ -372,6 +387,7 @@ export default function HomeScreen() {
 
       {status === "unconfigured" ? (
         <View style={styles.centered}>
+          <DotMark color={colors.primary} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>연결 설정이 필요합니다</Text>
           <Text style={[styles.emptyText, { color: colors.muted }]}>
             API 주소와 개인 키를 입력하면 북마크를 불러옵니다.
@@ -380,35 +396,38 @@ export default function HomeScreen() {
             onPress={() => router.push("/settings")}
             style={[styles.primaryButton, { backgroundColor: colors.primary }]}
           >
-            <Text style={styles.primaryButtonText}>연결 설정</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>연결 설정</Text>
           </Pressable>
         </View>
       ) : null}
 
       {status === "error" ? (
         <View style={styles.centered}>
+          <DotMark color={colors.primary} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>불러오지 못했습니다</Text>
           <Text style={[styles.emptyText, { color: colors.muted }]}>{errorMessage}</Text>
           <Pressable onPress={() => void load()} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
-            <Text style={styles.primaryButtonText}>다시 시도</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>다시 시도</Text>
           </Pressable>
         </View>
       ) : null}
 
       {status === "ready" ? (
         <>
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="제목, 주소, 설명 검색"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[
-              styles.search,
-              { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
-            ]}
-          />
+          <DotReveal delay={90}>
+            <View style={[styles.searchShell, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.searchDot, { backgroundColor: colors.primary }]} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="제목, 주소, 설명 검색"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={[styles.search, { color: colors.text }]}
+              />
+            </View>
+          </DotReveal>
           {sections.length === 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               {[...pinnedChips, ...folders.map(folderToChip)].map(renderChip)}
@@ -442,7 +461,10 @@ export default function HomeScreen() {
               keyExtractor={(item) => item.id}
               renderItem={renderBookmark}
               renderSectionHeader={({ section }) => (
-                <Text style={[styles.bookmarkSectionHeader, { color: colors.muted }]}>{section.title}</Text>
+                <View style={styles.bookmarkSectionLine}>
+                  <View style={[styles.sectionDot, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.bookmarkSectionHeader, { color: colors.muted }]}>{section.title}</Text>
+                </View>
               )}
               contentContainerStyle={styles.list}
               refreshControl={
@@ -450,6 +472,7 @@ export default function HomeScreen() {
               }
               ListEmptyComponent={
                 <View style={styles.listEmpty}>
+                  <DotMark color={colors.dot} />
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
                     {search.trim() || filter !== "all" ? "조건에 맞는 북마크가 없습니다." : "북마크가 없습니다."}
                   </Text>
@@ -467,6 +490,7 @@ export default function HomeScreen() {
               }
               ListEmptyComponent={
                 <View style={styles.listEmpty}>
+                  <DotMark color={colors.dot} />
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
                     {search.trim() || filter !== "all" ? "조건에 맞는 북마크가 없습니다." : "북마크가 없습니다."}
                   </Text>
@@ -482,7 +506,7 @@ export default function HomeScreen() {
               { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
             ]}
           >
-            <Text style={styles.fabText}>＋</Text>
+            <Text style={[styles.fabText, { color: colors.onPrimary }]}>＋</Text>
           </Pressable>
         </>
       ) : null}
@@ -496,42 +520,74 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 18,
+    paddingBottom: 18,
+  },
+  headerCopy: {
+    gap: 7,
+  },
+  eyebrowLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2,
   },
   headerTitleGroup: {
     flexDirection: "row",
-    alignItems: "baseline",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
   },
   title: {
-    fontSize: 28,
+    fontSize: 31,
     fontWeight: "800",
+    letterSpacing: -1.3,
   },
   count: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "800",
+    overflow: "hidden",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  headerSubtitle: {
+    fontSize: 13,
   },
   settingsButton: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    marginTop: 3,
   },
   settingsButtonText: {
     fontSize: 13,
     fontWeight: "600",
   },
-  search: {
+  searchShell: {
     marginHorizontal: 20,
-    marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingHorizontal: 15,
+  },
+  searchDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  search: {
+    flex: 1,
+    paddingVertical: 12,
     fontSize: 15,
   },
   chips: {
@@ -558,7 +614,19 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  bookmarkSectionLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  sectionDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 6,
   },
   bookmarkSectionHeader: {
     fontSize: 13,
@@ -587,24 +655,25 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 20,
     paddingBottom: 96,
-    gap: 8,
+    gap: 9,
   },
   listEmpty: {
     paddingTop: 48,
     alignItems: "center",
+    gap: 15,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    padding: 12,
+    borderWidth: 1,
+    borderRadius: 17,
+    padding: 13,
   },
   rowMark: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -626,6 +695,16 @@ const styles = StyleSheet.create({
   },
   rowFolder: {
     fontSize: 12,
+  },
+  rowFolderLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  rowFolderDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
   starButton: {
     paddingHorizontal: 4,
