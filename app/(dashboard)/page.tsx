@@ -1388,8 +1388,8 @@ function SearchBox({ query, setQuery, className }: { query: string; setQuery: (v
   return (
     <div className={cn("relative min-w-0", className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      <Input aria-label="북마크 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="pl-9 pr-10" />
-      {query ? <Button type="button" variant="ghost" size="icon-xs" aria-label="검색어 지우기" onClick={() => setQuery("")} className="absolute right-1 top-1/2 -translate-y-1/2"><X /></Button> : null}
+      <Input aria-label="북마크 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="pl-9 pr-12 lg:pr-10" />
+      {query ? <Button type="button" variant="ghost" size="icon" aria-label="검색어 지우기" onClick={() => setQuery("")} className="absolute right-0 top-1/2 size-10 -translate-y-1/2 lg:size-8"><X /></Button> : null}
     </div>
   );
 }
