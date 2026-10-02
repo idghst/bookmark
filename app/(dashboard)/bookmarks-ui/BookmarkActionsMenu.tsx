@@ -1,7 +1,8 @@
-import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { BookmarkItem } from "@/app/lib/bookmarks/types";
+import { toast } from "@/app/components/toast";
 
 export function BookmarkActionsMenu({
   bookmark,
@@ -16,6 +17,15 @@ export function BookmarkActionsMenu({
   onDuplicate: (bookmark: BookmarkItem) => void;
   onDelete: (bookmark: BookmarkItem) => void;
 }) {
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(bookmark.url);
+      toast.success("링크를 복사했습니다.");
+    } catch {
+      toast.error("링크를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인하세요.");
+    }
+  }
+
   return (
     <div
       className="-mr-1 -mt-1 shrink-0"
@@ -35,6 +45,9 @@ export function BookmarkActionsMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent aria-label={`${bookmark.title} 메뉴`} align="end">
           <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={() => void copyLink()}>
+              <Link2 aria-hidden="true" />링크 복사
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onEdit(bookmark)}>
               <Pencil aria-hidden="true" />편집
             </DropdownMenuItem>
