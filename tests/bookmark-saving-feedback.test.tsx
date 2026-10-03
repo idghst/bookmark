@@ -211,6 +211,48 @@ describe("section-first bookmark UI", () => {
     expect(within(dialog).getByRole("combobox", { name: "폴더" })).toHaveTextContent("프로젝트");
   });
 
+  it("keeps keyboard focus in the mobile folder menu and restores it on Escape", async () => {
+    setup();
+    const opener = await screen.findByRole("button", { name: "폴더 메뉴 열기" });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const menu = screen.getByRole("dialog", { name: "북마크 메뉴" });
+    const first = within(menu).getByRole("link", { name: "Bookmark 홈으로 이동" });
+    const last = within(menu).getByRole("button", { name: "새 폴더" });
+    expect(first).toHaveFocus();
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(first).toHaveFocus();
+    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+
+    fireEvent.keyDown(last, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "북마크 메뉴" })).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes a form opened from the mobile menu before closing the menu", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "폴더 메뉴 열기" }));
+    const menu = screen.getByRole("dialog", { name: "북마크 메뉴" });
+    const addFolder = within(menu).getByRole("button", { name: "새 폴더" });
+    addFolder.focus();
+    fireEvent.click(addFolder);
+
+    const form = screen.getByRole("dialog", { name: "새 폴더" });
+    const name = within(form).getByRole("textbox");
+    expect(name).toHaveFocus();
+    fireEvent.keyDown(name, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "새 폴더" })).not.toBeInTheDocument());
+    expect(menu).toBeInTheDocument();
+    expect(addFolder).toHaveFocus();
+  });
+
   it("lets users clear search and favorite filters from an empty result", async () => {
     setup({ folders, sections, bookmarks: [{ ...bookmarks[0], isFavorite: true }, ...bookmarks.slice(1)] });
     expect(await screen.findByRole("link", { name: /프로젝트 A/ })).toBeInTheDocument();

@@ -115,6 +115,7 @@ export default function BookmarksPage() {
   const mutationEpoch = useRef(0);
   const latestMutationEpoch = useRef(new Map<string, number>());
   const persistRemoteRef = useRef(false);
+  const mobileFoldersRef = useRef<HTMLDivElement>(null);
   persistRemoteRef.current = apiBacked || refreshing;
   const hasHydratedData = hydrated;
   const mutationsDisabled = !hasHydratedData;
@@ -125,6 +126,43 @@ export default function BookmarksPage() {
     if (!isDragging) setDragStatus("");
     return () => document.documentElement.removeAttribute("data-dragging");
   }, [isDragging]);
+
+  useEffect(() => {
+    if (!mobileFoldersOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const menu = mobileFoldersRef.current;
+    const focusableSelector = 'a[href], button:not([disabled]):not([tabindex="-1"]), [tabindex="0"]';
+    menu?.querySelector<HTMLElement>(focusableSelector)?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || document.querySelector("[data-bookmark-modal]")) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileFoldersOpen(false);
+      } else if (event.key === "Tab") {
+        const focusable = [...(menu?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])];
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    }
+    function handleResize() {
+      if (window.innerWidth >= 1024) setMobileFoldersOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
+      previousFocus?.focus();
+    };
+  }, [mobileFoldersOpen]);
 
   function announceDrop(message: string) {
     setDragStatus((current) => (current === message ? current : message));
@@ -1084,16 +1122,16 @@ export default function BookmarksPage() {
       <div className="sr-only" aria-live="polite" aria-atomic="true">{dragStatus}</div>
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="북마크 메뉴">
-          <button type="button" aria-label="폴더 메뉴 닫기" className="absolute inset-0 bg-black/30" onClick={() => setMobileFoldersOpen(false)} />
+        <div ref={mobileFoldersRef} className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="북마크 메뉴">
+          <button type="button" tabIndex={-1} aria-label="폴더 메뉴 닫기" className="absolute inset-0 bg-black/30" onClick={() => setMobileFoldersOpen(false)} />
           <ConsoleSidebar {...sidebarProps} id="mobile-console-sidebar" className="absolute inset-y-0 left-0 flex shadow-2xl" />
         </div>
       ) : null}
 
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <section inert={mobileFoldersOpen} className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="dot-header shrink-0 border-b border-border px-3 py-2 lg:hidden">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)} aria-controls="mobile-console-sidebar">
+            <Button variant="ghost" size="icon" className={BOOKMARK_TOUCH_TARGET_CLASS} onClick={() => setMobileFoldersOpen(true)} aria-controls="mobile-console-sidebar" aria-expanded={mobileFoldersOpen}>
               <Menu className="h-5 w-5" /><span className="sr-only">폴더 메뉴 열기</span>
             </Button>
             <PageTitle name={activeName} color={activeColor} count={currentCount} />
