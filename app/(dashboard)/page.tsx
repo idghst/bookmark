@@ -1447,11 +1447,24 @@ function PageTitle({ name, color, count }: { name: string; color: string; count:
 }
 
 function SearchBox({ query, setQuery, className }: { query: string; setQuery: (value: string) => void; className?: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function clearSearch() {
+    setQuery("");
+    inputRef.current?.focus();
+  }
+
   return (
     <div className={cn("relative min-w-0", className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      <Input aria-label="북마크 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="북마크 검색..." className="pl-9 pr-12 lg:pr-10" />
-      {query ? <Button type="button" variant="ghost" size="icon" aria-label="검색어 지우기" onClick={() => setQuery("")} className="absolute right-0 top-1/2 size-10 -translate-y-1/2 lg:size-8"><X /></Button> : null}
+      <Input ref={inputRef} aria-label="북마크 검색" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => {
+        if (event.key === "Escape" && query && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          event.stopPropagation();
+          clearSearch();
+        }
+      }} placeholder="북마크 검색..." className="pl-9 pr-12 lg:pr-10" />
+      {query ? <Button type="button" variant="ghost" size="icon" aria-label="검색어 지우기" onClick={clearSearch} className="absolute right-0 top-1/2 size-10 -translate-y-1/2 lg:size-8"><X /></Button> : null}
     </div>
   );
 }
