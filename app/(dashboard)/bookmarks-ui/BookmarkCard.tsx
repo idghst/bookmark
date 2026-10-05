@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookmarkActionsMenu } from "@/app/(dashboard)/bookmarks-ui/BookmarkActionsMenu";
 import { Favicon } from "@/app/(dashboard)/bookmarks-ui/Favicon";
+import { DropPreview } from "@/app/(dashboard)/bookmarks-ui/MovePreview";
 import type { BookmarkItem } from "@/app/lib/bookmarks/types";
 import { bookmarkHost } from "@/app/lib/bookmarks/url";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ export function BookmarkCard({
   dragging,
   dropEdge,
   canDrop,
+  preview,
   mutationsDisabled,
   onDragStart,
   onDragEnd,
@@ -29,6 +31,7 @@ export function BookmarkCard({
   dragging: boolean;
   dropEdge: InsertEdge | null;
   canDrop: boolean;
+  preview?: { title: string; placement: string } | null;
   mutationsDisabled: boolean;
   onDragStart: (bookmarkId: string) => void;
   onDragEnd: () => void;
@@ -56,11 +59,13 @@ export function BookmarkCard({
       onClick={openBookmark}
       onDragStart={(event) => {
         event.stopPropagation();
+        event.dataTransfer?.setData("text/plain", bookmark.id);
         if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
         onDragStart(bookmark.id);
       }}
       onDragEnd={onDragEnd}
       onDragOver={(event) => {
+        if (dragging) { event.stopPropagation(); onDragOver(bookmark.id, event); return; }
         if (!canDrop) return;
         event.preventDefault();
         event.stopPropagation();
@@ -68,6 +73,12 @@ export function BookmarkCard({
         onDragOver(bookmark.id, event);
       }}
       onDrop={(event) => {
+        if (dragging) {
+          event.preventDefault();
+          event.stopPropagation();
+          onDragEnd();
+          return;
+        }
         if (!canDrop) return;
         event.preventDefault();
         event.stopPropagation();
@@ -77,6 +88,7 @@ export function BookmarkCard({
         if (event.key === "Enter" && event.target === event.currentTarget) openBookmark();
       }}
     >
+      {preview ? <DropPreview {...preview} variant="card" edge={dropEdge} /> : null}
       <CardHeader>
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary">

@@ -19,6 +19,7 @@ import { insertEdgeFromPointer, scrollFromPointer } from "@/app/lib/bookmarks/po
 import { BRAND } from "@/app/lib/config/brand";
 import type { BookmarkItem, Folder, Section } from "@/app/lib/bookmarks/types";
 import { cn } from "@/lib/utils";
+import { DropPreview, type MovePreviewInfo } from "@/app/(dashboard)/bookmarks-ui/MovePreview";
 
 type Selection = { kind: "folder" | "section"; id: string };
 type InsertEdge = "before" | "after";
@@ -36,6 +37,7 @@ export type ConsoleSidebarProps = {
   dragOverSectionId: string | null;
   folderInsert: { id: string; edge: InsertEdge } | null;
   sectionInsertEdge: InsertEdge | null;
+  movePreview?: MovePreviewInfo | null;
   onSelectFolder: (id: string) => void;
   onSelectSection: (id: string) => void;
   onAddFolder: () => void;
@@ -61,6 +63,9 @@ export type ConsoleSidebarProps = {
 
 export function ConsoleSidebar(props: ConsoleSidebarProps) {
   const groups = buildSidebarGroups(props.sections, props.folders);
+  if (props.draggingFolderId && !groups.some((group) => group.section === null)) {
+    groups.push({ section: null, folders: [] });
+  }
   return (
     <aside
       id={props.id}
@@ -116,6 +121,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                 key={sectionId ?? "__none__"}
                 aria-label={group.section?.name ?? "섹션 없음"}
                 className={cn(
+                  "relative",
                   group.section && props.draggingSectionId === group.section.id && "opacity-60",
                   group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
                   group.section && props.draggingSectionId && props.dragOverSectionId === group.section.id && props.sectionInsertEdge === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
@@ -137,14 +143,16 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                   props.onDropSection(group.section.id, event);
                 }}
               >
+                {props.movePreview && props.draggingSectionId && props.dragOverSectionId === sectionId ? <DropPreview {...props.movePreview} edge={props.sectionInsertEdge} variant="section" /> : null}
                 {group.section ? (
                   <div
                     className={cn(
-                      "group/section flex min-h-9 items-center rounded-md",
+                      "group/section relative flex min-h-9 items-center rounded-md",
                       props.draggingFolderId && props.dragOverSectionId === group.section.id && "bg-muted ring-2 ring-ring/25"
                     )}
                     draggable={!props.mutationsDisabled}
                     onDragStart={(event) => {
+                      event.dataTransfer?.setData("text/plain", group.section?.id ?? "");
                       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                       props.onDragSection(group.section?.id ?? null);
                       const groupEl = event.currentTarget.closest("section");
@@ -167,6 +175,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       props.onDropFolderOnSection(group.section?.id ?? null);
                     }}
                   >
+                    {props.movePreview && props.draggingFolderId && props.dragOverSectionId === sectionId ? <DropPreview {...props.movePreview} /> : null}
                     <Button
                       variant={sectionActive ? "secondary" : "ghost"}
                       size="sm"
@@ -192,7 +201,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                 ) : (
                   <div
                     className={cn(
-                      "flex min-h-9 items-center rounded-md px-2 text-xs font-medium text-muted-foreground",
+                      "relative flex min-h-9 items-center rounded-md px-2 text-xs font-medium text-muted-foreground",
                       props.draggingFolderId && props.dragOverSectionId === "__none__" && "bg-muted ring-2 ring-ring/25"
                     )}
                     onDragOver={(event) => {
@@ -206,6 +215,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       props.onDropFolderOnSection(null);
                     }}
                   >
+                    {props.movePreview && props.draggingFolderId && props.dragOverSectionId === "__none__" ? <DropPreview {...props.movePreview} /> : null}
                     섹션 없음
                   </div>
                 )}
@@ -219,7 +229,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                       <li
                         key={folder.id}
                         className={cn(
-                          "group/folder flex min-h-9 items-center rounded-md",
+                          "group/folder relative flex min-h-9 items-center rounded-md",
                           props.draggingFolderId === folder.id && "opacity-60",
                           insert === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
                           insert === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]",
@@ -228,6 +238,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                         data-drop-edge={insert ?? undefined}
                         draggable={!props.mutationsDisabled}
                         onDragStart={(event) => {
+                          event.dataTransfer?.setData("text/plain", folder.id);
                           if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                           props.onDragFolder(folder.id);
                         }}
@@ -250,6 +261,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                           props.onDragOverFolder(folder.id, insertEdgeFromPointer(event.clientY, rect));
                         }}
                         onDrop={(event) => {
+                          if (!props.draggingBookmarkId && !props.draggingFolderId) return;
                           event.preventDefault();
                           event.stopPropagation();
                           if (props.draggingBookmarkId) {
@@ -259,6 +271,7 @@ export function ConsoleSidebar(props: ConsoleSidebarProps) {
                           if (props.draggingFolderId) props.onDropFolder(folder.id, event);
                         }}
                       >
+                        {props.movePreview && (insert || dropInto) ? <DropPreview {...props.movePreview} edge={insert} /> : null}
                         <Button
                           variant={active ? "secondary" : "ghost"}
                           size="sm"

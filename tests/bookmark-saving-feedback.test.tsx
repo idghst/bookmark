@@ -507,6 +507,175 @@ describe("section-first bookmark UI", () => {
     expect(screen.getByText("프로젝트 앞에 놓습니다.")).toBeInTheDocument();
   });
 
+  it("previews a folder destination without persisting until drop and clears on Escape", async () => {
+    const { fetchMock } = setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    mockRect(100, 40);
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "미분류 0" }));
+    firePointerDrag(within(nav).getByRole("button", { name: "프로젝트 2" }), "dragover", 110);
+    const preview = screen.getByRole("region", { name: "이동 미리보기" });
+    expect(preview).toHaveTextContent("미분류");
+    expect(preview).toHaveTextContent("업무");
+    expect(preview).toHaveTextContent("프로젝트 앞");
+    expect(nav.querySelector("[data-move-preview]")).toHaveTextContent("미분류");
+    expect(folderNamesInSection("섹션 없음")).toEqual(["미분류"]);
+    expect(mutations(fetchMock)).toHaveLength(0);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "이동 미리보기" })).not.toBeInTheDocument();
+    expect(nav.querySelector("[data-move-preview]")).toBeNull();
+    firePointerDrag(within(nav).getByRole("button", { name: "프로젝트 2" }), "drop", 110);
+    expect(mutations(fetchMock)).toHaveLength(0);
+  });
+
+  it("previews bookmarks on a card, empty group and sidebar folder", async () => {
+    setup({ folders, sections, bookmarks: bookmarks.filter((item) => item.folderId !== "operations") });
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    mockRect(100, 40);
+    fireEvent.dragStart(source);
+    firePointerDrag(screen.getByRole("link", { name: /프로젝트 B/ }), "dragover", 130);
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("프로젝트 B 뒤");
+    expect(document.querySelector('[data-move-preview="card"]')).toHaveTextContent("프로젝트 A");
+    const emptyGroup = screen.getByLabelText("운영 북마크, 드래그해서 위치 변경");
+    fireEvent.dragOver(emptyGroup);
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("운영");
+    expect(emptyGroup.querySelector("[data-move-preview]")).toHaveTextContent("프로젝트 A");
+    const nav = screen.getByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "문서 1" }));
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("지식 / 문서 / 섹션 없음");
+    expect(emptyGroup.querySelector("[data-move-preview]")).toBeNull();
+    fireEvent.dragEnd(source);
+    expect(screen.queryByRole("region", { name: "이동 미리보기" })).not.toBeInTheDocument();
+  });
+
+  it("previews a sidebar section with the folders it carries", async () => {
+    setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    mockRect(100, 80);
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "업무" }));
+    firePointerDrag(within(nav).getByRole("region", { name: "지식" }), "dragover", 150);
+    const preview = screen.getByRole("region", { name: "이동 미리보기" });
+    expect(preview).toHaveTextContent("업무");
+    expect(preview).toHaveTextContent("지식 뒤");
+    expect(preview).toHaveTextContent("폴더 2개");
+    expect(nav.querySelector("[data-move-preview]")).toHaveTextContent("프로젝트");
+  });
+
+  it("clears a previous destination when dragged outside valid targets", async () => {
+    setup();
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    fireEvent.dragStart(source);
+    fireEvent.dragOver(screen.getByRole("link", { name: /운영 A/ }));
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toBeInTheDocument();
+    fireEvent.dragOver(screen.getByRole("main"));
+    expect(screen.queryByRole("region", { name: "이동 미리보기" })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-drop-edge]")).toBeNull();
+  });
+
+  it("previews inner section sorting and rejects a section in another folder", async () => {
+    const folderSections: FolderSection[] = [
+      { id: "daily", name: "매일", folderId: "projects", color: null, position: 0 },
+      { id: "weekly", name: "주간", folderId: "projects", color: null, position: 1 },
+      { id: "other", name: "운영 섹션", folderId: "operations", color: null, position: 0 }
+    ];
+    const { fetchMock } = setup({ folders, sections, bookmarks, folderSections });
+    const daily = (await screen.findByRole("heading", { name: "프로젝트 · 매일" })).parentElement!;
+    const weekly = screen.getByRole("heading", { name: "프로젝트 · 주간" }).parentElement!;
+    mockRect(100, 40);
+    fireEvent.dragStart(daily);
+    firePointerDrag(weekly, "dragover", 130);
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("주간 뒤");
+    expect(weekly.querySelector("[data-move-preview]")).toHaveTextContent("매일");
+    const other = screen.getByRole("heading", { name: "운영 · 운영 섹션" }).parentElement!;
+    firePointerDrag(other, "dragover", 110);
+    expect(screen.queryByRole("region", { name: "이동 미리보기" })).not.toBeInTheDocument();
+    expect(weekly.querySelector("[data-move-preview]")).toBeNull();
+    firePointerDrag(other, "drop", 110);
+    expect(mutations(fetchMock)).toHaveLength(0);
+  });
+
+  it("offers empty unassigned destinations only while dragging", async () => {
+    const folderSections: FolderSection[] = [{ id: "daily", name: "매일", folderId: "projects", color: null, position: 0 }];
+    setup({ folders: folders.slice(0, 3), sections, bookmarks: [{ ...bookmarks[0], folderSectionId: "daily" }], folderSections });
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    expect(screen.queryByRole("heading", { name: "프로젝트 · 섹션 없음" })).not.toBeInTheDocument();
+    fireEvent.dragStart(source);
+    const header = screen.getByRole("heading", { name: "프로젝트 · 섹션 없음" }).parentElement!;
+    fireEvent.dragOver(header);
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("업무 / 프로젝트 / 섹션 없음");
+    fireEvent.dragEnd(source);
+    expect(screen.queryByRole("heading", { name: "프로젝트 · 섹션 없음" })).not.toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "북마크 폴더" });
+    expect(within(nav).queryByRole("region", { name: "섹션 없음" })).not.toBeInTheDocument();
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "프로젝트 1" }));
+    const unassigned = within(nav).getByRole("region", { name: "섹션 없음" });
+    fireEvent.dragOver(within(unassigned).getByText("섹션 없음"));
+    expect(screen.getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("섹션 없음");
+  });
+
+  it("previews a bookmark's destination when editing its folder", async () => {
+    const { fetchMock } = setup();
+    const menu = await openMenu("프로젝트 A");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    const dialog = screen.getByRole("dialog", { name: "북마크 편집" });
+    fireEvent.click(within(dialog).getByRole("combobox", { name: "폴더" }));
+    fireEvent.click(await screen.findByRole("option", { name: "문서" }));
+    expect(within(dialog).getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("지식 / 문서 / 섹션 없음");
+    expect(mutations(fetchMock)).toHaveLength(0);
+  });
+
+  it("does not move a bookmark to the end when dropped back onto itself", async () => {
+    const { fetchMock } = setup();
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    fireEvent.dragStart(source);
+    fireEvent.dragOver(source);
+    fireEvent.drop(source);
+    await act(async () => { await Promise.resolve(); });
+    expect(mutations(fetchMock)).toHaveLength(0);
+  });
+
+  it("does not preview a move when hovering a bookmark's current group header or unsectioned folder", async () => {
+    setup();
+    const source = await screen.findByRole("link", { name: /프로젝트 A/ });
+    fireEvent.dragStart(source);
+    fireEvent.dragOver(screen.getByRole("heading", { name: "프로젝트" }).parentElement!);
+    expect(screen.queryByRole("region", { name: "이동 미리보기" })).not.toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "북마크 폴더" });
+    fireEvent.dragOver(within(nav).getByRole("button", { name: "프로젝트 2" }));
+    expect(screen.queryByRole("region", { name: "이동 미리보기" })).not.toBeInTheDocument();
+  });
+
+  it("appends an edited bookmark to the previewed destination in local mode", async () => {
+    const { fetchMock } = setup({ folders, sections, bookmarks: [...bookmarks, { ...bookmarks[2], id: "o2", title: "운영 B", position: 3 }] });
+    await screen.findByRole("link", { name: /프로젝트 A/ });
+    fetchMock.mockRejectedValue(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "북마크 새로고침" }));
+    await screen.findByText(/서버에 연결하지 못했습니다/);
+    const menu = await openMenu("프로젝트 A");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    const dialog = screen.getByRole("dialog", { name: "북마크 편집" });
+    fireEvent.click(within(dialog).getByRole("combobox", { name: "폴더" }));
+    fireEvent.click(await screen.findByRole("option", { name: "운영" }));
+    expect(within(dialog).getByRole("region", { name: "이동 미리보기" })).toHaveTextContent("저장하면 마지막 위치로 이동");
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const group = screen.getByLabelText("운영 북마크, 드래그해서 위치 변경");
+    expect(within(group).getAllByRole("link").map(el => el.textContent?.split("https")[0])).toEqual([
+      expect.stringContaining("운영 A"), expect.stringContaining("운영 B"), expect.stringContaining("프로젝트 A")
+    ]);
+  });
+
+  it("lets a sidebar section drop bubble through a destination folder row", async () => {
+    const { fetchMock } = setup();
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    mockRect(100, 80);
+    fireEvent.dragStart(within(nav).getByRole("button", { name: "업무" }));
+    const folder = within(nav).getByRole("button", { name: "문서 1" });
+    firePointerDrag(folder, "dragover", 160);
+    firePointerDrag(folder, "drop", 160);
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
+    expect(mutations(fetchMock)[0][0]).toBe("/api/sections/reorder");
+  });
+
   it("reorders folders by drop position instead of swapping onto the target", async () => {
     const extra: Folder[] = [
       { id: "a", name: "폴더A", color: "#4f46e5", sectionId: "work", position: 0 },

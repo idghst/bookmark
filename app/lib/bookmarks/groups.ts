@@ -38,7 +38,8 @@ export function buildBookmarkGroups(
   visibleFolders: Folder[],
   folderSections: FolderSection[],
   hasActiveFilter: boolean,
-  alwaysShowUnsectioned = false
+  alwaysShowUnsectioned = false,
+  includeEmptyUnsectioned = false
 ): BookmarkGroup[] {
   const multipleFolders = visibleFolders.length > 1;
   const knownIds = new Set(folderSections.map((section) => section.id));
@@ -71,7 +72,7 @@ export function buildBookmarkGroups(
         folderSection,
         items: itemsByKey.get(`${folder.id}:${folderSection.id}`) ?? []
       })),
-      ...(unsectioned.items.length > 0 || (!owned.length && !alwaysShowUnsectioned) ? [unsectioned] : [])
+      ...(includeEmptyUnsectioned || unsectioned.items.length > 0 || (!owned.length && !alwaysShowUnsectioned) ? [unsectioned] : [])
     ];
     return hasActiveFilter ? groups.filter((group) => group.items.length) : groups;
   });

@@ -14,6 +14,7 @@ import { DatabaseProgressStatus } from "@/app/(dashboard)/bookmarks-ui/DatabaseP
 import { Field } from "@/app/(dashboard)/bookmarks-ui/Field";
 import { FolderActionsMenu, FolderSectionActionsMenu } from "@/app/(dashboard)/bookmarks-ui/SectionActionsMenu";
 import { Modal } from "@/app/(dashboard)/bookmarks-ui/Modal";
+import { DropPreview, MovePreview, type MovePreviewInfo } from "@/app/(dashboard)/bookmarks-ui/MovePreview";
 import { readBookmarkCache, writeBookmarkCache } from "@/app/lib/bookmarks/cache";
 import { apiRequest } from "@/app/lib/bookmarks/client-api";
 import {
@@ -109,6 +110,7 @@ export default function BookmarksPage() {
   const [folderInsert, setFolderInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
   const [folderSectionInsert, setFolderSectionInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
   const [bookmarkInsert, setBookmarkInsert] = useState<{ id: string; edge: "before" | "after" } | null>(null);
+  const [bookmarkGroupTarget, setBookmarkGroupTarget] = useState<string | null>(null);
   const [dragStatus, setDragStatus] = useState("");
   const mutationQueues = useRef(new Map<string, Promise<void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
@@ -125,6 +127,20 @@ export default function BookmarksPage() {
     document.documentElement.toggleAttribute("data-dragging", isDragging);
     if (!isDragging) setDragStatus("");
     return () => document.documentElement.removeAttribute("data-dragging");
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    function cancelDrag(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      clearFolderDrag();
+      clearFolderSectionDrag();
+      clearBookmarkDrag();
+      setDraggingSectionId(null);
+    }
+    window.addEventListener("keydown", cancelDrag);
+    return () => window.removeEventListener("keydown", cancelDrag);
   }, [isDragging]);
 
   useEffect(() => {
@@ -215,8 +231,13 @@ export default function BookmarksPage() {
     ? "첫 폴더 만들기"
     : selectedSection ? "이 섹션에 폴더 만들기" : "폴더 만들기";
   const groups = useMemo(
-    () => buildBookmarkGroups(filtered, visibleFolders, folderSections, hasActiveFilter, Boolean(selectedFolder)),
-    [filtered, folderSections, hasActiveFilter, selectedFolder, visibleFolders]
+    () => {
+      const current = buildBookmarkGroups(filtered, visibleFolders, folderSections, hasActiveFilter, Boolean(selectedFolder));
+      if (!draggingBookmarkId) return current;
+      const targets = buildBookmarkGroups(filtered, visibleFolders, folderSections, hasActiveFilter, Boolean(selectedFolder), true);
+      return [...current, ...targets.filter((target) => !current.some((group) => group.key === target.key))];
+    },
+    [filtered, folderSections, hasActiveFilter, selectedFolder, visibleFolders, draggingBookmarkId]
   );
   const folderSectionsForDraft = useMemo(
     () => folderSections.filter((section) => section.folderId === bookmarkDraft.folderId).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ko")),
@@ -227,6 +248,76 @@ export default function BookmarksPage() {
   const favoriteCount = countBookmarks(visibleBookmarks, { favoriteOnly: true });
   const activeName = selectedFolder?.name ?? selectedSection?.name ?? "북마크";
   const activeColor = selectedFolder?.color ?? selectedSection?.color ?? COLOR_FALLBACK;
+
+  function sectionPath(id: string | null) {
+    return sections.find((section) => section.id === id)?.name ?? "섹션 없음";
+  }
+
+  function bookmarkPath(folderId: string | null, innerSectionId: string | null) {
+    const folder = folders.find((item) => item.id === folderId);
+    return `${sectionPath(folder ? folderSectionId(folder) : null)} / ${folder?.name ?? "폴더 없음"} / ${folderSections.find((item) => item.id === innerSectionId)?.name ?? "섹션 없음"}`;
+  }
+
+  const draggingBookmark = bookmarks.find((item) => item.id === draggingBookmarkId);
+  const draggingFolderSection = folderSections.find((item) => item.id === draggingFolderSectionId);
+  const movePreview: MovePreviewInfo | null = (() => {
+    if (draggingBookmark) {
+      const target = bookmarks.find((item) => item.id === bookmarkInsert?.id);
+      const group = groups.find((item) => item.key === bookmarkGroupTarget);
+      const folder = folders.find((item) => item.id === dragOverFolderId);
+      const destinationFolderId = target?.folderId ?? group?.folder.id ?? folder?.id;
+      if (!destinationFolderId) return null;
+      const destinationSectionId = target ? bookmarkFolderSectionId(target) : group?.folderSection?.id ?? null;
+      return {
+        title: draggingBookmark.title,
+        from: bookmarkPath(draggingBookmark.folderId, bookmarkFolderSectionId(draggingBookmark)),
+        to: bookmarkPath(destinationFolderId, destinationSectionId),
+        placement: target ? `${target.title} ${bookmarkInsert?.edge === "before" ? "앞" : "뒤"}` : "마지막 위치에 놓기"
+      };
+    }
+    const sourceFolder = folders.find((item) => item.id === draggingFolderId);
+    if (sourceFolder) {
+      const target = folders.find((item) => item.id === folderInsert?.id);
+      if (!target && !dragOverSectionId) return null;
+      return {
+        title: sourceFolder.name,
+        from: sectionPath(folderSectionId(sourceFolder)),
+        to: sectionPath(target ? folderSectionId(target) : dragOverSectionId === NO_SECTION ? null : dragOverSectionId),
+        placement: target ? `${target.name} ${folderInsert?.edge === "before" ? "앞" : "뒤"}` : "마지막 위치에 놓기",
+        contents: `북마크 ${bookmarks.filter((item) => item.folderId === sourceFolder.id).length}개 함께 이동`
+      };
+    }
+    const sourceSection = sections.find((item) => item.id === draggingSectionId);
+    const targetSection = sections.find((item) => item.id === dragOverSectionId);
+    if (sourceSection && targetSection && sectionInsertEdge) {
+      const carriedFolders = orderedFolders.filter((item) => folderSectionId(item) === sourceSection.id);
+      return { title: sourceSection.name, from: "사이드바", to: "사이드바", placement: `${targetSection.name} ${sectionInsertEdge === "before" ? "앞" : "뒤"}`, contents: `폴더 ${carriedFolders.length}개${carriedFolders.length ? ` · ${carriedFolders.map((item) => item.name).join(", ")}` : ""}` };
+    }
+    const targetFolderSection = folderSections.find((item) => item.id === folderSectionInsert?.id);
+    if (draggingFolderSection && targetFolderSection && folderSectionInsert) {
+      const path = bookmarkPath(draggingFolderSection.folderId, draggingFolderSection.id);
+      return { title: draggingFolderSection.name, from: path, to: bookmarkPath(targetFolderSection.folderId, targetFolderSection.id), placement: `${targetFolderSection.name} ${folderSectionInsert.edge === "before" ? "앞" : "뒤"}`, contents: `북마크 ${bookmarks.filter((item) => bookmarkFolderSectionId(item) === draggingFolderSectionId).length}개 함께 이동` };
+    }
+    return null;
+  })();
+  const editedBookmark = bookmarks.find((item) => item.id === bookmarkDialog?.bookmarkId);
+  const bookmarkDraftPreview: MovePreviewInfo | null = editedBookmark && (
+    editedBookmark.folderId !== bookmarkDraft.folderId
+    || bookmarkFolderSectionId(editedBookmark) !== (bookmarkDraft.folderSectionId === NO_SECTION ? null : bookmarkDraft.folderSectionId)
+  ) ? {
+    title: bookmarkDraft.title || editedBookmark.title,
+    from: bookmarkPath(editedBookmark.folderId, bookmarkFolderSectionId(editedBookmark)),
+    to: bookmarkPath(bookmarkDraft.folderId, bookmarkDraft.folderSectionId === NO_SECTION ? null : bookmarkDraft.folderSectionId),
+    placement: "저장하면 마지막 위치로 이동"
+  } : null;
+  const editedFolder = folders.find((item) => item.id === folderDialog?.folderId);
+  const folderDraftPreview: MovePreviewInfo | null = editedFolder && folderSectionId(editedFolder) !== (folderDraft.sectionId === NO_SECTION ? null : folderDraft.sectionId) ? {
+    title: folderDraft.name || editedFolder.name,
+    from: sectionPath(folderSectionId(editedFolder)),
+    to: sectionPath(folderDraft.sectionId === NO_SECTION ? null : folderDraft.sectionId),
+    placement: "저장하면 마지막 위치로 이동",
+    contents: `북마크 ${bookmarks.filter((item) => item.folderId === editedFolder.id).length}개 함께 이동`
+  } : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -484,8 +575,12 @@ export default function BookmarksPage() {
     const tempId = editingId ? null : createId("bm");
     try {
       if (editingId && previous) {
+        const moved = previous.folderId !== payload.folderId || bookmarkFolderSectionId(previous) !== payload.folderSectionId;
+        const position = moved
+          ? bookmarks.reduce((next, item) => item.id !== editingId && item.folderId === payload.folderId && bookmarkFolderSectionId(item) === payload.folderSectionId ? Math.max(next, item.position + 1) : next, 0)
+          : previous.position;
         noteMutation();
-        setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? { ...previous, ...payload } : bookmark));
+        setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? { ...previous, ...payload, position } : bookmark));
         if (persistRemoteRef.current) {
           const updated = await apiRequest<BookmarkItem>(`/api/bookmarks/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) });
           setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? updated : bookmark));
@@ -1031,7 +1126,19 @@ export default function BookmarksPage() {
   function clearBookmarkDrag() {
     setDraggingBookmarkId(null);
     setBookmarkInsert(null);
+    setBookmarkGroupTarget(null);
     setDragOverFolderId(null);
+    setDragStatus("");
+  }
+
+  function clearDropTarget() {
+    setDragOverFolderId(null);
+    setDragOverSectionId(null);
+    setSectionInsertEdge(null);
+    setFolderInsert(null);
+    setFolderSectionInsert(null);
+    setBookmarkInsert(null);
+    setBookmarkGroupTarget(null);
     setDragStatus("");
   }
 
@@ -1050,6 +1157,7 @@ export default function BookmarksPage() {
     dragOverSectionId,
     folderInsert,
     sectionInsertEdge,
+    movePreview,
     onSelectFolder: selectFolder,
     onSelectSection: selectSection,
     onAddFolder: () => openFolderDialog(),
@@ -1068,13 +1176,16 @@ export default function BookmarksPage() {
     onDragSection: (id: string | null) => {
       if (!mutationsDisabled) setDraggingSectionId(id);
       if (!id) {
-        setDragOverSectionId(null);
-        setSectionInsertEdge(null);
+        clearDropTarget();
       } else {
         setDragOverFolderId(null);
       }
     },
     onDragOverFolder: (id: string | null, edge?: "before" | "after") => {
+      if (id === draggingFolderId) return clearDropTarget();
+      if (draggingBookmark?.folderId === id && bookmarkFolderSectionId(draggingBookmark) === null) return clearDropTarget();
+      setBookmarkInsert(null);
+      setBookmarkGroupTarget(null);
       setDragOverFolderId(id);
       if (!id) {
         setFolderInsert(null);
@@ -1096,6 +1207,8 @@ export default function BookmarksPage() {
       }
     },
     onDragOverSection: (id: string | null, edge?: "before" | "after") => {
+      const source = folders.find((item) => item.id === draggingFolderId);
+      if (id === draggingSectionId || (source && !edge && folderSectionId(source) === (id === NO_SECTION ? null : id))) return clearDropTarget();
       setDragOverSectionId(id);
       setSectionInsertEdge(edge ?? null);
       if (id) {
@@ -1118,8 +1231,12 @@ export default function BookmarksPage() {
   };
 
   return (
-    <div className="dot-shell flex h-full min-h-0 overflow-hidden" aria-busy={!hasHydratedData}>
+    <div className="dot-shell flex h-full min-h-0 overflow-hidden" aria-busy={!hasHydratedData}
+      onDragOver={(event) => { if (isDragging && !event.defaultPrevented) clearDropTarget(); }}
+      onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) clearDropTarget(); }}
+    >
       <div className="sr-only" aria-live="polite" aria-atomic="true">{dragStatus}</div>
+      {movePreview ? <MovePreview preview={movePreview} floating /> : null}
       <ConsoleSidebar {...sidebarProps} className="hidden lg:flex" />
       {mobileFoldersOpen ? (
         <div ref={mobileFoldersRef} className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="북마크 메뉴">
@@ -1208,7 +1325,7 @@ export default function BookmarksPage() {
                 <div
                   className={cn(
                     BOOKMARK_SECTION_HEADER_CLASS,
-                    "dot-section-header",
+                    "dot-section-header relative",
                     draggingFolderSectionId === group.folderSection?.id && "opacity-60",
                     draggingBookmarkId && "ring-1 ring-transparent hover:ring-ring/30",
                     folderSectionInsert?.id && folderSectionInsert.id === group.folderSection?.id && folderSectionInsert.edge === "before" && "shadow-[inset_0_2px_0_0_hsl(var(--primary))]",
@@ -1217,6 +1334,7 @@ export default function BookmarksPage() {
                   draggable={Boolean(group.folderSection) && !mutationsDisabled}
                   onDragStart={(event) => {
                     if (!group.folderSection || mutationsDisabled) return;
+                    clearDropTarget();
                     event.dataTransfer?.setData("text/plain", group.folderSection.id);
                     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                     setDraggingFolderSectionId(group.folderSection.id);
@@ -1224,6 +1342,12 @@ export default function BookmarksPage() {
                   onDragEnd={clearFolderSectionDrag}
                   onDragOver={(event) => {
                     if (draggingFolderSectionId && group.folderSection) {
+                      if (draggingFolderSection?.folderId !== group.folder.id || draggingFolderSectionId === group.folderSection.id) {
+                        event.stopPropagation();
+                        clearDropTarget();
+                        if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+                        return;
+                      }
                       event.preventDefault();
                       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
                       const rect = event.currentTarget.getBoundingClientRect();
@@ -1235,6 +1359,9 @@ export default function BookmarksPage() {
                     if (!draggingBookmarkId) return;
                     event.preventDefault();
                     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+                    clearDropTarget();
+                    if (draggingBookmark?.folderId === group.folder.id && bookmarkFolderSectionId(draggingBookmark) === (group.folderSection?.id ?? null)) return;
+                    setBookmarkGroupTarget(group.key);
                     announceDrop(`${group.label}으로 이동합니다.`);
                   }}
                   onDrop={(event) => {
@@ -1252,6 +1379,7 @@ export default function BookmarksPage() {
                     moveBookmarkToSection(source, group.folderSection?.id ?? null);
                   }}
                 >
+                  {movePreview && folderSectionInsert?.id === group.folderSection?.id && draggingFolderSectionId ? <DropPreview {...movePreview} edge={folderSectionInsert?.edge} /> : null}
                   <span data-folder-color={group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK} className="dot-marker" style={{ backgroundColor: group.folderSection?.color ?? group.folder.color ?? COLOR_FALLBACK }} aria-hidden="true" />
                   <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{group.label}</h2>
                   <Badge variant="secondary" className="tabular-nums">{group.items.length}</Badge>
@@ -1274,13 +1402,14 @@ export default function BookmarksPage() {
                   )}
                 </div>
                 <div
-                  className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4"
+                  className={cn("relative grid min-h-12 grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4", bookmarkGroupTarget === group.key && "rounded-2xl ring-2 ring-primary/30")}
                   aria-label={`${group.label} 북마크, 드래그해서 위치 변경`}
                   onDragOver={(event) => {
                     if (!draggingBookmarkId) return;
                     event.preventDefault();
                     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-                    setBookmarkInsert(null);
+                    clearDropTarget();
+                    setBookmarkGroupTarget(group.key);
                     announceDrop(`${group.label}으로 이동합니다.`);
                   }}
                   onDrop={(event) => {
@@ -1320,12 +1449,15 @@ export default function BookmarksPage() {
                       dragging={draggingBookmarkId === bookmark.id}
                       dropEdge={bookmarkInsert?.id === bookmark.id ? bookmarkInsert.edge : null}
                       canDrop={Boolean(draggingBookmarkId && draggingBookmarkId !== bookmark.id)}
+                      preview={bookmarkInsert?.id === bookmark.id ? movePreview : null}
                       mutationsDisabled={mutationsDisabled}
-                      onDragStart={setDraggingBookmarkId}
+                      onDragStart={(id) => { clearDropTarget(); setDraggingBookmarkId(id); }}
                       onDragEnd={clearBookmarkDrag}
                       onDragOver={(id, event) => {
+                        if (id === draggingBookmarkId) { clearDropTarget(); return; }
                         const rect = event.currentTarget.getBoundingClientRect();
                         const edge = insertEdgeFromPointer(event.clientY, rect);
+                        clearDropTarget();
                         setBookmarkInsert({ id, edge });
                         const target = bookmarks.find((item) => item.id === id);
                         if (target) announceDrop(`${target.title} ${edge === "before" ? "앞" : "뒤"}에 놓습니다.`);
@@ -1337,6 +1469,7 @@ export default function BookmarksPage() {
                       onToggleFavorite={toggleFavorite}
                     />
                   ))}
+                  {movePreview && bookmarkGroupTarget === group.key ? <div className="pointer-events-none relative min-h-[136px]"><DropPreview {...movePreview} variant="card" /></div> : null}
                 </div>
               </section>
             ))}
@@ -1366,6 +1499,7 @@ export default function BookmarksPage() {
               </Select>
             </Field>
             <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookmarkDraft.isFavorite} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, isFavorite: event.target.checked }))} />즐겨찾기</label>
+            {bookmarkDraftPreview ? <MovePreview preview={bookmarkDraftPreview} /> : null}
             <FormFooter saving={saving} error={formError} onCancel={() => setBookmarkDialog(null)} />
           </form>
         </Modal>
@@ -1385,6 +1519,7 @@ export default function BookmarksPage() {
               </Select>
             </Field>
             <ColorPicker color={folderDraft.color} onChange={(color) => setFolderDraft((draft) => ({ ...draft, color }))} />
+            {folderDraftPreview ? <MovePreview preview={folderDraftPreview} /> : null}
             <FormFooter saving={saving} error={formError} onCancel={() => setFolderDialog(null)} />
           </form>
         </Modal>
