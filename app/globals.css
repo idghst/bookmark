@@ -132,7 +132,7 @@ html[data-dragging] * {
     radial-gradient(circle, rgba(91, 76, 230, .13) .8px, transparent 1.2px),
     radial-gradient(ellipse at 80% 0%, rgba(192, 181, 255, .18), transparent 52%);
   background-size: 24px 24px, 100% 100%;
-  animation: dot-drift 28s linear infinite;
+  background-position: 0 0, center top;
 }
 
 .dot-section-header {
