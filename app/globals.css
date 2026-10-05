@@ -112,7 +112,7 @@ html[data-dragging] * {
   height: 4px;
   border-radius: 50%;
   background: hsl(var(--primary));
-  animation: dot-breathe 2.4s ease-in-out infinite;
+  animation: none;
 }
 
 .dot-logo span:nth-child(3n + 2) { animation-delay: .18s; }
