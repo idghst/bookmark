@@ -32,6 +32,14 @@ describe("bookmark count filters", () => {
     expect(matchesBookmarkFilters(bookmarks[2], { query: "자동화" })).toBe(true);
     expect(matchesBookmarkFilters(bookmarks[3], { query: "notion.so" })).toBe(true);
   });
+
+  it("matches every search word across fields regardless of order and whitespace", () => {
+    expect(matchesBookmarkFilters(bookmarks[0], { query: " office   BNK " })).toBe(true);
+    expect(matchesBookmarkFilters(bookmarks[2], { query: "자동화\tRPA" })).toBe(true);
+    expect(matchesBookmarkFilters(bookmarks[2], { query: "RPA 없는단어" })).toBe(false);
+    expect(countBookmarks(bookmarks, { folderId: "bnk", favoriteOnly: true, query: "office BNK" })).toBe(1);
+    expect(matchesBookmarkFilters(bookmarks[0], { query: " \t " })).toBe(true);
+  });
 });
 
 it("finds a section by trimmed case-insensitive global name", () => {

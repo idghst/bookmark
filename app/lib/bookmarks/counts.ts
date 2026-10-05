@@ -13,11 +13,8 @@ export function matchesBookmarkFilters(bookmark: BookmarkItem, filters: Bookmark
   const needle = filters.query?.trim().toLowerCase();
   if (!needle) return true;
 
-  return (
-    bookmark.title.toLowerCase().includes(needle) ||
-    bookmark.url.toLowerCase().includes(needle) ||
-    (bookmark.description ?? "").toLowerCase().includes(needle)
-  );
+  const fields = [bookmark.title, bookmark.url, bookmark.description ?? ""].map((value) => value.toLowerCase());
+  return needle.split(/\s+/).every((word) => fields.some((field) => field.includes(word)));
 }
 
 export function countBookmarks(bookmarks: BookmarkItem[], filters: BookmarkCountFilters = {}) {
