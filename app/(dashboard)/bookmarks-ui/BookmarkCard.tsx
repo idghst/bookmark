@@ -53,6 +53,7 @@ export function BookmarkCard({
         dropEdge === "after" && "shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
       )}
       data-drop-edge={dropEdge ?? undefined}
+      style={{ animation: "none" }}
       draggable={!mutationsDisabled}
       role="link"
       tabIndex={0}

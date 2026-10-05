@@ -6,7 +6,7 @@ export function DatabaseProgressStatus({ title }: { title: string }) {
       <LoaderCircle className="size-5 shrink-0 animate-spin text-muted-foreground" />
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">완료될 때까지 잠시 기다려 주세요.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">화면에 반영했습니다. 백그라운드에서 저장합니다.</p>
       </div>
     </div>
   );

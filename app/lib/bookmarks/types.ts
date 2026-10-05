@@ -32,6 +32,13 @@ export type FolderSection = {
   position: number;
 };
 
+export type BookmarkSnapshot = {
+  folders: Folder[];
+  sections: Section[];
+  folderSections: FolderSection[];
+  bookmarks: BookmarkItem[];
+};
+
 export type BookmarkFormData = {
   title: string;
   url: string;

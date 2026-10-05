@@ -18,6 +18,27 @@ describe("bookmarkStore REST transport", () => {
     vi.resetModules();
   });
 
+  it.each([404, 405])("supports older API deployments without snapshots (%s)", async (status) => {
+    configureRest();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/snapshot")) return jsonResponse({ message: "Not found" }, status);
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.listSnapshot()).resolves.toEqual({ folders: [], sections: [], folderSections: [], bookmarks: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([401, 403, 503])("preserves snapshot errors instead of retrying four collections (%s)", async (status) => {
+    configureRest();
+    const fetchMock = vi.fn(async () => jsonResponse({ message: "Snapshot unavailable" }, status));
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookmarkStore } = await import("@/app/lib/bookmarks/store");
+    await expect(bookmarkStore.listSnapshot()).rejects.toMatchObject({ status });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("maps connection failures without leaking upstream details", async () => {
     configureRest();
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("private upstream address")));

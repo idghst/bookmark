@@ -48,6 +48,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const { resource, path } = await routeParts(context);
     if (path.length > 0) return noRoute();
+    if (resource === "snapshot") return NextResponse.json(await bookmarkStore.listSnapshot(), { headers: { "Cache-Control": "no-store" } });
     if (resource === "bookmarks") return NextResponse.json(await bookmarkStore.listBookmarks());
     if (resource === "folders") return NextResponse.json(await bookmarkStore.listFolders());
     if (resource === "sections") return NextResponse.json(await bookmarkStore.listSections());

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, FolderPlus, LoaderCircle, Menu, Plus, Search, Star, X } from "lucide-react";
+import { Bookmark, FolderPlus, Menu, Plus, Search, Star, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ import {
 } from "@/app/lib/bookmarks/positions";
 import { INITIAL_BOOKMARKS, INITIAL_FOLDERS, INITIAL_SECTIONS } from "@/app/lib/bookmarks/sample-data";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
-import type { BookmarkItem, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, BookmarkSnapshot, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
 import { safeUrl } from "@/app/lib/bookmarks/url";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +69,53 @@ const emptyBookmarkDraft = (folderId: string, folderSectionId = NO_SECTION): Boo
   isFavorite: false
 });
 
+// Only replace fields that still have this operation's optimistic value.
+function mergeUnchanged<T extends { id: string }>(current: T, expected: T, next: T): T {
+  const merged = { ...current };
+  for (const field of Object.keys(next) as Array<keyof T>) {
+    if (current[field] === expected[field]) merged[field] = next[field];
+  }
+  return merged;
+}
+
+function upsertOptimistic<T extends { id: string }>(current: T[], item: T, editing: boolean): T[] {
+  return editing ? current.map((entry) => entry.id === item.id ? { ...entry, ...item } : entry)
+    : current.some((entry) => entry.id === item.id) ? current : [...current, item];
+}
+
+function rollbackItem<T extends { id: string }>(current: T[], previous: T | undefined, optimistic: T): T[] {
+  return previous ? current.map((item) => item.id === optimistic.id ? mergeUnchanged(item, optimistic, previous) : item)
+    : current.filter((item) => item.id !== optimistic.id);
+}
+
+function applyCollectionChange<T extends { id: string }>(current: T[], before: T[], after: T[]): T[] {
+  return current.flatMap((item) => {
+    const previous = before.find((entry) => entry.id === item.id);
+    if (!previous) return [item];
+    const next = after.find((entry) => entry.id === item.id);
+    if (!next) return [];
+    const changed = { ...item };
+    for (const field of Object.keys(next) as Array<keyof T>) {
+      if (previous[field] !== next[field]) changed[field] = next[field];
+    }
+    return [changed];
+  });
+}
+
+function rollbackCollectionChange<T extends { id: string }>(current: T[], before: T[], after: T[]): T[] {
+  const restored = current.map((item) => {
+    const previous = before.find((entry) => entry.id === item.id);
+    const optimistic = after.find((entry) => entry.id === item.id);
+    if (!previous || !optimistic) return item;
+    const next = { ...item };
+    for (const field of Object.keys(previous) as Array<keyof T>) {
+      if (previous[field] !== optimistic[field] && item[field] === optimistic[field]) next[field] = previous[field];
+    }
+    return next;
+  });
+  return [...restored, ...before.filter((item) => !after.some((entry) => entry.id === item.id) && !current.some((entry) => entry.id === item.id))];
+}
+
 export default function BookmarksPage() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -81,8 +128,8 @@ export default function BookmarksPage() {
   const [apiBacked, setApiBacked] = useState(false);
   const [cacheWritable, setCacheWritable] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState(0);
+  const [pendingDeletes, setPendingDeletes] = useState(0);
   const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
   const [mutationError, setMutationError] = useState("");
   const [formError, setFormError] = useState("");
@@ -113,7 +160,9 @@ export default function BookmarksPage() {
   const [bookmarkGroupTarget, setBookmarkGroupTarget] = useState<string | null>(null);
   const [dragStatus, setDragStatus] = useState("");
   const mutationQueues = useRef(new Map<string, Promise<void>>());
+  const failedRollbacks = useRef(new Map<string, Array<() => void>>());
   const pendingOptimistic = useRef(new Map<symbol, () => void>());
+  const pendingCreates = useRef(new Set<string>());
   const mutationEpoch = useRef(0);
   const latestMutationEpoch = useRef(new Map<string, number>());
   const persistRemoteRef = useRef(false);
@@ -341,7 +390,7 @@ export default function BookmarksPage() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || pendingWrites > 0) return;
     setCacheWritable(writeBookmarkCache({
       apiBacked,
       savedAt: Date.now(),
@@ -351,7 +400,7 @@ export default function BookmarksPage() {
       bookmarks,
       selection: selection ?? undefined
     }));
-  }, [apiBacked, bookmarks, folderSections, folders, hydrated, sections, selection]);
+  }, [apiBacked, bookmarks, folderSections, folders, hydrated, pendingWrites, sections, selection]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -381,17 +430,10 @@ export default function BookmarksPage() {
     const epochAtStart = mutationEpoch.current;
     setRefreshing(true);
     try {
-      const [remoteFolders, remoteSections, remoteFolderSections, remoteBookmarks] = await Promise.all([
-        apiRequest<Folder[]>("/api/folders"),
-        apiRequest<Section[]>("/api/sections"),
-        apiRequest<FolderSection[]>("/api/folder-sections"),
-        apiRequest<BookmarkItem[]>("/api/bookmarks")
-      ]);
+      const { folders: remoteFolders, sections: remoteSections, folderSections: remoteFolderSections, bookmarks: remoteBookmarks } = await apiRequest<BookmarkSnapshot>("/api/snapshot");
       if (isCancelled()) return false;
       const flatFolders = flattenFolderResponse(remoteFolders);
-      const stale = !reapplyOptimistic && (
-        pendingOptimistic.current.size > 0 || mutationEpoch.current !== epochAtStart
-      );
+      const stale = mutationEpoch.current !== epochAtStart || (!reapplyOptimistic && pendingOptimistic.current.size > 0);
       if (!stale) {
         setFolders(flatFolders);
         setSections(normalizePositions(remoteSections));
@@ -409,7 +451,7 @@ export default function BookmarksPage() {
       }
       pendingOptimistic.current.forEach((apply) => apply());
       setApiBacked(true);
-      return true;
+      return !reapplyOptimistic || !stale;
     } catch {
       if (isCancelled()) return false;
       if (fallbackToInitial) {
@@ -437,35 +479,35 @@ export default function BookmarksPage() {
     rollback: () => void,
     request: () => Promise<unknown>,
     fallbackMessage: string,
-    reconcileOnFailure = false
+    reconcileOnFailure = false,
+    onSuccess?: (result: unknown) => void
   ) {
     if (!hasHydratedData) return;
+    const queueKey = /^(form:|favorite:|move:(bookmark|folder):|delete:(bookmark|folder|section|folderSection):)/.test(key)
+      ? `item:${key.split(":").at(-1)}` : key;
     setMutationError("");
     noteMutation();
     const epoch = mutationEpoch.current;
     // A local-only edit needs an epoch only while an older request for this key is still in flight.
-    if (persistRemoteRef.current || mutationQueues.current.has(key)) {
+    if (persistRemoteRef.current || mutationQueues.current.has(queueKey)) {
       latestMutationEpoch.current.set(key, epoch);
     }
     apply();
     if (!persistRemoteRef.current) return;
+    setPendingWrites((count) => count + 1);
     const token = Symbol(key);
     pendingOptimistic.current.set(token, () => {
       if (latestMutationEpoch.current.get(key) !== epoch) return;
       apply();
     });
-    const previous = mutationQueues.current.get(key) ?? Promise.resolve();
+    const previous = mutationQueues.current.get(queueKey) ?? Promise.resolve();
     const queued = previous.catch(() => undefined).then(async () => {
       try {
-        await request();
+        const result = await request();
+        if (latestMutationEpoch.current.get(key) === epoch) onSuccess?.(result);
+        failedRollbacks.current.delete(key);
         pendingOptimistic.current.delete(token);
         noteMutation();
-        if (
-          pendingOptimistic.current.size === 0
-          && latestMutationEpoch.current.get(key) === epoch
-        ) {
-          await refreshBookmarks();
-        }
       } catch (error) {
         pendingOptimistic.current.delete(token);
         const isLatest = latestMutationEpoch.current.get(key) === epoch;
@@ -473,21 +515,34 @@ export default function BookmarksPage() {
           const refreshed = reconcileOnFailure
             ? await refreshBookmarks({ reapplyOptimistic: true })
             : false;
-          if (!refreshed) rollback();
+          if (!refreshed) {
+            rollback();
+            [...(failedRollbacks.current.get(key) ?? [])].reverse().forEach((undo) => undo());
+            pendingOptimistic.current.forEach((apply) => apply());
+          }
+          failedRollbacks.current.delete(key);
+        } else {
+          failedRollbacks.current.set(key, [...(failedRollbacks.current.get(key) ?? []), rollback]);
         }
         noteMutation();
         if (isLatest) {
           setMutationError(error instanceof Error ? error.message : fallbackMessage);
         }
+      } finally {
+        setPendingWrites((count) => count - 1);
       }
     });
-    mutationQueues.current.set(key, queued);
+    mutationQueues.current.set(queueKey, queued);
     void queued.finally(() => {
-      if (mutationQueues.current.get(key) === queued) {
-        mutationQueues.current.delete(key);
-        latestMutationEpoch.current.delete(key);
-      }
+      if (mutationQueues.current.get(queueKey) === queued) mutationQueues.current.delete(queueKey);
+      if (latestMutationEpoch.current.get(key) === epoch) latestMutationEpoch.current.delete(key);
     });
+  }
+
+  function hasPendingCreation(...ids: Array<string | null | undefined>) {
+    if (!ids.some((id) => id && pendingCreates.current.has(id))) return false;
+    setMutationError("이 항목을 저장 중입니다. 저장이 끝나면 다시 시도하세요.");
+    return true;
   }
 
   function selectFolder(id: string) {
@@ -501,6 +556,7 @@ export default function BookmarksPage() {
   }
 
   function openBookmarkDialog(bookmark?: BookmarkItem, folder?: Folder) {
+    if (hasPendingCreation(bookmark?.id, folder?.id)) return;
     setFormError("");
     if (bookmark) {
       setBookmarkDialog({ mode: "edit", bookmarkId: bookmark.id });
@@ -521,6 +577,7 @@ export default function BookmarksPage() {
   }
 
   function openBookmarkDialogInSection(folder: Folder, folderSection: FolderSection | null) {
+    if (hasPendingCreation(folder.id, folderSection?.id)) return;
     setFormError("");
     setBookmarkDraft(emptyBookmarkDraft(folder.id, folderSection?.id ?? NO_SECTION));
     setBookmarkDialog({ mode: "create" });
@@ -529,6 +586,7 @@ export default function BookmarksPage() {
   function openFolderSectionDialog(folderSection?: FolderSection, folderId?: string) {
     const targetFolderId = folderSection?.folderId ?? folderId ?? selectedFolder?.id;
     if (!targetFolderId) return;
+    if (hasPendingCreation(targetFolderId, folderSection?.id)) return;
     setFormError("");
     setFolderSectionDraft({ name: folderSection?.name ?? "", color: folderSection?.color ?? null });
     setFolderSectionDialog(folderSection
@@ -537,6 +595,7 @@ export default function BookmarksPage() {
   }
 
   function openFolderDialog(folder?: Folder) {
+    if (hasPendingCreation(folder?.id)) return;
     setFormError("");
     setFolderDraft({
       name: folder?.name ?? "",
@@ -547,12 +606,13 @@ export default function BookmarksPage() {
   }
 
   function openSectionDialog(section?: Section) {
+    if (hasPendingCreation(section?.id)) return;
     setFormError("");
     setSectionDraft({ name: section?.name ?? "", color: section?.color ?? null });
     setSectionDialog(section ? { mode: "edit", sectionId: section.id } : { mode: "create" });
   }
 
-  async function saveBookmark(event: FormEvent<HTMLFormElement>) {
+  function saveBookmark(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = bookmarkDraft.title.trim();
     const url = safeUrl(bookmarkDraft.url);
@@ -560,293 +620,207 @@ export default function BookmarksPage() {
       setFormError(!title ? "제목을 입력하세요." : !url ? "http 또는 https URL을 입력하세요." : "폴더를 선택하세요.");
       return;
     }
+    const editingId = bookmarkDialog?.mode === "edit" ? bookmarkDialog.bookmarkId : undefined;
+    if (hasPendingCreation(editingId, bookmarkDraft.folderId, bookmarkDraft.folderSectionId)) return;
+    const previous = bookmarks.find((item) => item.id === editingId);
     const payload = {
-      title,
-      url,
-      description: bookmarkDraft.description.trim() || null,
+      title, url, description: bookmarkDraft.description.trim() || null,
       folderId: bookmarkDraft.folderId,
       folderSectionId: bookmarkDraft.folderSectionId === NO_SECTION ? null : bookmarkDraft.folderSectionId,
       isFavorite: bookmarkDraft.isFavorite
     };
-    setSaving(true);
+    const id = editingId ?? createId("bm");
+    const moved = previous && (previous.folderId !== payload.folderId || bookmarkFolderSectionId(previous) !== payload.folderSectionId);
+    const optimistic: BookmarkItem = {
+      id, ...payload,
+      position: previous && !moved ? previous.position : bookmarks.reduce((next, item) => (
+        item.id !== id && item.folderId === payload.folderId && bookmarkFolderSectionId(item) === payload.folderSectionId
+          ? Math.max(next, item.position + 1) : next
+      ), 0)
+    };
+    const changedPayload = previous ? Object.fromEntries(Object.entries(payload).filter(([field, value]) => (
+      value !== (field === "url" ? safeUrl(previous.url) : field === "folderSectionId" ? bookmarkFolderSectionId(previous) : previous[field as keyof BookmarkItem])
+    ))) : payload;
     setFormError("");
-    const editingId = bookmarkDialog?.mode === "edit" ? bookmarkDialog.bookmarkId : undefined;
-    const previous = editingId ? bookmarks.find((bookmark) => bookmark.id === editingId) : undefined;
-    const tempId = editingId ? null : createId("bm");
-    try {
-      if (editingId && previous) {
-        const moved = previous.folderId !== payload.folderId || bookmarkFolderSectionId(previous) !== payload.folderSectionId;
-        const position = moved
-          ? bookmarks.reduce((next, item) => item.id !== editingId && item.folderId === payload.folderId && bookmarkFolderSectionId(item) === payload.folderSectionId ? Math.max(next, item.position + 1) : next, 0)
-          : previous.position;
-        noteMutation();
-        setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? { ...previous, ...payload, position } : bookmark));
-        if (persistRemoteRef.current) {
-          const updated = await apiRequest<BookmarkItem>(`/api/bookmarks/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) });
-          setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? updated : bookmark));
-          noteMutation();
-        }
-      } else if (tempId) {
-        const optimistic = {
-          id: tempId,
-          ...payload,
-          position: bookmarks.filter((bookmark) => (
-            bookmark.folderId === payload.folderId
-            && bookmarkFolderSectionId(bookmark) === payload.folderSectionId
-          )).length
-        };
-        noteMutation();
-        setBookmarks((current) => [...current, optimistic]);
-        if (persistRemoteRef.current) {
-          const created = await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) });
-          setBookmarks((current) => current.map((bookmark) => bookmark.id === tempId ? created : bookmark));
-          noteMutation();
-        }
-      }
-      setBookmarkDialog(null);
-    } catch (error) {
-      if (editingId && previous) {
-        setBookmarks((current) => current.map((bookmark) => bookmark.id === editingId ? previous : bookmark));
-      } else if (tempId) {
-        setBookmarks((current) => current.filter((bookmark) => bookmark.id !== tempId));
-      }
-      noteMutation();
-      setFormError(error instanceof Error ? error.message : "북마크 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
+    setBookmarkDialog(null);
+    if (!Object.keys(changedPayload).length) return;
+    persistFormMutation(id, Boolean(editingId),
+      () => setBookmarks((current) => previous ? applyCollectionChange(current, [previous], [optimistic]) : upsertOptimistic(current, optimistic, false)),
+      () => setBookmarks((current) => rollbackItem(current, previous, optimistic)),
+      () => apiRequest<BookmarkItem>(editingId ? `/api/bookmarks/${id}` : "/api/bookmarks", {
+        method: editingId ? "PATCH" : "POST",
+        body: JSON.stringify(changedPayload)
+      }),
+      (saved) => setBookmarks((current) => current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item)),
+      "북마크 저장에 실패했습니다.");
   }
 
-  async function saveFolder(event: FormEvent<HTMLFormElement>) {
+  function saveFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = folderDraft.name.trim();
     if (!name) return setFormError("폴더 이름을 입력하세요.");
     const sectionId = folderDraft.sectionId === NO_SECTION ? null : folderDraft.sectionId;
-    const payload = { name, color: folderDraft.color, sectionId };
-    setSaving(true);
-    setFormError("");
     const editingId = folderDialog?.mode === "edit" ? folderDialog.folderId : undefined;
-    const existing = editingId ? folders.find((folder) => folder.id === editingId) : undefined;
-    const tempId = editingId ? null : createId("folder");
-    const local = {
-      ...(existing ?? { id: tempId!, position: folders.filter((folder) => folderSectionId(folder) === sectionId).length }),
-      ...payload,
-      position: existing && folderSectionId(existing) === sectionId
-        ? existing.position
-        : folders.filter((folder) => folderSectionId(folder) === sectionId).length
-    };
-    try {
-      noteMutation();
-      setFolders((current) => normalizeFolderPositions(
-        editingId
-          ? current.map((folder) => folder.id === editingId ? local : folder)
-          : [...current, local]
-      ));
-      if (!editingId) setSelection({ kind: "folder", id: local.id });
-      if (persistRemoteRef.current) {
-        const saved = editingId
-          ? await apiRequest<Folder>(`/api/folders/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) })
-          : await apiRequest<Folder>("/api/folders", { method: "POST", body: JSON.stringify(payload) });
-        setFolders((current) => normalizeFolderPositions(current.map((folder) => folder.id === local.id ? saved : folder)));
-        if (!editingId) setSelection({ kind: "folder", id: saved.id });
-        noteMutation();
-      }
-      setFolderDialog(null);
-    } catch (error) {
-      setFolders((current) => normalizeFolderPositions(
-        editingId && existing
-          ? current.map((folder) => folder.id === editingId ? existing : folder)
-          : current.filter((folder) => folder.id !== local.id)
-      ));
-      noteMutation();
-      setFormError(error instanceof Error ? error.message : "폴더 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
+    if (hasPendingCreation(editingId, sectionId)) return;
+    const previous = folders.find((item) => item.id === editingId);
+    const id = editingId ?? createId("folder");
+    const payload = { name, color: folderDraft.color, sectionId };
+    const optimistic: Folder = { id, ...payload, position: previous && folderSectionId(previous) === sectionId
+      ? previous.position : folders.filter((folder) => folder.id !== id && folderSectionId(folder) === sectionId).length };
+    setFormError("");
+    setFolderDialog(null);
+    persistFormMutation(id, Boolean(editingId),
+      () => {
+        setFolders((current) => normalizeFolderPositions(previous ? applyCollectionChange(current, [previous], [optimistic]) : upsertOptimistic(current, optimistic, false)));
+        if (!editingId) setSelection((current) => current?.id === id || current === selection ? { kind: "folder", id } : current);
+      },
+      () => setFolders((current) => normalizeFolderPositions(rollbackItem(current, previous, optimistic))),
+      () => apiRequest<Folder>(editingId ? `/api/folders/${id}` : "/api/folders", { method: editingId ? "PATCH" : "POST", body: JSON.stringify(payload) }),
+      (saved) => {
+        setFolders((current) => normalizeFolderPositions(current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item)));
+        if (!editingId) setSelection((current) => current?.kind === "folder" && current.id === id ? { kind: "folder", id: saved.id } : current);
+      }, "폴더 저장에 실패했습니다.");
   }
 
-  async function saveSection(event: FormEvent<HTMLFormElement>) {
+  function saveSection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = sectionDraft.name.trim();
     if (!name) return setFormError("섹션 이름을 입력하세요.");
     const duplicate = findSectionByName(sections, name);
     if (duplicate && duplicate.id !== sectionDialog?.sectionId) return setFormError("같은 이름의 섹션이 이미 있습니다.");
-    setSaving(true);
-    setFormError("");
     const editingId = sectionDialog?.mode === "edit" ? sectionDialog.sectionId : undefined;
-    const existing = editingId ? sections.find((section) => section.id === editingId) : undefined;
-    const tempId = editingId ? null : createId("section");
-    try {
-      if (editingId) {
-        const patch: { name?: string; color?: string | null } = {};
-        if (existing?.name !== name) patch.name = name;
-        if ((existing?.color ?? null) !== sectionDraft.color) patch.color = sectionDraft.color;
-        if (!Object.keys(patch).length) {
-          setSectionDialog(null);
-          return;
-        }
-        noteMutation();
-        setSections((current) => current.map((section) => section.id === editingId ? { ...section, ...patch } : section));
-        if (persistRemoteRef.current) {
-          const updated = await apiRequest<Section>(`/api/sections/${editingId}`, { method: "PATCH", body: JSON.stringify(patch) });
-          setSections((current) => current.map((section) => section.id === editingId ? updated : section));
-          noteMutation();
-        }
-      } else if (tempId) {
-        const payload = { name, color: sectionDraft.color };
-        noteMutation();
-        setSections((current) => [...current, { id: tempId, ...payload, position: sections.length }]);
-        setSelection({ kind: "section", id: tempId });
-        if (persistRemoteRef.current) {
-          const created = await apiRequest<Section>("/api/sections", { method: "POST", body: JSON.stringify(payload) });
-          setSections((current) => current.map((section) => section.id === tempId ? created : section));
-          setSelection({ kind: "section", id: created.id });
-          noteMutation();
-        }
-      }
-      setSectionDialog(null);
-    } catch (error) {
-      if (editingId && existing) {
-        setSections((current) => current.map((section) => section.id === editingId ? existing : section));
-      } else if (tempId) {
-        setSections((current) => current.filter((section) => section.id !== tempId));
-      }
-      noteMutation();
-      setFormError(error instanceof Error ? error.message : "섹션 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
+    if (hasPendingCreation(editingId)) return;
+    const previous = sections.find((item) => item.id === editingId);
+    const id = editingId ?? createId("section");
+    const payload: { name?: string; color?: string | null } = {};
+    if (!previous || previous.name !== name) payload.name = name;
+    if (!previous || (previous.color ?? null) !== sectionDraft.color) payload.color = sectionDraft.color;
+    setFormError("");
+    setSectionDialog(null);
+    if (!Object.keys(payload).length) return;
+    const optimistic: Section = { id, name, color: sectionDraft.color, position: previous?.position ?? sections.length };
+    persistFormMutation(id, Boolean(editingId),
+      () => {
+        setSections((current) => previous ? applyCollectionChange(current, [previous], [optimistic]) : upsertOptimistic(current, optimistic, false));
+        if (!editingId) setSelection((current) => current?.id === id || current === selection ? { kind: "section", id } : current);
+      },
+      () => setSections((current) => rollbackItem(current, previous, optimistic)),
+      () => apiRequest<Section>(editingId ? `/api/sections/${id}` : "/api/sections", { method: editingId ? "PATCH" : "POST", body: JSON.stringify(payload) }),
+      (saved) => {
+        setSections((current) => current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item));
+        if (!editingId) setSelection((current) => current?.kind === "section" && current.id === id ? { kind: "section", id: saved.id } : current);
+      }, "섹션 저장에 실패했습니다.");
   }
 
-  async function saveFolderSection(event: FormEvent<HTMLFormElement>) {
+  function saveFolderSection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = folderSectionDraft.name.trim();
     const folderId = folderSectionDialog?.folderId;
     if (!name) return setFormError("섹션 이름을 입력하세요.");
     if (!folderId) return setFormError("폴더를 선택하세요.");
-    const duplicate = folderSections.find((section) => (
-      section.folderId === folderId
-      && section.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase()
-      && section.id !== folderSectionDialog.folderSectionId
-    ));
-    if (duplicate) return setFormError("같은 이름의 섹션이 이미 있습니다.");
-    setSaving(true);
-    setFormError("");
     const editingId = folderSectionDialog.mode === "edit" ? folderSectionDialog.folderSectionId : undefined;
-    const existing = editingId ? folderSections.find((section) => section.id === editingId) : undefined;
-    const tempId = editingId ? null : createId("folder-section");
-    try {
-      if (editingId) {
-        const payload: { name?: string; color?: string | null } = {};
-        if (existing?.name !== name) payload.name = name;
-        if ((existing?.color ?? null) !== folderSectionDraft.color) payload.color = folderSectionDraft.color;
-        if (!Object.keys(payload).length) {
-          setFolderSectionDialog(null);
-          return;
-        }
-        noteMutation();
-        setFolderSections((current) => current.map((section) => section.id === editingId ? { ...section, ...payload } : section));
-        if (persistRemoteRef.current) {
-          const updated = await apiRequest<FolderSection>(`/api/folder-sections/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) });
-          setFolderSections((current) => current.map((section) => section.id === editingId ? updated : section));
-          noteMutation();
-        }
-      } else if (tempId) {
-        const payload = { name, color: folderSectionDraft.color, folderId };
-        const optimistic = {
-          id: tempId,
-          ...payload,
-          position: folderSections.filter((section) => section.folderId === folderId).length
-        };
-        noteMutation();
-        setFolderSections((current) => [...current, optimistic]);
-        if (persistRemoteRef.current) {
-          const created = await apiRequest<FolderSection>("/api/folder-sections", { method: "POST", body: JSON.stringify(payload) });
-          setFolderSections((current) => current.map((section) => section.id === tempId ? created : section));
-          noteMutation();
-        }
-      }
-      setFolderSectionDialog(null);
-    } catch (error) {
-      if (editingId && existing) {
-        setFolderSections((current) => current.map((section) => section.id === editingId ? existing : section));
-      } else if (tempId) {
-        setFolderSections((current) => current.filter((section) => section.id !== tempId));
-      }
-      noteMutation();
-      setFormError(error instanceof Error ? error.message : "섹션 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
+    if (hasPendingCreation(editingId, folderId)) return;
+    if (folderSections.some((section) => section.folderId === folderId && section.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase() && section.id !== editingId)) {
+      return setFormError("같은 이름의 섹션이 이미 있습니다.");
     }
+    const previous = folderSections.find((item) => item.id === editingId);
+    const id = editingId ?? createId("folder-section");
+    const payload: { name?: string; color?: string | null; folderId?: string } = {};
+    if (!previous || previous.name !== name) payload.name = name;
+    if (!previous || (previous.color ?? null) !== folderSectionDraft.color) payload.color = folderSectionDraft.color;
+    if (!editingId) payload.folderId = folderId;
+    setFormError("");
+    setFolderSectionDialog(null);
+    if (!Object.keys(payload).length) return;
+    const optimistic: FolderSection = { id, name, color: folderSectionDraft.color, folderId,
+      position: previous?.position ?? folderSections.filter((item) => item.folderId === folderId).length };
+    persistFormMutation(id, Boolean(editingId),
+      () => setFolderSections((current) => previous ? applyCollectionChange(current, [previous], [optimistic]) : upsertOptimistic(current, optimistic, false)),
+      () => setFolderSections((current) => rollbackItem(current, previous, optimistic)),
+      () => apiRequest<FolderSection>(editingId ? `/api/folder-sections/${id}` : "/api/folder-sections", { method: editingId ? "PATCH" : "POST", body: JSON.stringify(payload) }),
+      (saved) => setFolderSections((current) => current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item)),
+      "섹션 저장에 실패했습니다.");
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget || deleting) return;
+  function persistFormMutation<T extends { id: string }>(
+    id: string, editing: boolean, apply: () => void, rollback: () => void,
+    request: () => Promise<T>, saved: (item: T) => void, message: string
+  ) {
+    if (!editing && persistRemoteRef.current) pendingCreates.current.add(id);
+    persistOptimisticMutation(`form:${id}`, apply, rollback, async () => {
+      try {
+        const result = await request();
+        // Creation must replace the temporary identity even when unrelated work happened meanwhile.
+        if (!editing && result) saved(result);
+        return result;
+      } finally {
+        pendingCreates.current.delete(id);
+      }
+    }, message, false, (result) => { if (editing && result) saved(result as T); });
+  }
+
+  function confirmDelete() {
+    if (!deleteTarget) return;
     const target = deleteTarget;
-    const previousBookmarks = bookmarks;
-    const previousFolders = folders;
-    const previousSections = sections;
-    const previousFolderSections = folderSections;
-    const previousSelection = selection;
-    setDeleting(true);
-    setDeleteError("");
-    try {
-      if (target.type === "folder") {
-        if (folders.length <= 1) throw new Error("마지막 폴더는 삭제할 수 없습니다.");
-        if (!folders.some((folder) => folder.id !== target.id)) throw new Error("북마크를 이동할 대상 폴더가 없습니다.");
-      }
-      const fallback = folders.find((folder) => folder.id !== target.id);
-      noteMutation();
-      if (target.type === "bookmark") {
-        setBookmarks((current) => current.filter((bookmark) => bookmark.id !== target.id));
-        if (persistRemoteRef.current) await apiRequest<void>(`/api/bookmarks/${target.id}`, { method: "DELETE" });
-      } else if (target.type === "folderSection") {
-        setFolderSections((current) => current.filter((section) => section.id !== target.id));
-        setBookmarks((current) => current.map((bookmark) => (
-          bookmarkFolderSectionId(bookmark) === target.id
-            ? { ...bookmark, folderSectionId: null }
-            : bookmark
-        )));
-        if (persistRemoteRef.current) await apiRequest<void>(`/api/folder-sections/${target.id}`, { method: "DELETE" });
-      } else if (target.type === "section") {
-        setSections((current) => normalizePositions(current.filter((section) => section.id !== target.id)));
-        setFolders((current) => normalizeFolderPositions(current.map((folder) => folderSectionId(folder) === target.id ? { ...folder, sectionId: null } : folder)));
-        if (selection?.kind === "section" && selection.id === target.id) {
-          const next = folders.find((folder) => folderSectionId(folder) === target.id) ?? folders[0];
-          setSelection(next ? { kind: "folder", id: next.id } : null);
-        }
-        if (persistRemoteRef.current) await apiRequest<void>(`/api/sections/${target.id}`, { method: "DELETE" });
-      } else {
-        if (!fallback) throw new Error("북마크를 이동할 대상 폴더가 없습니다.");
-        setFolders((current) => normalizeFolderPositions(current.filter((folder) => folder.id !== target.id)));
-        setFolderSections((current) => current.filter((section) => section.folderId !== target.id));
-        setBookmarks((current) => current.map((bookmark) => (
-          bookmark.folderId === target.id
-            ? { ...bookmark, folderId: fallback.id, folderSectionId: null }
-            : bookmark
-        )));
-        if (selection?.kind === "folder" && selection.id === target.id) setSelection({ kind: "folder", id: fallback.id });
-        if (persistRemoteRef.current) {
-          await apiRequest<void>(`/api/folders/${target.id}?destination_folder_id=${encodeURIComponent(fallback.id)}`, { method: "DELETE" });
-        }
-      }
-      setDeleteTarget(null);
-      noteMutation();
-    } catch (error) {
-      setBookmarks(previousBookmarks);
-      setFolders(previousFolders);
-      setSections(previousSections);
-      setFolderSections(previousFolderSections);
-      setSelection(previousSelection);
-      noteMutation();
-      setDeleteError(error instanceof Error ? error.message : "삭제에 실패했습니다.");
-    } finally {
-      setDeleting(false);
+    if (hasPendingCreation(target.id)) return;
+    const fallback = folders.find((folder) => folder.id !== target.id && !pendingCreates.current.has(folder.id));
+    if (target.type === "folder" && (folders.length <= 1 || !fallback)) {
+      setDeleteError(folders.length <= 1 ? "마지막 폴더는 삭제할 수 없습니다." : "북마크를 이동할 대상 폴더가 없습니다.");
+      return;
     }
+    // Related temporary children must finish creation before their parent can be deleted.
+    const related = target.type === "folder"
+      ? [...bookmarks.filter((item) => item.folderId === target.id), ...folderSections.filter((item) => item.folderId === target.id)]
+      : target.type === "section" ? folders.filter((item) => folderSectionId(item) === target.id)
+      : target.type === "folderSection" ? bookmarks.filter((item) => bookmarkFolderSectionId(item) === target.id) : [];
+    if (hasPendingCreation(...related.map((item) => item.id))) return;
+    const movedPositions = new Map<string, number>();
+    if (target.type === "folder") {
+      const start = bookmarks.reduce((next, item) => item.folderId === fallback!.id && bookmarkFolderSectionId(item) === null
+        ? Math.max(next, item.position + 1) : next, 0);
+      bookmarks.filter((item) => item.folderId === target.id)
+        .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+        .forEach((item, index) => movedPositions.set(item.id, start + index));
+    }
+    const nextBookmarks = target.type === "bookmark" ? bookmarks.filter((item) => item.id !== target.id)
+      : target.type === "folder" ? bookmarks.map((item) => item.folderId === target.id ? { ...item, folderId: fallback!.id, folderSectionId: null, position: movedPositions.get(item.id)! } : item)
+      : target.type === "folderSection" ? bookmarks.map((item) => bookmarkFolderSectionId(item) === target.id ? { ...item, folderSectionId: null } : item) : bookmarks;
+    const nextFolders = target.type === "folder" ? normalizeFolderPositions(folders.filter((item) => item.id !== target.id))
+      : target.type === "section" ? normalizeFolderPositions(folders.map((item) => folderSectionId(item) === target.id ? { ...item, sectionId: null } : item)) : folders;
+    const nextSections = target.type === "section" ? normalizePositions(sections.filter((item) => item.id !== target.id)) : sections;
+    const nextFolderSections = target.type === "folderSection" ? folderSections.filter((item) => item.id !== target.id)
+      : target.type === "folder" ? folderSections.filter((item) => item.folderId !== target.id) : folderSections;
+    const remote = persistRemoteRef.current;
+    setDeleteError("");
+    setDeleteTarget(null);
+    if (remote) setPendingDeletes((count) => count + 1);
+    persistOptimisticMutation(`delete:${target.type}:${target.id}`,
+      () => {
+        setBookmarks((current) => applyCollectionChange(current, bookmarks, nextBookmarks));
+        setFolders((current) => applyCollectionChange(current, folders, nextFolders));
+        setSections((current) => applyCollectionChange(current, sections, nextSections));
+        setFolderSections((current) => applyCollectionChange(current, folderSections, nextFolderSections));
+      },
+      () => {
+        setBookmarks((current) => rollbackCollectionChange(current, bookmarks, nextBookmarks));
+        setFolders((current) => rollbackCollectionChange(current, folders, nextFolders));
+        setSections((current) => rollbackCollectionChange(current, sections, nextSections));
+        setFolderSections((current) => rollbackCollectionChange(current, folderSections, nextFolderSections));
+      },
+      async () => {
+        try {
+          const resource = target.type === "bookmark" ? "bookmarks" : target.type === "folder" ? "folders" : target.type === "folderSection" ? "folder-sections" : "sections";
+          const destination = target.type === "folder" ? `?destination_folder_id=${encodeURIComponent(fallback!.id)}` : "";
+          await apiRequest<void>(`/api/${resource}/${target.id}${destination}`, { method: "DELETE" });
+        } finally {
+          setPendingDeletes((count) => count - 1);
+        }
+      }, "삭제에 실패했습니다.", true);
   }
 
   function moveFolderToSection(sectionId: string | null) {
     if (!draggingFolderId) return;
+    if (hasPendingCreation(draggingFolderId, sectionId)) return clearFolderDrag();
     const source = folders.find((folder) => folder.id === draggingFolderId);
     if (!source || folderSectionId(source) === sectionId) return clearFolderDrag();
     const previousSectionId = folderSectionId(source);
@@ -857,7 +831,13 @@ export default function BookmarksPage() {
       () => setFolders((current) => normalizeFolderPositions(current.map((folder) => folder.id === source.id ? { ...folder, sectionId, position: nextPosition } : folder))),
       () => setFolders((current) => normalizeFolderPositions(current.map((folder) => folder.id === source.id ? { ...folder, sectionId: previousSectionId, position: previousPosition } : folder))),
       () => apiRequest<Folder>(`/api/folders/${source.id}`, { method: "PATCH", body: JSON.stringify({ sectionId }) }),
-      "폴더 이동에 실패했습니다."
+      "폴더 이동에 실패했습니다.", false,
+      (result) => {
+        const saved = result as Folder | undefined;
+        if (!saved) return;
+        setFolders((current) => current.map((item) => item.id === source.id && folderSectionId(item) === sectionId && item.position === nextPosition
+          ? { ...item, position: saved.position } : item));
+      }
     );
     clearFolderDrag();
   }
@@ -871,6 +851,7 @@ export default function BookmarksPage() {
     const destScoped = folders
       .filter((folder) => folderSectionId(folder) === destSectionId)
       .sort((a, b) => a.position - b.position);
+    if (hasPendingCreation(source.id, destSectionId, ...destScoped.map((item) => item.id))) return clearFolderDrag();
     const targetIndex = destScoped.findIndex((folder) => folder.id === targetId);
     const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
     const insertIndex = folderInsert?.id === targetId
@@ -897,13 +878,16 @@ export default function BookmarksPage() {
     nextDest.splice(Math.max(0, Math.min(insertIndex, nextDest.length)), 0, { ...source, sectionId: destSectionId });
     const destMoved = normalizePositions(nextDest);
     const previousFolders = folders;
+    const optimisticFolders = normalizeFolderPositions(applyPositions(
+      folders.map((folder) => folder.id === source.id ? { ...folder, sectionId: destSectionId } : folder), destMoved
+    ));
     persistOptimisticMutation(
       `move:folder:${source.id}`,
       () => setFolders((current) => normalizeFolderPositions(applyPositions(
         current.map((folder) => folder.id === source.id ? { ...folder, sectionId: destSectionId } : folder),
         destMoved
       ))),
-      () => setFolders(previousFolders),
+      () => setFolders((current) => rollbackCollectionChange(current, previousFolders, optimisticFolders)),
       async () => {
         await apiRequest<Folder>(`/api/folders/${source.id}`, { method: "PATCH", body: JSON.stringify({ sectionId: destSectionId }) });
         await apiRequest<void>("/api/folders/reorder", { method: "POST", body: JSON.stringify(destMoved.map(({ id, position }) => ({ id, position }))) });
@@ -916,6 +900,7 @@ export default function BookmarksPage() {
 
   function dropSection(targetId: string, event: { clientY: number; currentTarget: EventTarget }) {
     if (!draggingSectionId) return;
+    if (hasPendingCreation(...sections.map((item) => item.id))) { setDraggingSectionId(null); return; }
     const targetIndex = orderedSections.findIndex((section) => section.id === targetId);
     if (targetIndex < 0) return;
     const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
@@ -945,6 +930,7 @@ export default function BookmarksPage() {
     const target = folderSections.find((section) => section.id === targetId);
     if (!source || !target || source.folderId !== target.folderId) return clearFolderSectionDrag();
     const scoped = folderSections.filter((section) => section.folderId === source.folderId).sort((a, b) => a.position - b.position);
+    if (hasPendingCreation(...scoped.map((item) => item.id))) return clearFolderSectionDrag();
     const targetIndex = scoped.findIndex((section) => section.id === targetId);
     const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
     const insertIndex = folderSectionInsert?.id === targetId
@@ -975,6 +961,7 @@ export default function BookmarksPage() {
     const destScoped = bookmarks
       .filter((bookmark) => bookmark.folderId === destFolderId && bookmarkFolderSectionId(bookmark) === destSectionId)
       .sort((a, b) => a.position - b.position);
+    if (hasPendingCreation(source.id, destFolderId, destSectionId, ...destScoped.map((item) => item.id))) return clearBookmarkDrag();
     const targetIndex = destScoped.findIndex((bookmark) => bookmark.id === targetId);
     const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null;
     const insertIndex = bookmarkInsert?.id === targetId
@@ -1013,6 +1000,7 @@ export default function BookmarksPage() {
     nextFolderSectionId: string | null,
     insertIndex?: number
   ) {
+    if (hasPendingCreation(source.id, folderId, nextFolderSectionId)) return clearBookmarkDrag();
     if (source.folderId === folderId && bookmarkFolderSectionId(source) === nextFolderSectionId && insertIndex === undefined) {
       clearBookmarkDrag();
       return;
@@ -1024,6 +1012,7 @@ export default function BookmarksPage() {
         && bookmarkFolderSectionId(bookmark) === nextFolderSectionId
       ))
       .sort((a, b) => a.position - b.position);
+    if (hasPendingCreation(...destWithout.map((item) => item.id))) return clearBookmarkDrag();
     const nextDest = [...destWithout];
     nextDest.splice(Math.max(0, Math.min(insertIndex ?? nextDest.length, nextDest.length)), 0, {
       ...source,
@@ -1035,24 +1024,36 @@ export default function BookmarksPage() {
       ? { folderSectionId: nextFolderSectionId }
       : { folderId, folderSectionId: nextFolderSectionId };
     const previousBookmarks = bookmarks;
+    const optimisticBookmarks = applyPositions(
+      bookmarks.map((bookmark) => bookmark.id === source.id ? { ...bookmark, folderId, folderSectionId: nextFolderSectionId } : bookmark), destMoved
+    );
     persistOptimisticMutation(
       `move:bookmark:${source.id}`,
       () => setBookmarks((current) => applyPositions(
         current.map((bookmark) => bookmark.id === source.id ? { ...bookmark, folderId, folderSectionId: nextFolderSectionId } : bookmark),
         destMoved
       )),
-      () => setBookmarks(previousBookmarks),
+      () => setBookmarks((current) => rollbackCollectionChange(current, previousBookmarks, optimisticBookmarks)),
       async () => {
-        await apiRequest<BookmarkItem>(`/api/bookmarks/${source.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        const saved = await apiRequest<BookmarkItem>(`/api/bookmarks/${source.id}`, { method: "PATCH", body: JSON.stringify(body) });
         if (insertIndex !== undefined && destMoved.length > 1) {
           await apiRequest<void>("/api/bookmarks/reorder", {
             method: "POST",
             body: JSON.stringify(destMoved.map(({ id, position }) => ({ id, position })))
           });
         }
+        return insertIndex === undefined ? saved : undefined;
       },
       "북마크 이동에 실패했습니다.",
-      true
+      true,
+      (result) => {
+        const saved = result as BookmarkItem | undefined;
+        const optimistic = destMoved.find((item) => item.id === source.id);
+        if (!saved || !optimistic) return;
+        setBookmarks((current) => current.map((item) => item.id === source.id && item.folderId === folderId
+          && bookmarkFolderSectionId(item) === nextFolderSectionId && item.position === optimistic.position
+          ? { ...item, position: saved.position } : item));
+      }
     );
     clearBookmarkDrag();
   }
@@ -1066,6 +1067,7 @@ export default function BookmarksPage() {
   }
 
   function duplicateBookmark(bookmark: BookmarkItem) {
+    if (hasPendingCreation(bookmark.id, bookmark.folderId, bookmarkFolderSectionId(bookmark))) return;
     const payload = {
       title: `${bookmark.title} copy`,
       url: bookmark.url,
@@ -1083,19 +1085,23 @@ export default function BookmarksPage() {
         && bookmarkFolderSectionId(item) === payload.folderSectionId
       )).length
     };
+    if (persistRemoteRef.current) pendingCreates.current.add(tempId);
     persistOptimisticMutation(
       `duplicate:${bookmark.id}:${tempId}`,
-      () => setBookmarks((current) => [...current, optimistic]),
+      () => setBookmarks((current) => upsertOptimistic(current, optimistic, false)),
       () => setBookmarks((current) => current.filter((item) => item.id !== tempId)),
       async () => {
-        const created = await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) });
-        setBookmarks((current) => current.map((item) => item.id === tempId ? created : item));
+        try {
+          const created = await apiRequest<BookmarkItem>("/api/bookmarks", { method: "POST", body: JSON.stringify(payload) });
+          setBookmarks((current) => current.map((item) => item.id === tempId ? created : item));
+        } finally { pendingCreates.current.delete(tempId); }
       },
       "북마크 복제에 실패했습니다."
     );
   }
 
   function toggleFavorite(id: string) {
+    if (hasPendingCreation(id)) return;
     const bookmark = bookmarks.find((item) => item.id === id);
     if (!bookmark) return;
     const next = !bookmark.isFavorite;
@@ -1292,6 +1298,7 @@ export default function BookmarksPage() {
                   : "서버에 연결하지 못했고 브라우저 저장소를 사용할 수 없습니다. 변경 사항은 현재 화면에만 유지됩니다. 새로고침하거나 창을 닫으면 사라집니다."}
               </div>
             ) : null}
+            {pendingWrites > 0 ? <DatabaseProgressStatus title={pendingDeletes > 0 ? "데이터베이스에서 삭제 중" : "데이터베이스에 저장 중"} /> : null}
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
               <div className="dot-empty flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 text-center">
@@ -1386,7 +1393,7 @@ export default function BookmarksPage() {
                   {group.folderSection ? (
                     <FolderSectionActionsMenu
                       folderSection={group.folderSection}
-                      mutationsDisabled={mutationsDisabled}
+                      mutationsDisabled={mutationsDisabled || pendingCreates.current.has(group.folderSection.id)}
                       onAddBookmark={(folderSection) => openBookmarkDialogInSection(group.folder, folderSection)}
                       onEdit={openFolderSectionDialog}
                       onDelete={(folderSection) => setDeleteTarget({ type: "folderSection", id: folderSection.id })}
@@ -1394,7 +1401,7 @@ export default function BookmarksPage() {
                   ) : (
                     <FolderActionsMenu
                       folder={group.folder}
-                      mutationsDisabled={mutationsDisabled}
+                      mutationsDisabled={mutationsDisabled || pendingCreates.current.has(group.folder.id)}
                       onAddBookmark={(folder) => openBookmarkDialogInSection(folder, null)}
                       onEdit={openFolderDialog}
                       onDelete={(folder) => setDeleteTarget({ type: "folder", id: folder.id })}
@@ -1426,6 +1433,7 @@ export default function BookmarksPage() {
                         .sort((a, b) => a.position - b.position);
                       const moved = moveToIndex(scoped, source.id, scoped.length);
                       const changes = getPositionChanges(scoped, moved);
+                      if (hasPendingCreation(...scoped.map((item) => item.id))) return clearBookmarkDrag();
                       if (changes.length) {
                         persistOptimisticMutation(
                           `reorder:bookmarks:${source.folderId}:${bookmarkFolderSectionId(source) ?? NO_SECTION}`,
@@ -1450,7 +1458,7 @@ export default function BookmarksPage() {
                       dropEdge={bookmarkInsert?.id === bookmark.id ? bookmarkInsert.edge : null}
                       canDrop={Boolean(draggingBookmarkId && draggingBookmarkId !== bookmark.id)}
                       preview={bookmarkInsert?.id === bookmark.id ? movePreview : null}
-                      mutationsDisabled={mutationsDisabled}
+                      mutationsDisabled={mutationsDisabled || pendingCreates.current.has(bookmark.id)}
                       onDragStart={(id) => { clearDropTarget(); setDraggingBookmarkId(id); }}
                       onDragEnd={clearBookmarkDrag}
                       onDragOver={(id, event) => {
@@ -1478,7 +1486,7 @@ export default function BookmarksPage() {
       </section>
 
       {bookmarkDialog ? (
-        <Modal title={bookmarkDialog.mode === "edit" ? "북마크 편집" : "북마크 추가"} onClose={() => setBookmarkDialog(null)} closeDisabled={saving}>
+        <Modal title={bookmarkDialog.mode === "edit" ? "북마크 편집" : "북마크 추가"} onClose={() => setBookmarkDialog(null)}>
           <form className="flex flex-col gap-4" onSubmit={saveBookmark}>
             <Field label="URL"><Input type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={bookmarkDraft.url} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, url: event.target.value }))} /></Field>
             <Field label="제목"><Input value={bookmarkDraft.title} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, title: event.target.value }))} /></Field>
@@ -1500,13 +1508,13 @@ export default function BookmarksPage() {
             </Field>
             <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={bookmarkDraft.isFavorite} onChange={(event) => setBookmarkDraft((draft) => ({ ...draft, isFavorite: event.target.checked }))} />즐겨찾기</label>
             {bookmarkDraftPreview ? <MovePreview preview={bookmarkDraftPreview} /> : null}
-            <FormFooter saving={saving} error={formError} onCancel={() => setBookmarkDialog(null)} />
+            <FormFooter error={formError} onCancel={() => setBookmarkDialog(null)} />
           </form>
         </Modal>
       ) : null}
 
       {folderDialog ? (
-        <Modal title={folderDialog.mode === "edit" ? "폴더 편집" : "새 폴더"} onClose={() => setFolderDialog(null)} closeDisabled={saving}>
+        <Modal title={folderDialog.mode === "edit" ? "폴더 편집" : "새 폴더"} onClose={() => setFolderDialog(null)}>
           <form className="flex flex-col gap-4" onSubmit={saveFolder}>
             <Field label="이름"><Input value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
             <Field label="섹션">
@@ -1520,33 +1528,33 @@ export default function BookmarksPage() {
             </Field>
             <ColorPicker color={folderDraft.color} onChange={(color) => setFolderDraft((draft) => ({ ...draft, color }))} />
             {folderDraftPreview ? <MovePreview preview={folderDraftPreview} /> : null}
-            <FormFooter saving={saving} error={formError} onCancel={() => setFolderDialog(null)} />
+            <FormFooter error={formError} onCancel={() => setFolderDialog(null)} />
           </form>
         </Modal>
       ) : null}
 
       {sectionDialog ? (
-        <Modal title={sectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setSectionDialog(null)} closeDisabled={saving}>
+        <Modal title={sectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setSectionDialog(null)}>
           <form className="flex flex-col gap-4" onSubmit={saveSection}>
             <Field label="이름"><Input value={sectionDraft.name} onChange={(event) => setSectionDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
             <ColorPicker color={sectionDraft.color} allowDefault onChange={(color) => setSectionDraft((draft) => ({ ...draft, color }))} />
-            <FormFooter saving={saving} error={formError} onCancel={() => setSectionDialog(null)} />
+            <FormFooter error={formError} onCancel={() => setSectionDialog(null)} />
           </form>
         </Modal>
       ) : null}
 
       {folderSectionDialog ? (
-        <Modal title={folderSectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setFolderSectionDialog(null)} closeDisabled={saving}>
+        <Modal title={folderSectionDialog.mode === "edit" ? "섹션 편집" : "새 섹션"} onClose={() => setFolderSectionDialog(null)}>
           <form className="flex flex-col gap-4" onSubmit={saveFolderSection}>
             <Field label="이름"><Input value={folderSectionDraft.name} onChange={(event) => setFolderSectionDraft((draft) => ({ ...draft, name: event.target.value }))} /></Field>
             <ColorPicker color={folderSectionDraft.color} allowDefault onChange={(color) => setFolderSectionDraft((draft) => ({ ...draft, color }))} />
-            <FormFooter saving={saving} error={formError} onCancel={() => setFolderSectionDialog(null)} />
+            <FormFooter error={formError} onCancel={() => setFolderSectionDialog(null)} />
           </form>
         </Modal>
       ) : null}
 
       {deleteTarget ? (
-        <Modal title={`${deleteTarget.type === "bookmark" ? "북마크" : deleteTarget.type === "folder" ? "폴더" : "섹션"} 삭제`} onClose={() => setDeleteTarget(null)} closeDisabled={deleting}>
+        <Modal title={`${deleteTarget.type === "bookmark" ? "북마크" : deleteTarget.type === "folder" ? "폴더" : "섹션"} 삭제`} onClose={() => setDeleteTarget(null)}>
           <p className="text-sm text-muted-foreground">
             {deleteTarget.type === "folderSection"
               ? "이 섹션을 삭제합니다. 북마크는 삭제되지 않고 섹션 없음으로 이동합니다."
@@ -1556,13 +1564,11 @@ export default function BookmarksPage() {
                 ? "이 폴더를 삭제하고 북마크는 다른 폴더로 이동합니다."
                 : "이 북마크를 삭제합니다."}
           </p>
-          {deleting ? <div className="mt-4"><DatabaseProgressStatus title="데이터베이스에서 삭제 중" /></div> : null}
           {deleteError ? <p className="mt-4 text-sm font-bold text-destructive">{deleteError}</p> : null}
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>취소</Button>
-            <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
-              {deleting ? <LoaderCircle className="animate-spin" /> : null}
-              {deleting ? "삭제 중..." : "삭제"}
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>취소</Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()}>
+              삭제
             </Button>
           </div>
         </Modal>
@@ -1623,14 +1629,13 @@ function ColorPicker({ color, onChange, allowDefault = false }: { color: string 
   );
 }
 
-function FormFooter({ saving, error, onCancel }: { saving: boolean; error: string; onCancel: () => void }) {
+function FormFooter({ error, onCancel }: { error: string; onCancel: () => void }) {
   return (
     <>
-      {saving ? <DatabaseProgressStatus title="데이터베이스에 저장 중" /> : null}
       {error ? <p className="text-sm font-bold text-destructive">{error}</p> : null}
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" disabled={saving} onClick={onCancel}>취소</Button>
-        <Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? "저장 중..." : "저장"}</Button>
+        <Button type="button" variant="outline" onClick={onCancel}>취소</Button>
+        <Button type="submit">저장</Button>
       </div>
     </>
   );

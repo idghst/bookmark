@@ -20,6 +20,20 @@ describe("bookmark API write boundary", () => {
     vi.resetModules();
   });
 
+  it("reads all collections with one private uncached snapshot request", async () => {
+    const snapshot = { folders: [], sections: [], folderSections: [], bookmarks: [] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(snapshot), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { GET } = await import("@/app/api/[resource]/[[...path]]/route");
+    const response = await GET(new NextRequest("http://localhost/api/snapshot"), context("snapshot"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(snapshot);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.example.com/api/snapshot");
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get("X-Bookmark-Key")).toBe("bookmark-api-secret");
+  });
+
   it("allows unauthenticated browser requests when access is configured", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify([]), { status: 200 })

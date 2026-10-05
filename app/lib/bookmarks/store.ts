@@ -1,6 +1,6 @@
 import { restRequest } from "@/app/lib/bookmarks/rest";
 import { findSectionByName } from "@/app/lib/bookmarks/sections";
-import type { BookmarkItem, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
+import type { BookmarkItem, BookmarkSnapshot, Folder, FolderSection, Section } from "@/app/lib/bookmarks/types";
 import {
   StoreError,
   invalid,
@@ -18,6 +18,22 @@ import {
 export { StoreError };
 
 export const bookmarkStore = {
+  async listSnapshot(): Promise<BookmarkSnapshot> {
+    try {
+      return await restRequest<BookmarkSnapshot>("snapshot");
+    } catch (error) {
+      // Keep the web usable while the API and web roll out independently.
+      if (!(error instanceof StoreError) || ![404, 405].includes(error.status)) throw error;
+      const [folders, sections, folderSections, bookmarks] = await Promise.all([
+        bookmarkStore.listFolders(),
+        bookmarkStore.listSections(),
+        bookmarkStore.listFolderSections(),
+        bookmarkStore.listBookmarks()
+      ]);
+      return { folders, sections, folderSections, bookmarks };
+    }
+  },
+
   async listBookmarks() {
     return restRequest<BookmarkItem[]>("bookmarks");
   },
