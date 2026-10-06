@@ -1554,10 +1554,14 @@ describe("section-first bookmark UI", () => {
     expect(screen.getByRole("dialog", { name: "섹션 삭제" })).toBeInTheDocument();
   });
 
-  it("shows a Korean retry message instead of a raw database failure", async () => {
+  it.each([
+    ["Database request failed", 502, "데이터베이스 요청에 실패했습니다. 잠시 후 다시 시도하세요."],
+    ["Bookmark API is unavailable.", 503, "서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요."],
+    ["Bookmark API request timed out.", 504, "서버 응답 시간이 초과되었습니다. 저장 여부를 새로고침으로 확인한 뒤 다시 시도하세요."]
+  ])("shows a Korean message for %s and restores the section", async (detail, status, message) => {
     setup(snapshot, async () =>
-      new Response(JSON.stringify({ detail: "Database request failed" }), {
-        status: 502,
+      new Response(JSON.stringify({ detail }), {
+        status,
         headers: { "Content-Type": "application/json" }
       })
     );
@@ -1567,8 +1571,10 @@ describe("section-first bookmark UI", () => {
     const dialog = screen.getByRole("dialog", { name: "섹션 편집" });
     fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: "업무 수정" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
-    expect(await screen.findByText("데이터베이스 요청에 실패했습니다. 잠시 후 다시 시도하세요.")).toBeInTheDocument();
-    expect(screen.queryByText("Database request failed")).not.toBeInTheDocument();
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText(detail)).not.toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: "업무" })).toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "업무 수정" })).not.toBeInTheDocument();
   });
 
   it("shows a live saving status until the database request finishes", async () => {

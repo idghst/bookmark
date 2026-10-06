@@ -14,6 +14,12 @@ export async function readApiError(response: Response) {
     if (payload.detail === "Database request failed") {
       return "데이터베이스 요청에 실패했습니다. 잠시 후 다시 시도하세요.";
     }
+    if (payload.detail === "Bookmark API is unavailable.") {
+      return "서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.";
+    }
+    if (payload.detail === "Bookmark API request timed out.") {
+      return "서버 응답 시간이 초과되었습니다. 저장 여부를 새로고침으로 확인한 뒤 다시 시도하세요.";
+    }
     if (typeof payload.detail === "string") return payload.detail;
   } catch {
     // Fall back to status text below.
