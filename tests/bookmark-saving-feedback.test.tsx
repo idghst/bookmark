@@ -182,6 +182,68 @@ function dropFolderOn(sourceName: string, targetName: string, nav: HTMLElement) 
 }
 
 describe("section-first bookmark UI", () => {
+  it("restores a failed bookmark draft for review without automatically retrying", async () => {
+    const { fetchMock } = setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    fireEvent.click(await screen.findByRole("button", { name: "새 북마크 추가" }));
+    const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    fireEvent.change(within(dialog).getByLabelText("URL"), { target: { value: "https://example.com/draft" } });
+    fireEvent.change(within(dialog).getByLabelText("제목"), { target: { value: "복구할 북마크" } });
+    fireEvent.change(within(dialog).getByLabelText("설명"), { target: { value: "작성한 설명" } });
+    fireEvent.click(within(dialog).getByLabelText("즐겨찾기"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+    const recover = await screen.findByRole("button", { name: "입력 복구" });
+    fireEvent.click(screen.getByRole("button", { name: "새 북마크 추가" }));
+    const nextDialog = screen.getByRole("dialog", { name: "북마크 추가" });
+    fireEvent.change(within(nextDialog).getByLabelText("제목"), { target: { value: "다른 초안" } });
+    expect(recover).toBeDisabled();
+    expect(within(nextDialog).getByLabelText("제목")).toHaveValue("다른 초안");
+    fireEvent.click(within(nextDialog).getByRole("button", { name: "취소" }));
+    fireEvent.click(recover);
+    const restored = screen.getByRole("dialog", { name: "북마크 추가" });
+    expect(within(restored).getByLabelText("제목")).toHaveValue("복구할 북마크");
+    expect(within(restored).getByLabelText("URL")).toHaveValue("https://example.com/draft");
+    expect(within(restored).getByLabelText("설명")).toHaveValue("작성한 설명");
+    expect(within(restored).getByLabelText("즐겨찾기")).toBeChecked();
+    expect(within(restored).getByRole("combobox", { name: "폴더" })).toHaveTextContent("프로젝트");
+    expect(mutations(fetchMock)).toHaveLength(1);
+  });
+
+  it("restores an edited bookmark and retries with its original identity", async () => {
+    const { fetchMock } = setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    const menu = await openMenu("프로젝트 A");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    const dialog = screen.getByRole("dialog", { name: "북마크 편집" });
+    fireEvent.change(within(dialog).getByLabelText("제목"), { target: { value: "편집한 제목" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+    fireEvent.click(await screen.findByRole("button", { name: "입력 복구" }));
+    const restored = screen.getByRole("dialog", { name: "북마크 편집" });
+    expect(within(restored).getByLabelText("제목")).toHaveValue("편집한 제목");
+    fireEvent.click(within(restored).getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(2));
+    expect(mutations(fetchMock).map(([url, init]) => [url, init?.method])).toEqual([
+      ["/api/bookmarks/p1", "PATCH"], ["/api/bookmarks/p1", "PATCH"]
+    ]);
+    await screen.findByRole("button", { name: "입력 복구" });
+  });
+
+  it("keeps every failed creation until its draft is restored or dismissed", async () => {
+    setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    for (const title of ["첫 번째 초안", "두 번째 초안"]) {
+      fireEvent.click(await screen.findByRole("button", { name: "새 북마크 추가" }));
+      const dialog = screen.getByRole("dialog", { name: "북마크 추가" });
+      fireEvent.change(within(dialog).getByLabelText("URL"), { target: { value: "https://example.com" } });
+      fireEvent.change(within(dialog).getByLabelText("제목"), { target: { value: title } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+      await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    }
+    fireEvent.click(await screen.findByRole("button", { name: "입력 복구" }));
+    const restored = screen.getByRole("dialog", { name: "북마크 추가" });
+    expect(within(restored).getByLabelText("제목")).toHaveValue("첫 번째 초안");
+    fireEvent.click(within(restored).getByRole("button", { name: "취소" }));
+    fireEvent.click(screen.getByRole("button", { name: "입력 복구" }));
+    expect(within(screen.getByRole("dialog", { name: "북마크 추가" })).getByLabelText("제목")).toHaveValue("두 번째 초안");
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

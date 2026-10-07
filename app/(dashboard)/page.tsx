@@ -132,6 +132,8 @@ export default function BookmarksPage() {
   const [pendingDeletes, setPendingDeletes] = useState(0);
   const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
   const [mutationError, setMutationError] = useState("");
+  const [failedBookmarkDrafts, setFailedBookmarkDrafts] = useState<Array<{ id: string; dialog: BookmarkDialog; draft: BookmarkDraft }>>([]);
+  const failedBookmarkDraft = failedBookmarkDrafts[0];
   const [formError, setFormError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [bookmarkDialog, setBookmarkDialog] = useState<BookmarkDialog | null>(null);
@@ -480,7 +482,8 @@ export default function BookmarksPage() {
     request: () => Promise<unknown>,
     fallbackMessage: string,
     reconcileOnFailure = false,
-    onSuccess?: (result: unknown) => void
+    onSuccess?: (result: unknown) => void,
+    onFailure?: () => void
   ) {
     if (!hasHydratedData) return;
     const queueKey = /^(form:|favorite:|move:(bookmark|folder):|delete:(bookmark|folder|section|folderSection):)/.test(key)
@@ -527,6 +530,7 @@ export default function BookmarksPage() {
         noteMutation();
         if (isLatest) {
           setMutationError(error instanceof Error ? error.message : fallbackMessage);
+          onFailure?.();
         }
       } finally {
         setPendingWrites((count) => count - 1);
@@ -652,7 +656,10 @@ export default function BookmarksPage() {
         body: JSON.stringify(changedPayload)
       }),
       (saved) => setBookmarks((current) => current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item)),
-      "북마크 저장에 실패했습니다.");
+      "북마크 저장에 실패했습니다.", () => setFailedBookmarkDrafts((current) => [
+        ...current.filter((entry) => entry.id !== id),
+        { id, dialog: editingId ? { mode: "edit", bookmarkId: editingId } : { mode: "create" }, draft: { ...bookmarkDraft } }
+      ]));
   }
 
   function saveFolder(event: FormEvent<HTMLFormElement>) {
@@ -744,7 +751,7 @@ export default function BookmarksPage() {
 
   function persistFormMutation<T extends { id: string }>(
     id: string, editing: boolean, apply: () => void, rollback: () => void,
-    request: () => Promise<T>, saved: (item: T) => void, message: string
+    request: () => Promise<T>, saved: (item: T) => void, message: string, onFailure?: () => void
   ) {
     if (!editing && persistRemoteRef.current) pendingCreates.current.add(id);
     persistOptimisticMutation(`form:${id}`, apply, rollback, async () => {
@@ -756,7 +763,7 @@ export default function BookmarksPage() {
       } finally {
         pendingCreates.current.delete(id);
       }
-    }, message, false, (result) => { if (editing && result) saved(result as T); });
+    }, message, false, (result) => { if (editing && result) saved(result as T); }, onFailure);
   }
 
   function confirmDelete() {
@@ -1300,6 +1307,18 @@ export default function BookmarksPage() {
             ) : null}
             {pendingWrites > 0 ? <DatabaseProgressStatus title={pendingDeletes > 0 ? "데이터베이스에서 삭제 중" : "데이터베이스에 저장 중"} /> : null}
             {mutationError ? <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive">{mutationError}</div> : null}
+            {failedBookmarkDraft ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted px-4 py-3 text-sm">
+                <p className="min-w-0 flex-1 break-words">‘{failedBookmarkDraft.draft.title}’ 입력을 이 화면에 임시 보관했습니다.{failedBookmarkDrafts.length > 1 ? ` 총 ${failedBookmarkDrafts.length}개 대기 중입니다.` : ""} 저장 여부를 확인한 뒤 다시 저장하세요.</p>
+                <Button type="button" variant="outline" disabled={Boolean(bookmarkDialog || folderDialog || sectionDialog || folderSectionDialog)} onClick={() => {
+                  setBookmarkDraft(failedBookmarkDraft.draft);
+                  setBookmarkDialog(failedBookmarkDraft.dialog);
+                  setFormError("");
+                  setFailedBookmarkDrafts((current) => current.filter((entry) => entry.id !== failedBookmarkDraft.id));
+                }}>입력 복구</Button>
+                <Button type="button" variant="ghost" onClick={() => setFailedBookmarkDrafts((current) => current.filter((entry) => entry.id !== failedBookmarkDraft.id))}>닫기</Button>
+              </div>
+            ) : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (
               <div className="dot-empty flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 text-center">
                 {showFolderEmptyState
