@@ -22,6 +22,21 @@ function renderModal() {
 }
 
 describe("Modal focus", () => {
+  it.each(["Enter", "Escape"])("ignores %s during IME composition and handles it afterwards", (key) => {
+    const onClose = vi.fn();
+    const onConfirm = vi.fn();
+    render(<Modal title="편집" onClose={onClose} onConfirm={onConfirm}><input aria-label="제목" /></Modal>);
+    const input = screen.getByRole("textbox", { name: "제목" });
+
+    fireEvent.keyDown(input, { key, isComposing: true });
+    fireEvent.keyDown(input, { key, keyCode: 229 });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key });
+    expect(key === "Escape" ? onClose : onConfirm).toHaveBeenCalledTimes(1);
+  });
+
   it("focuses the first field and returns focus to the opener when closed", () => {
     const { opener, unmount } = renderModal();
 

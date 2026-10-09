@@ -33,6 +33,8 @@ export function Modal({
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
+      // Some IMEs report keyCode 229 when composition ends before keydown.
+      if (event.isComposing || event.keyCode === 229) return;
       const modals = document.querySelectorAll<HTMLElement>("[data-bookmark-modal]");
       const topmostModal = modals.item(modals.length - 1);
       if (event.defaultPrevented || topmostModal?.dataset.bookmarkModal !== modalId) return;
