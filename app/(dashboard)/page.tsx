@@ -1245,6 +1245,7 @@ export default function BookmarksPage() {
 
   return (
     <div className="dot-shell flex h-full min-h-0 overflow-hidden" aria-busy={!hasHydratedData}
+      data-bookmark-background
       onDragOver={(event) => { if (isDragging && !event.defaultPrevented) clearDropTarget(); }}
       onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) clearDropTarget(); }}
     >

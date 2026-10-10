@@ -4,6 +4,7 @@ import { Modal } from "@/app/(dashboard)/bookmarks-ui/Modal";
 
 function renderModal() {
   const opener = document.createElement("button");
+  opener.setAttribute("data-bookmark-background", "");
   opener.textContent = "편집 열기";
   document.body.append(opener);
   opener.focus();
@@ -22,6 +23,21 @@ function renderModal() {
 }
 
 describe("Modal focus", () => {
+  it.each([false, true])("restores the original background state after overlapping dialogs close (inert: %s)", (wasInert) => {
+    const background = document.createElement("div");
+    background.setAttribute("data-bookmark-background", "");
+    background.toggleAttribute("inert", wasInert);
+    document.body.append(background);
+    const first = render(<Modal title="첫 창" onClose={vi.fn()}><input /></Modal>);
+    const second = render(<Modal title="둘째 창" onClose={vi.fn()}><input /></Modal>);
+    expect(background).toHaveAttribute("inert");
+    first.unmount();
+    expect(background).toHaveAttribute("inert");
+    second.unmount();
+    expect(background.hasAttribute("inert")).toBe(wasInert);
+    background.remove();
+  });
+
   it.each(["Enter", "Escape"])("ignores %s during IME composition and handles it afterwards", (key) => {
     const onClose = vi.fn();
     const onConfirm = vi.fn();
@@ -41,9 +57,11 @@ describe("Modal focus", () => {
     const { opener, unmount } = renderModal();
 
     expect(screen.getByRole("textbox", { name: "제목" })).toHaveFocus();
+    expect(opener).toHaveAttribute("inert");
 
     unmount();
     expect(opener).toHaveFocus();
+    expect(opener).not.toHaveAttribute("inert");
     opener.remove();
   });
 

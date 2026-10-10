@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const backgroundLocks = new WeakMap<HTMLElement, { count: number; wasInert: boolean }>();
 
 export function Modal({
   title,
@@ -24,11 +25,26 @@ export function Modal({
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const backgrounds = [...document.querySelectorAll<HTMLElement>("[data-bookmark-background]")];
+    backgrounds.forEach((element) => {
+      const lock = backgroundLocks.get(element) ?? { count: 0, wasInert: element.hasAttribute("inert") };
+      lock.count += 1;
+      backgroundLocks.set(element, lock);
+      element.setAttribute("inert", "");
+    });
     const modal = modalRef.current;
     const firstField = modal?.querySelector<HTMLElement>('input:not([type="hidden"]):not([disabled]), textarea:not([disabled])');
     (firstField ?? modal?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR))?.focus();
 
-    return () => previousFocus?.focus();
+    return () => {
+      backgrounds.forEach((element) => {
+        const lock = backgroundLocks.get(element)!;
+        if (--lock.count > 0) return;
+        element.toggleAttribute("inert", lock.wasInert);
+        backgroundLocks.delete(element);
+      });
+      previousFocus?.focus();
+    };
   }, []);
 
   useEffect(() => {

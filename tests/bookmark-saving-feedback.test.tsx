@@ -182,6 +182,28 @@ function dropFolderOn(sourceName: string, targetName: string, nav: HTMLElement) 
 }
 
 describe("section-first bookmark UI", () => {
+  it("makes the background inert only while an editor or delete confirmation is open", async () => {
+    setup();
+    const add = await screen.findByRole("button", { name: "새 북마크 추가" });
+    const background = document.querySelector(".dot-shell")!;
+    expect(background).not.toHaveAttribute("inert");
+
+    fireEvent.click(add);
+    const editor = screen.getByRole("dialog", { name: "북마크 추가" });
+    expect(background).toHaveAttribute("inert");
+    expect(background.contains(editor)).toBe(false);
+    fireEvent.click(within(editor).getByRole("button", { name: "취소" }));
+    expect(background).not.toHaveAttribute("inert");
+
+    const menu = await openMenu("프로젝트 A");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "삭제" }));
+    const confirmation = screen.getByRole("dialog", { name: "북마크 삭제" });
+    expect(background).toHaveAttribute("inert");
+    expect(background.contains(confirmation)).toBe(false);
+    fireEvent.click(within(confirmation).getByRole("button", { name: "취소" }));
+    expect(background).not.toHaveAttribute("inert");
+  });
+
   it("restores a failed bookmark draft for review without automatically retrying", async () => {
     const { fetchMock } = setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
     fireEvent.click(await screen.findByRole("button", { name: "새 북마크 추가" }));
