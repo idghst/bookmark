@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 type Selection = { kind: "folder" | "section"; id: string };
 type BookmarkDialog = { mode: "create" | "edit"; bookmarkId?: string };
 type FolderDialog = { mode: "create" | "edit"; folderId?: string };
+type FolderDraft = { name: string; color: string | null; sectionId: string };
 type SectionDialog = { mode: "create" | "edit"; sectionId?: string };
 type DeleteTarget = { type: "bookmark" | "folder" | "section" | "folderSection"; id: string };
 
@@ -134,6 +135,8 @@ export default function BookmarksPage() {
   const [mutationError, setMutationError] = useState("");
   const [failedBookmarkDrafts, setFailedBookmarkDrafts] = useState<Array<{ id: string; dialog: BookmarkDialog; draft: BookmarkDraft }>>([]);
   const failedBookmarkDraft = failedBookmarkDrafts[0];
+  const [failedFolderDrafts, setFailedFolderDrafts] = useState<Array<{ id: string; dialog: FolderDialog; draft: FolderDraft }>>([]);
+  const failedFolderDraft = failedFolderDrafts[0];
   const [formError, setFormError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [bookmarkDialog, setBookmarkDialog] = useState<BookmarkDialog | null>(null);
@@ -142,7 +145,7 @@ export default function BookmarksPage() {
   const [folderSectionDialog, setFolderSectionDialog] = useState<{ mode: "create" | "edit"; folderSectionId?: string; folderId?: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [bookmarkDraft, setBookmarkDraft] = useState(() => emptyBookmarkDraft(INITIAL_FOLDERS[0]?.id ?? ""));
-  const [folderDraft, setFolderDraft] = useState<{ name: string; color: string | null; sectionId: string }>({
+  const [folderDraft, setFolderDraft] = useState<FolderDraft>({
     name: "",
     color: COLOR_OPTIONS[0],
     sectionId: NO_SECTION
@@ -686,7 +689,10 @@ export default function BookmarksPage() {
       (saved) => {
         setFolders((current) => normalizeFolderPositions(current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item)));
         if (!editingId) setSelection((current) => current?.kind === "folder" && current.id === id ? { kind: "folder", id: saved.id } : current);
-      }, "폴더 저장에 실패했습니다.");
+      }, "폴더 저장에 실패했습니다.", () => setFailedFolderDrafts((current) => [
+        ...current.filter((entry) => entry.id !== id),
+        { id, dialog: editingId ? { mode: "edit", folderId: editingId } : { mode: "create" }, draft: { ...folderDraft } }
+      ]));
   }
 
   function saveSection(event: FormEvent<HTMLFormElement>) {
@@ -1318,6 +1324,18 @@ export default function BookmarksPage() {
                   setFailedBookmarkDrafts((current) => current.filter((entry) => entry.id !== failedBookmarkDraft.id));
                 }}>입력 복구</Button>
                 <Button type="button" variant="ghost" onClick={() => setFailedBookmarkDrafts((current) => current.filter((entry) => entry.id !== failedBookmarkDraft.id))}>닫기</Button>
+              </div>
+            ) : null}
+            {failedFolderDraft ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted px-4 py-3 text-sm">
+                <p className="min-w-0 flex-1 break-words">폴더 ‘{failedFolderDraft.draft.name}’ 입력을 이 화면에 임시 보관했습니다.{failedFolderDrafts.length > 1 ? ` 총 ${failedFolderDrafts.length}개 대기 중입니다.` : ""} 저장 여부를 확인한 뒤 다시 저장하세요.</p>
+                <Button type="button" variant="outline" disabled={Boolean(bookmarkDialog || folderDialog || sectionDialog || folderSectionDialog)} onClick={() => {
+                  setFolderDraft(failedFolderDraft.draft);
+                  setFolderDialog(failedFolderDraft.dialog);
+                  setFormError("");
+                  setFailedFolderDrafts((current) => current.filter((entry) => entry.id !== failedFolderDraft.id));
+                }}>폴더 입력 복구</Button>
+                <Button type="button" variant="ghost" onClick={() => setFailedFolderDrafts((current) => current.filter((entry) => entry.id !== failedFolderDraft.id))}>닫기</Button>
               </div>
             ) : null}
             {groups.length === 0 || (filtered.length === 0 && hasActiveFilter) ? (

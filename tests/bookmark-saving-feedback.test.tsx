@@ -182,6 +182,48 @@ function dropFolderOn(sourceName: string, targetName: string, nav: HTMLElement) 
 }
 
 describe("section-first bookmark UI", () => {
+  it("keeps failed folder drafts in order and protects an open editor", async () => {
+    const { fetchMock } = setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    for (const name of ["첫 폴더", "둘째 폴더"]) {
+      fireEvent.click(await screen.findByRole("button", { name: "새 폴더" }));
+      const dialog = screen.getByRole("dialog", { name: "새 폴더" });
+      fireEvent.change(within(dialog).getByLabelText("이름"), { target: { value: name } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+      await screen.findByRole("button", { name: "폴더 입력 복구" });
+      await waitFor(() => expect(screen.queryByText("데이터베이스에 저장 중")).not.toBeInTheDocument());
+    }
+    expect(screen.getByText(/총 2개 대기 중/)).toHaveTextContent("첫 폴더");
+    const recover = screen.getByRole("button", { name: "폴더 입력 복구" });
+    fireEvent.click(screen.getByRole("button", { name: "새 북마크 추가" }));
+    expect(recover).toBeDisabled();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+    fireEvent.click(recover);
+    const restored = screen.getByRole("dialog", { name: "새 폴더" });
+    expect(within(restored).getByLabelText("이름")).toHaveValue("첫 폴더");
+    expect(within(restored).getByRole("combobox", { name: "섹션" })).toHaveTextContent("업무");
+    expect(mutations(fetchMock)).toHaveLength(2);
+    fireEvent.click(within(restored).getByRole("button", { name: "취소" }));
+    fireEvent.click(screen.getByRole("button", { name: "폴더 입력 복구" }));
+    expect(within(screen.getByRole("dialog")).getByLabelText("이름")).toHaveValue("둘째 폴더");
+  });
+
+  it("restores failed folder editing with its original ID and color", async () => {
+    const { fetchMock } = setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    await screen.findByRole("button", { name: "새 폴더" });
+    const menu = await openMenu("프로젝트", screen.getByRole("navigation", { name: "북마크 폴더" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    const editor = screen.getByRole("dialog", { name: "폴더 편집" });
+    fireEvent.change(within(editor).getByLabelText("이름"), { target: { value: "변경한 폴더" } });
+    fireEvent.click(within(editor).getByRole("button", { name: "저장" }));
+    fireEvent.click(await screen.findByRole("button", { name: "폴더 입력 복구" }));
+    const restored = screen.getByRole("dialog", { name: "폴더 편집" });
+    expect(within(restored).getByLabelText("이름")).toHaveValue("변경한 폴더");
+    fireEvent.click(within(restored).getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(2));
+    expect(mutations(fetchMock)[1][0]).toBe("/api/folders/projects");
+    expect(mutations(fetchMock)[1][1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ name: "변경한 폴더", color: "#4f46e5", sectionId: "work" }) });
+  });
+
   it("makes the background inert only while an editor or delete confirmation is open", async () => {
     setup();
     const add = await screen.findByRole("button", { name: "새 북마크 추가" });
