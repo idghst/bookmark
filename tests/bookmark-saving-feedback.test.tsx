@@ -194,6 +194,7 @@ describe("section-first bookmark UI", () => {
     }
     expect(screen.getByText(/총 2개 대기 중/)).toHaveTextContent("첫 폴더");
     const recover = screen.getByRole("button", { name: "폴더 입력 복구" });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "북마크 폴더" })).getByRole("button", { name: "프로젝트 2" }));
     fireEvent.click(screen.getByRole("button", { name: "새 북마크 추가" }));
     expect(recover).toBeDisabled();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
@@ -1668,6 +1669,59 @@ describe("section-first bookmark UI", () => {
     await waitFor(() => expect(mutations(fetchMock)).toHaveLength(1));
     expect(requestBody).toEqual({ name: "업무 수정" });
     expect(await within(nav).findByRole("button", { name: "업무 수정" })).toBeInTheDocument();
+  });
+
+  it.each([false, true])("restores failed section editing with its identity (inside folder: %s)", async (insideFolder) => {
+    const folderSections: FolderSection[] = [{ id: "daily", name: "매일", color: "#4f46e5", folderId: "projects", position: 0 }];
+    const { fetchMock } = setup({ folders, sections, bookmarks, folderSections }, async () =>
+      new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    const nav = await screen.findByRole("navigation", { name: "북마크 폴더" });
+    if (insideFolder) fireEvent.click(within(nav).getByRole("button", { name: "프로젝트 2" }));
+    const menu = await openMenu(insideFolder ? "매일 섹션" : "업무", insideFolder ? document.body : nav);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "편집" }));
+    fireEvent.change(within(screen.getByRole("dialog")).getByLabelText("이름"), { target: { value: "변경한 섹션" } });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "저장" }));
+    const recover = await screen.findByRole("button", { name: "섹션 입력 복구" });
+    fireEvent.click(screen.getByRole("button", { name: "새 북마크 추가" }));
+    expect(recover).toBeDisabled();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+    fireEvent.click(recover);
+    expect(within(screen.getByRole("dialog")).getByLabelText("이름")).toHaveValue("변경한 섹션");
+    expect(mutations(fetchMock)).toHaveLength(1);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(mutations(fetchMock)).toHaveLength(2));
+    expect(mutations(fetchMock)[1][0]).toBe(insideFolder ? "/api/folder-sections/daily" : "/api/sections/work");
+    expect(mutations(fetchMock)[1][1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ name: "변경한 섹션" }) });
+  });
+
+  it("keeps failed section creations in order without automatic retries", async () => {
+    const { fetchMock } = setup(snapshot, async () => new Response(JSON.stringify({ detail: "저장 실패" }), { status: 503 }));
+    for (const name of ["첫 섹션", "둘째 섹션"]) {
+      if (name === "둘째 섹션") {
+        fireEvent.click(within(screen.getByRole("navigation", { name: "북마크 폴더" })).getByRole("button", { name: "프로젝트 2" }));
+        fireEvent.click(screen.getByRole("button", { name: "섹션 추가" }));
+      } else {
+        fireEvent.click(await screen.findByRole("button", { name: "새 섹션" }));
+      }
+      fireEvent.change(within(screen.getByRole("dialog")).getByLabelText("이름"), { target: { value: name } });
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "색상 #16a34a" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "저장" }));
+      await screen.findByRole("button", { name: "섹션 입력 복구" });
+      await waitFor(() => expect(screen.queryByText("데이터베이스에 저장 중")).not.toBeInTheDocument());
+    }
+    expect(screen.getByText(/총 2개 대기 중/)).toHaveTextContent("첫 섹션");
+    for (const name of ["첫 섹션", "둘째 섹션"]) {
+      fireEvent.click(screen.getByRole("button", { name: "섹션 입력 복구" }));
+      expect(within(screen.getByRole("dialog")).getByLabelText("이름")).toHaveValue(name);
+      expect(within(screen.getByRole("dialog")).getByRole("button", { name: "색상 #16a34a" })).toHaveAttribute("aria-pressed", "true");
+      if (name === "둘째 섹션") {
+        fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "저장" }));
+        await waitFor(() => expect(mutations(fetchMock)).toHaveLength(3));
+        expect(mutations(fetchMock)[2]).toMatchObject(["/api/folder-sections", { method: "POST", body: JSON.stringify({ name, color: "#16a34a", folderId: "projects" }) }]);
+        break;
+      }
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+    }
   });
 
   it("offers deletion for an empty section in the sidebar", async () => {

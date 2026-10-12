@@ -137,6 +137,13 @@ export default function BookmarksPage() {
   const failedBookmarkDraft = failedBookmarkDrafts[0];
   const [failedFolderDrafts, setFailedFolderDrafts] = useState<Array<{ id: string; dialog: FolderDialog; draft: FolderDraft }>>([]);
   const failedFolderDraft = failedFolderDrafts[0];
+  const [failedSectionDrafts, setFailedSectionDrafts] = useState<Array<{
+    id: string;
+    kind: "section" | "folderSection";
+    dialog: SectionDialog & { folderSectionId?: string; folderId?: string };
+    draft: { name: string; color: string | null };
+  }>>([]);
+  const failedSectionDraft = failedSectionDrafts[0];
   const [formError, setFormError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [bookmarkDialog, setBookmarkDialog] = useState<BookmarkDialog | null>(null);
@@ -722,7 +729,10 @@ export default function BookmarksPage() {
       (saved) => {
         setSections((current) => current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item));
         if (!editingId) setSelection((current) => current?.kind === "section" && current.id === id ? { kind: "section", id: saved.id } : current);
-      }, "섹션 저장에 실패했습니다.");
+      }, "섹션 저장에 실패했습니다.", () => setFailedSectionDrafts((current) => [
+        ...current.filter((entry) => entry.id !== id),
+        { id, kind: "section", dialog: editingId ? { mode: "edit", sectionId: editingId } : { mode: "create" }, draft: { ...sectionDraft } }
+      ]));
   }
 
   function saveFolderSection(event: FormEvent<HTMLFormElement>) {
@@ -752,7 +762,10 @@ export default function BookmarksPage() {
       () => setFolderSections((current) => rollbackItem(current, previous, optimistic)),
       () => apiRequest<FolderSection>(editingId ? `/api/folder-sections/${id}` : "/api/folder-sections", { method: editingId ? "PATCH" : "POST", body: JSON.stringify(payload) }),
       (saved) => setFolderSections((current) => current.map((item) => item.id === id ? mergeUnchanged(item, optimistic, saved) : item)),
-      "섹션 저장에 실패했습니다.");
+      "섹션 저장에 실패했습니다.", () => setFailedSectionDrafts((current) => [
+        ...current.filter((entry) => entry.id !== id),
+        { id, kind: "folderSection", dialog: editingId ? { mode: "edit", folderSectionId: editingId, folderId } : { mode: "create", folderId }, draft: { ...folderSectionDraft } }
+      ]));
   }
 
   function persistFormMutation<T extends { id: string }>(
@@ -1324,6 +1337,23 @@ export default function BookmarksPage() {
                   setFailedBookmarkDrafts((current) => current.filter((entry) => entry.id !== failedBookmarkDraft.id));
                 }}>입력 복구</Button>
                 <Button type="button" variant="ghost" onClick={() => setFailedBookmarkDrafts((current) => current.filter((entry) => entry.id !== failedBookmarkDraft.id))}>닫기</Button>
+              </div>
+            ) : null}
+            {failedSectionDraft ? (
+              <div role="status" className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground">
+                <p className="min-w-0 flex-1 break-words">{failedSectionDraft.kind === "folderSection" ? "폴더 내부 섹션" : "섹션"} ‘{failedSectionDraft.draft.name}’ 입력을 이 화면에 임시 보관했습니다.{failedSectionDrafts.length > 1 ? ` 총 ${failedSectionDrafts.length}개 대기 중입니다.` : ""} 저장 여부를 확인한 뒤 다시 저장하세요.</p>
+                <Button type="button" variant="outline" disabled={Boolean(bookmarkDialog || folderDialog || sectionDialog || folderSectionDialog)} onClick={() => {
+                  if (failedSectionDraft.kind === "folderSection") {
+                    setFolderSectionDraft(failedSectionDraft.draft);
+                    setFolderSectionDialog(failedSectionDraft.dialog);
+                  } else {
+                    setSectionDraft(failedSectionDraft.draft);
+                    setSectionDialog(failedSectionDraft.dialog);
+                  }
+                  setFormError("");
+                  setFailedSectionDrafts((current) => current.filter((entry) => entry.id !== failedSectionDraft.id));
+                }}>섹션 입력 복구</Button>
+                <Button type="button" variant="ghost" onClick={() => setFailedSectionDrafts((current) => current.filter((entry) => entry.id !== failedSectionDraft.id))}>닫기</Button>
               </div>
             ) : null}
             {failedFolderDraft ? (
